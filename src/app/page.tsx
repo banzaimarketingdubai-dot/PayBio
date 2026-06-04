@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import ImageCropper from '@/components/ImageCropper';
+import BookingCalendar from '@/components/BookingCalendar';
 import { TRANSLATIONS } from '@/lib/translations';
 
 interface Creator {
@@ -3061,77 +3062,15 @@ export default function Storefront() {
             )}
 
             {product.product_type === 'BOOKING' && (
-              <div className="tg-card animate-fade-up" style={{ padding: '16px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid var(--tg-border)' }}>
-                <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
-                  📅 {lang === 'ru' ? 'Выберите дату и время записи:' : 'Select Date & Time:'}
-                </p>
-                <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0 }}>
-                  {lang === 'ru' ? `Доступность: ${slotsText}` : `Availability: ${slotsText}`}
-                </p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 600 }}>{lang === 'ru' ? 'Дата' : 'Date'}</label>
-                    <input 
-                      type="date" 
-                      className="tg-input" 
-                      min={new Date().toISOString().split('T')[0]} 
-                      value={bookingDate} 
-                      onChange={(e) => setBookingDate(e.target.value)} 
-                    />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 600 }}>{lang === 'ru' ? 'Время' : 'Time'}</label>
-                    <input 
-                      type="time" 
-                      className="tg-input" 
-                      value={bookingTime} 
-                      onChange={(e) => setBookingTime(e.target.value)} 
-                    />
-                  </div>
-                </div>
-
-                {isLoadingBusySlots ? (
-                  <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0 }}>
-                    🔄 {lang === 'ru' ? 'Загрузка занятого времени...' : 'Loading busy times...'}
-                  </p>
-                ) : (
-                  <>
-                    {bookingDate && (
-                      <div style={{ fontSize: '11px', margin: 0, lineHeight: 1.4 }}>
-                        {(() => {
-                          const selectedDateBusyIntervals = busySlots.filter((slot) => {
-                            const slotStart = new Date(slot.start);
-                            const localDateStr = `${slotStart.getFullYear()}-${String(slotStart.getMonth() + 1).padStart(2, '0')}-${String(slotStart.getDate()).padStart(2, '0')}`;
-                            return localDateStr === bookingDate;
-                          });
-                          
-                          if (selectedDateBusyIntervals.length > 0) {
-                            return (
-                              <div style={{ color: 'var(--tg-destructive, #e53935)', display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
-                                <span>⚠️ {lang === 'ru' ? 'Занято:' : 'Booked:'}</span>
-                                {selectedDateBusyIntervals.map((slot, index) => {
-                                  const start = new Date(slot.start);
-                                  const end = new Date(slot.end);
-                                  const timeStr = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-                                  return <strong key={index} style={{ marginLeft: '4px' }}>{timeStr}{index < selectedDateBusyIntervals.length - 1 ? ',' : ''}</strong>;
-                                })}
-                              </div>
-                            );
-                          } else {
-                            return <div style={{ color: '#4caf50' }}>✓ {lang === 'ru' ? 'Весь день свободен' : 'All day available'}</div>;
-                          }
-                        })()}
-                      </div>
-                    )}
-                    
-                    {bookingDate && bookingTime && hasBookingConflict && (
-                      <div style={{ padding: '8px 10px', background: 'rgba(233,92,92,0.1)', border: '1px solid rgba(233,92,92,0.2)', borderRadius: '8px', color: '#e53935', fontSize: '11px', fontWeight: 600 }} className="animate-scale-in">
-                        ⚠️ {lang === 'ru' ? 'Этот слот уже занят в календаре. Выберите другое время.' : 'This slot is already booked. Please choose another time.'}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+              <BookingCalendar
+                slotsText={slotsText}
+                busySlots={busySlots}
+                bookingDate={bookingDate}
+                setBookingDate={setBookingDate}
+                bookingTime={bookingTime}
+                setBookingTime={setBookingTime}
+                lang={lang}
+              />
             )}
 
             {/* Price row */}
