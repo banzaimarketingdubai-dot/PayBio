@@ -15,10 +15,49 @@ export async function sendTelegramNotification(chatId: number | string, text: st
         parse_mode: 'Markdown',
       }),
     });
-    const data = await res.json();
-    return data;
+    return await res.json();
   } catch (err) {
     console.error(`Error sending Telegram notification to ${chatId}:`, err);
+    return null;
+  }
+}
+
+export async function sendTelegramPhoto(chatId: number | string, photo: string, caption?: string) {
+  if (!TELEGRAM_BOT_TOKEN) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        photo,
+        caption,
+        parse_mode: 'Markdown',
+      }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error(`Error sending Telegram photo to ${chatId}:`, err);
+    return null;
+  }
+}
+
+export async function sendTelegramDocument(chatId: number | string, document: string, caption?: string) {
+  if (!TELEGRAM_BOT_TOKEN) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        document,
+        caption,
+        parse_mode: 'Markdown',
+      }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.error(`Error sending Telegram document to ${chatId}:`, err);
     return null;
   }
 }

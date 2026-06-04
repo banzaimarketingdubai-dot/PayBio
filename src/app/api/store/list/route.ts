@@ -37,7 +37,8 @@ export async function GET(request: Request) {
         }
       }
 
-      return NextResponse.json({ success: true, product });
+      const soldCount = await db.getApprovedOrderCount(productId);
+      return NextResponse.json({ success: true, product: { ...product, sold_count: soldCount } });
     }
 
     if (creatorTgIdParam) {

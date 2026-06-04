@@ -41,6 +41,7 @@ interface Product {
   content_url: string;
   cover_url?: string;
   creator?: Creator;
+  product_type?: string;
 }
 
 const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> => {
@@ -530,7 +531,7 @@ interface ProductListScreenProps {
   setStoreBanner: (banner: string) => void;
   socialLinks: { youtube?: string; instagram?: string; tiktok?: string; vk?: string; max?: string; };
   setSocialLinks: (links: any) => void;
-  onAddProduct: (title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string) => Promise<boolean>;
+  onAddProduct: (title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string) => Promise<boolean>;
   onOpenPremium: () => void;
   lang: 'en' | 'ru';
   setLang: (lang: 'en' | 'ru') => void;
@@ -620,6 +621,8 @@ function ProductListScreen({
   const [prodPriceUSD, setProdPriceUSD] = useState('');
   const [prodPriceStars, setProdPriceStars] = useState('');
   const [prodUrl, setProdUrl] = useState('');
+  const [prodCalendarIcsUrl, setProdCalendarIcsUrl] = useState('');
+  const [prodMaxQuantity, setProdMaxQuantity] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   // Product cover visual state
@@ -633,6 +636,9 @@ function ProductListScreen({
   const [cropperAspect, setCropperAspect] = useState(1);
   const [cropperCircular, setCropperCircular] = useState(false);
   const [onCropComplete, setOnCropComplete] = useState<((cropped: string) => void) | null>(null);
+
+  // New product type states
+  const [prodType, setProdType] = useState('DIGITAL');
 
   // AI Promo generation states
   const [isPromoOpen, setIsPromoOpen] = useState(false);
@@ -826,13 +832,28 @@ function ProductListScreen({
     try {
       const priceUSD = Number(prodPriceUSD);
       const priceStars = prodPriceStars ? Number(prodPriceStars) : undefined;
+
+      let finalContentUrl = prodUrl || '';
+      if (prodType === 'BOOKING') {
+        finalContentUrl = JSON.stringify({
+          slots: prodUrl,
+          ics_url: prodCalendarIcsUrl
+        });
+      } else if (prodType === 'VOUCHER') {
+        finalContentUrl = JSON.stringify({
+          fulfillment_url: prodUrl,
+          max_quantity: prodMaxQuantity ? Number(prodMaxQuantity) : null
+        });
+      }
+
       const success = await onAddProduct(
         prodTitle, 
         prodDesc, 
         priceUSD, 
         priceStars, 
-        prodUrl || undefined, 
-        prodCoverUrl || undefined
+        finalContentUrl || undefined, 
+        prodCoverUrl || undefined,
+        prodType
       );
       if (success) {
         setProdTitle('');
@@ -840,8 +861,11 @@ function ProductListScreen({
         setProdPriceUSD('');
         setProdPriceStars('');
         setProdUrl('');
+        setProdCalendarIcsUrl('');
+        setProdMaxQuantity('');
         setProdCoverUrl('');
         setAiPrompt('');
+        setProdType('DIGITAL');
         setIsAddProductOpen(false);
       }
     } catch (err) {
@@ -936,6 +960,54 @@ function ProductListScreen({
       };
       reader.readAsDataURL(file);
       e.target.value = '';
+    }
+  };
+
+  const handleScanTicket = () => {
+    if (typeof window !== 'undefined') {
+      const WebApp = (window as any).Telegram?.WebApp;
+      if (WebApp?.showScanQrPopup) {
+        WebApp.showScanQrPopup({ text: lang === 'ru' ? "Сканируйте QR-код билета" : "Scan Buyer's QR" }, async (text: string) => {
+          WebApp.closeScanQrPopup();
+          try {
+            const res = await fetch('/api/vouchers/redeem', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ qr_data: text })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              showAlert(lang === 'ru' ? `✅ Билет успешно погашен!\nТовар: "${data.voucher.order?.product?.title || 'Ваучер'}"` : `✅ Voucher Redeemed Successfully!\nProduct: "${data.voucher.order?.product?.title || 'Voucher'}"`);
+            } else {
+              showAlert(lang === 'ru' ? `❌ Ошибка: ${data.error}` : `❌ Error: ${data.error}`);
+            }
+          } catch (err: any) {
+            showAlert(err.message || 'Error processing ticket redemption.');
+          }
+          return true;
+        });
+      } else {
+        const qr = prompt(lang === 'ru' ? "Введите хэш QR-кода билета:" : "Enter scanned QR voucher code:");
+        if (qr) {
+          (async () => {
+            try {
+              const res = await fetch('/api/vouchers/redeem', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ qr_data: qr })
+              });
+              const data = await res.json();
+              if (res.ok && data.success) {
+                showAlert(lang === 'ru' ? `✅ Билет успешно погашен!` : `✅ Voucher Redeemed Successfully!`);
+              } else {
+                showAlert(lang === 'ru' ? `❌ Ошибка: ${data.error}` : `❌ Error: ${data.error}`);
+              }
+            } catch (err: any) {
+              showAlert(err.message || 'Error.');
+            }
+          })();
+        }
+      }
     }
   };
 
@@ -1057,6 +1129,20 @@ function ProductListScreen({
               title="Change Language / Сменить язык"
             >
               🌐 {lang === 'en' ? 'EN' : 'RU'}
+            </button>
+
+            {/* Scan Ticket (Zero-Backend QR scanner) */}
+            <button 
+              onClick={handleScanTicket}
+              style={{
+                background: 'rgba(77,202,90,0.15)', border: 'none', borderRadius: '14px',
+                padding: '0 8px', height: '28px', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer', fontSize: '11px', fontWeight: 600,
+                color: '#4dca5a'
+              }}
+              title={lang === 'ru' ? 'Сканировать билет' : 'Scan Ticket'}
+            >
+              📷 {lang === 'ru' ? 'Сканировать' : 'Scan Ticket'}
             </button>
 
             {isCreatorPremium ? (
@@ -1396,6 +1482,19 @@ function ProductListScreen({
           
           <form onSubmit={handleCreateProduct}>
             <div className="bottom-sheet-form-group">
+              <label className="bottom-sheet-label">{lang === 'ru' ? 'Тип товара' : 'Product Type'}</label>
+              <select 
+                className="tg-input"
+                value={prodType}
+                onChange={(e) => setProdType(e.target.value)}
+              >
+                <option value="DIGITAL">{lang === 'ru' ? 'Цифровой (Файл/Ссылка)' : 'Digital (File/Link)'}</option>
+                <option value="VOUCHER">{lang === 'ru' ? 'Ваучер / Билет' : 'Voucher / Ticket'}</option>
+                <option value="BOOKING">{lang === 'ru' ? 'Запись / Консультация' : 'Booking / Consultation'}</option>
+              </select>
+            </div>
+
+            <div className="bottom-sheet-form-group">
               <label className="bottom-sheet-label">{t.productTitle}</label>
               <input 
                 type="text" 
@@ -1445,15 +1544,50 @@ function ProductListScreen({
             </div>
 
             <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">{t.fulfillmentUrl}</label>
+              <label className="bottom-sheet-label">
+                {prodType === 'BOOKING' 
+                  ? (lang === 'ru' ? 'Свободные часы (например: Пн 10:00-12:00, Ср 15:00-18:00)' : 'Available Slots (e.g. Mon 10:00-12:00, Wed 15:00-18:00)')
+                  : t.fulfillmentUrl}
+              </label>
               <input 
-                type="url" 
+                type="text" 
                 className="tg-input" 
-                placeholder="https://example.com/ebook.pdf"
+                placeholder={prodType === 'BOOKING' ? "e.g. Mon 10:00-12:00" : "https://example.com/ebook.pdf"}
                 value={prodUrl} 
                 onChange={(e) => setProdUrl(e.target.value)} 
+                required={prodType === 'BOOKING'}
               />
             </div>
+
+            {prodType === 'BOOKING' && (
+              <div className="bottom-sheet-form-group animate-fade-in">
+                <label className="bottom-sheet-label">
+                  {lang === 'ru' ? 'Ссылка на Google/Apple Календарь (.ics) [Опционально]' : 'Google/Apple Calendar Link (.ics) [Optional]'}
+                </label>
+                <input 
+                  type="text" 
+                  className="tg-input" 
+                  placeholder="webcal://... or https://...ics"
+                  value={prodCalendarIcsUrl} 
+                  onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+                />
+              </div>
+            )}
+
+            {prodType === 'VOUCHER' && (
+              <div className="bottom-sheet-form-group animate-fade-in">
+                <label className="bottom-sheet-label">
+                  {lang === 'ru' ? 'Лимит билетов (Максимум) [Опционально]' : 'Max Ticket Limit [Optional]'}
+                </label>
+                <input 
+                  type="number" 
+                  className="tg-input" 
+                  placeholder="e.g. 50"
+                  value={prodMaxQuantity} 
+                  onChange={(e) => setProdMaxQuantity(e.target.value)} 
+                />
+              </div>
+            )}
 
             {/* Product Cover Image Upload / AI Generation */}
             <div className="bottom-sheet-form-group">
@@ -1862,6 +1996,12 @@ export default function Storefront() {
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [extractedData, setExtractedData] = useState<any>(null);
 
+  // Booking states
+  const [bookingDate, setBookingDate] = useState('');
+  const [bookingTime, setBookingTime] = useState('');
+  const [busySlots, setBusySlots] = useState<{ start: string; end: string }[]>([]);
+  const [isLoadingBusySlots, setIsLoadingBusySlots] = useState(false);
+
   const [selectedTonIdx, setSelectedTonIdx] = useState(0);
   const [selectedP2pIdx, setSelectedP2pIdx] = useState(0);
 
@@ -1981,6 +2121,21 @@ export default function Storefront() {
     });
   }, []);
 
+  const fetchBusySlotsForProduct = async (prodId: string) => {
+    setIsLoadingBusySlots(true);
+    try {
+      const res = await fetch(`/api/calendar/busy?product_id=${prodId}`);
+      const data = await res.json();
+      if (data.success && data.busySlots) {
+        setBusySlots(data.busySlots);
+      }
+    } catch (e) {
+      console.error('Failed to fetch busy slots:', e);
+    } finally {
+      setIsLoadingBusySlots(false);
+    }
+  };
+
   // Fetch data — waits for creatorTgId to be resolved by SDK
   useEffect(() => {
     // Don't fetch until SDK has resolved the creator's TG ID
@@ -2010,6 +2165,9 @@ export default function Storefront() {
             setProduct(data.product);
             if (data.product.creator) {
               setCreator(data.product.creator);
+            }
+            if (data.product.product_type === 'BOOKING') {
+              fetchBusySlotsForProduct(data.product.id);
             }
           } else {
             setError(data.error || 'Product not found.');
@@ -2110,7 +2268,8 @@ export default function Storefront() {
     priceFiat: number,
     priceStars?: number,
     contentUrl?: string,
-    coverUrl?: string
+    coverUrl?: string,
+    productType = 'DIGITAL'
   ): Promise<boolean> => {
     // If creator not loaded yet — try to fetch it now using resolved TG ID
     let activeCreator = creator;
@@ -2139,7 +2298,8 @@ export default function Storefront() {
           price_fiat: priceFiat,
           price_stars: priceStars,
           content_url: contentUrl,
-          cover_url: coverUrl
+          cover_url: coverUrl,
+          product_type: productType
         }),
       });
       const data = await res.json();
@@ -2160,11 +2320,22 @@ export default function Storefront() {
   // Stars payment
   const handleStarsPayment = async () => {
     if (!product) return;
+    if (product.product_type === 'BOOKING') {
+      if (!bookingDate || !bookingTime) {
+        showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
+        return;
+      }
+    }
     try {
+      const bookingSlot = product.product_type === 'BOOKING' ? {
+        start: `${bookingDate}T${bookingTime}:00`,
+        end: `${bookingDate}T${bookingTime}:00`
+      } : undefined;
+
       const res = await fetch('/api/checkout/stars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId }),
+        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot }),
       });
       const data = await res.json();
       if (!res.ok) { showAlert(data.error || 'Failed to create invoice.'); return; }
@@ -2210,6 +2381,12 @@ export default function Storefront() {
   const handleVerifyReceipt = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product || !file) return;
+    if (product.product_type === 'BOOKING') {
+      if (!bookingDate || !bookingTime) {
+        showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
+        return;
+      }
+    }
 
     setVerifying(true);
     setVerifyError(null);
@@ -2219,10 +2396,15 @@ export default function Storefront() {
 
     let orderId = '';
     try {
+      const bookingSlot = product.product_type === 'BOOKING' ? {
+        start: `${bookingDate}T${bookingTime}:00`,
+        end: `${bookingDate}T${bookingTime}:00`
+      } : undefined;
+
       const orderRes = await fetch('/api/checkout/stars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId }),
+        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot }),
       });
       const orderData = await orderRes.json();
       orderId = orderData.order_id;
@@ -2363,6 +2545,41 @@ export default function Storefront() {
   );
 
   const isStorePremium = product.creator?.is_premium;
+
+  let slotsText = product.content_url || '';
+  let maxQuantity: number | null = null;
+  let fulfillmentUrl = product.content_url || '';
+  let hasLimit = false;
+
+  if (product.product_type === 'BOOKING' || product.product_type === 'VOUCHER') {
+    try {
+      const parsed = JSON.parse(product.content_url);
+      if (parsed) {
+        if (product.product_type === 'BOOKING') {
+          slotsText = parsed.slots || '';
+        } else if (product.product_type === 'VOUCHER') {
+          fulfillmentUrl = parsed.fulfillment_url || '';
+          if (typeof parsed.max_quantity === 'number') {
+            maxQuantity = parsed.max_quantity;
+            hasLimit = true;
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore JSON parse errors for legacy data
+    }
+  }
+
+  const isSoldOut = product.product_type === 'VOUCHER' && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
+
+  const hasBookingConflict = product.product_type === 'BOOKING' && bookingDate && bookingTime && busySlots.some((slot) => {
+    const start = new Date(slot.start).getTime();
+    const end = new Date(slot.end).getTime();
+    const selStart = new Date(`${bookingDate}T${bookingTime}:00`).getTime();
+    const selEnd = selStart + 60 * 60 * 1000;
+    return selStart < end && selEnd > start;
+  });
+
   const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
   const p2pList = isStorePremium && product.creator?.payment_details?.p2p_list || [];
 
@@ -2473,7 +2690,11 @@ export default function Storefront() {
               }} />
             )}
             <span className="chip chip-hint" style={{ marginBottom: '14px', display: 'inline-flex' }}>
-              {t.digitalProduct}
+              {product.product_type === 'VOUCHER'
+                ? (lang === 'ru' ? '🎟️ Билет / Ваучер' : '🎟️ Ticket / Voucher')
+                : product.product_type === 'BOOKING'
+                ? (lang === 'ru' ? '📅 Запись / Консультация' : '📅 Booking / Consultation')
+                : t.digitalProduct}
             </span>
             <h1 style={{
               fontSize: '22px', fontWeight: 800,
@@ -2491,7 +2712,103 @@ export default function Storefront() {
           </div>
         </div>
 
-        {/* Price row */}
+            {product.product_type === 'VOUCHER' && hasLimit && (
+              <div style={{ margin: '0 0 16px 0', padding: '12px 16px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)', display: 'flex', flexDirection: 'column', gap: '8px' }} className="animate-fade-up">
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600 }}>
+                  <span style={{ color: 'var(--tg-hint)' }}>
+                    {lang === 'ru' ? 'Доступно билетов:' : 'Tickets available:'}
+                  </span>
+                  <span style={{ color: (product.sold_count || 0) >= (maxQuantity || 0) ? 'var(--tg-red)' : 'var(--tg-text)' }}>
+                    {Math.max(0, (maxQuantity || 0) - (product.sold_count || 0))} / {maxQuantity}
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'var(--tg-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.min(100, ((product.sold_count || 0) / (maxQuantity || 1)) * 100)}%`,
+                    height: '100%',
+                    background: (product.sold_count || 0) >= (maxQuantity || 0) ? 'var(--tg-red)' : 'var(--tg-accent)',
+                    borderRadius: '3px',
+                    transition: 'width 0.4s ease'
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {product.product_type === 'BOOKING' && (
+              <div className="tg-card animate-fade-up" style={{ padding: '16px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid var(--tg-border)' }}>
+                <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                  📅 {lang === 'ru' ? 'Выберите дату и время записи:' : 'Select Date & Time:'}
+                </p>
+                <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0 }}>
+                  {lang === 'ru' ? `Доступность: ${slotsText}` : `Availability: ${slotsText}`}
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 600 }}>{lang === 'ru' ? 'Дата' : 'Date'}</label>
+                    <input 
+                      type="date" 
+                      className="tg-input" 
+                      min={new Date().toISOString().split('T')[0]} 
+                      value={bookingDate} 
+                      onChange={(e) => setBookingDate(e.target.value)} 
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 600 }}>{lang === 'ru' ? 'Время' : 'Time'}</label>
+                    <input 
+                      type="time" 
+                      className="tg-input" 
+                      value={bookingTime} 
+                      onChange={(e) => setBookingTime(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                {isLoadingBusySlots ? (
+                  <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0 }}>
+                    🔄 {lang === 'ru' ? 'Загрузка занятого времени...' : 'Loading busy times...'}
+                  </p>
+                ) : (
+                  <>
+                    {bookingDate && (
+                      <div style={{ fontSize: '11px', margin: 0, lineHeight: 1.4 }}>
+                        {(() => {
+                          const selectedDateBusyIntervals = busySlots.filter((slot) => {
+                            const slotStart = new Date(slot.start);
+                            const localDateStr = `${slotStart.getFullYear()}-${String(slotStart.getMonth() + 1).padStart(2, '0')}-${String(slotStart.getDate()).padStart(2, '0')}`;
+                            return localDateStr === bookingDate;
+                          });
+                          
+                          if (selectedDateBusyIntervals.length > 0) {
+                            return (
+                              <div style={{ color: 'var(--tg-destructive, #e53935)', display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+                                <span>⚠️ {lang === 'ru' ? 'Занято:' : 'Booked:'}</span>
+                                {selectedDateBusyIntervals.map((slot, index) => {
+                                  const start = new Date(slot.start);
+                                  const end = new Date(slot.end);
+                                  const timeStr = `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                                  return <strong key={index} style={{ marginLeft: '4px' }}>{timeStr}{index < selectedDateBusyIntervals.length - 1 ? ',' : ''}</strong>;
+                                })}
+                              </div>
+                            );
+                          } else {
+                            return <div style={{ color: '#4caf50' }}>✓ {lang === 'ru' ? 'Весь день свободен' : 'All day available'}</div>;
+                          }
+                        })()}
+                      </div>
+                    )}
+                    
+                    {bookingDate && bookingTime && hasBookingConflict && (
+                      <div style={{ padding: '8px 10px', background: 'rgba(233,92,92,0.1)', border: '1px solid rgba(233,92,92,0.2)', borderRadius: '8px', color: '#e53935', fontSize: '11px', fontWeight: 600 }} className="animate-scale-in">
+                        ⚠️ {lang === 'ru' ? 'Этот слот уже занят в календаре. Выберите другое время.' : 'This slot is already booked. Please choose another time.'}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Price row */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 16px',
@@ -2514,7 +2831,17 @@ export default function Storefront() {
       {/* ── PAYMENT SECTION ── */}
       <div style={{ flex: 1, padding: '20px 16px 40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-        {isStorePremium ? (
+        {isSoldOut ? (
+          <div style={{ textAlign: 'center', padding: '24px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)' }} className="animate-scale-in">
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎟️</div>
+            <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--tg-text)', margin: 0 }}>
+              {lang === 'ru' ? 'Все билеты распроданы!' : 'All tickets are sold out!'}
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', marginBottom: 0 }}>
+              {lang === 'ru' ? 'Следите за новыми предложениями автора.' : 'Stay tuned for new offers from the creator.'}
+            </p>
+          </div>
+        ) : isStorePremium ? (
           <>
             {/* Payment method selector */}
             <div>
@@ -2569,7 +2896,12 @@ export default function Storefront() {
             <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6, marginBottom: '16px' }}>
               {t.starsDesc}
             </p>
-            <button className="btn-primary" onClick={handleStarsPayment} style={{ background: 'var(--tg-accent)' }}>
+            <button 
+              className="btn-primary" 
+              onClick={handleStarsPayment} 
+              disabled={hasBookingConflict}
+              style={{ background: hasBookingConflict ? 'var(--tg-hint)' : 'var(--tg-accent)' }}
+            >
               {t.payStars.replace('{stars}', String(product.price_stars))}
             </button>
           </div>
@@ -2741,8 +3073,8 @@ export default function Storefront() {
                   )}
                 </label>
 
-                <button type="submit" className="btn-primary" disabled={!file}
-                  style={{ background: file ? 'var(--tg-accent)' : undefined }}
+                <button type="submit" className="btn-primary" disabled={!file || hasBookingConflict}
+                  style={{ background: (file && !hasBookingConflict) ? 'var(--tg-accent)' : undefined }}
                 >
                   {t.verifyGetFile}
                 </button>

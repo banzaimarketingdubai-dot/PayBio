@@ -25,9 +25,11 @@ interface DatabaseSchema {
   users: any[];
   products: any[];
   orders: any[];
+  vouchers?: any[];
+  bookings?: any[];
 }
 
-let memoryDb: DatabaseSchema = { users: [], products: [], orders: [] };
+let memoryDb: DatabaseSchema = { users: [], products: [], orders: [], vouchers: [], bookings: [] };
 
 function readMockDb(): DatabaseSchema {
   return memoryDb;
@@ -226,7 +228,7 @@ export const db = {
     }
   },
 
-  async createProduct(creatorId: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string) {
+  async createProduct(creatorId: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string, productType = 'DIGITAL') {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('products')
@@ -237,7 +239,8 @@ export const db = {
           price_fiat: priceFiat,
           price_stars: priceStars,
           content_url: contentUrl,
-          cover_url: coverUrl || null
+          cover_url: coverUrl || null,
+          product_type: productType
         })
         .select()
         .single();
@@ -254,6 +257,7 @@ export const db = {
         price_stars: priceStars,
         content_url: contentUrl,
         cover_url: coverUrl || null,
+        product_type: productType,
         created_at: new Date().toISOString()
       };
       mockDb.products.push(newProduct);
@@ -342,6 +346,21 @@ export const db = {
     }
   },
 
+  async getApprovedOrderCount(productId: string) {
+    if (isRealSupabaseConfigured) {
+      const { count, error } = await supabaseAdmin
+        .from('orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('product_id', productId)
+        .eq('status', 'approved');
+      if (error) throw error;
+      return count || 0;
+    } else {
+      const mockDb = readMockDb();
+      return mockDb.orders.filter(o => o.product_id === productId && o.status === 'approved').length;
+    }
+  },
+
   async getAllUsers() {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
@@ -377,6 +396,156 @@ export const db = {
           const product = creatorProducts.find(p => p.id === o.product_id);
           return { ...o, product };
         });
+    }
+  },
+
+  // --- Vouchers Operations ---
+  async createVoucher(orderId: string, buyerTgId: string, qrData: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('vouchers')
+        .insert({
+          order_id: orderId,
+          buyer_tg_id: buyerTgId,
+          qr_data: qrData,
+          status: 'ACTIVE'
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.vouchers) mockDb.vouchers = [];
+      const newVoucher = {
+        id: Math.random().toString(36).substring(2, 15),
+        order_id: orderId,
+        buyer_tg_id: buyerTgId,
+        qr_data: qrData,
+        status: 'ACTIVE',
+        created_at: new Date().toISOString()
+      };
+      mockDb.vouchers.push(newVoucher);
+      writeMockDb(mockDb);
+      return newVoucher;
+    }
+  },
+
+  async getVoucherByQrData(qrData: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('vouchers')
+        .select('*, order:order_id(*, product:product_id(*))')
+        .eq('qr_data', qrData)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.vouchers) mockDb.vouchers = [];
+      const v = mockDb.vouchers.find(x => x.qr_data === qrData);
+      if (v) {
+        const order = mockDb.orders.find(o => o.id === v.order_id);
+        const product = order ? mockDb.products.find(p => p.id === order.product_id) : null;
+        return { ...v, order: order ? { ...order, product } : null };
+      }
+      return null;
+    }
+  },
+
+  async redeemVoucher(qrData: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('vouchers')
+        .update({ status: 'REDEEMED' })
+        .eq('qr_data', qrData)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.vouchers) mockDb.vouchers = [];
+      const v = mockDb.vouchers.find(x => x.qr_data === qrData);
+      if (v) {
+        v.status = 'REDEEMED';
+        writeMockDb(mockDb);
+      }
+      return v;
+    }
+  },
+
+  // --- Bookings Operations ---
+  async getBookingsByProductId(productId: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('bookings')
+        .select('*')
+        .eq('product_id', productId)
+        .order('slot_start_time', { ascending: true });
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.bookings) mockDb.bookings = [];
+      return mockDb.bookings.filter(b => b.product_id === productId);
+    }
+  },
+
+  async createBooking(productId: string, orderId: string | null, slotStartTime: string, slotEndTime: string, meetingLink?: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('bookings')
+        .insert({
+          product_id: productId,
+          order_id: orderId,
+          slot_start_time: slotStartTime,
+          slot_end_time: slotEndTime,
+          meeting_link: meetingLink || null,
+          status: 'SCHEDULED'
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.bookings) mockDb.bookings = [];
+      const newBooking = {
+        id: Math.random().toString(36).substring(2, 15),
+        product_id: productId,
+        order_id: orderId,
+        slot_start_time: slotStartTime,
+        slot_end_time: slotEndTime,
+        meeting_link: meetingLink || null,
+        status: 'SCHEDULED',
+        created_at: new Date().toISOString()
+      };
+      mockDb.bookings.push(newBooking);
+      writeMockDb(mockDb);
+      return newBooking;
+    }
+  },
+
+  async updateBookingStatus(bookingId: string, status: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('bookings')
+        .update({ status })
+        .eq('id', bookingId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.bookings) mockDb.bookings = [];
+      const b = mockDb.bookings.find(x => x.id === bookingId);
+      if (b) {
+        b.status = status;
+        writeMockDb(mockDb);
+      }
+      return b;
     }
   }
 };

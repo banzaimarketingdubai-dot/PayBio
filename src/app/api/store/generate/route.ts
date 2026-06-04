@@ -25,7 +25,7 @@ async function getBotUsername(): Promise<string> {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { creator_id, raw_text, content_url, title, description, price_fiat, price_stars, cover_url } = body;
+    const { creator_id, raw_text, content_url, title, description, price_fiat, price_stars, cover_url, product_type } = body;
 
     if (!creator_id) {
       return NextResponse.json(
@@ -69,7 +69,8 @@ export async function POST(request: Request) {
       Number(finalPriceFiat),
       Number(calculatedStars),
       finalContentUrl,
-      cover_url
+      cover_url,
+      product_type || 'DIGITAL'
     );
 
     // Dynamic bot username fetch

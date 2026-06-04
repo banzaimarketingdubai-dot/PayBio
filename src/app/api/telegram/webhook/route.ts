@@ -243,30 +243,8 @@ export async function POST(request: Request) {
       } else {
         // Product payment, payload is order ID (UUID)
         try {
-          const order = await db.getOrderById(payload);
-          if (order) {
-            await db.updateOrderStatus(payload, 'approved');
-            const product = order.product;
-            if (product) {
-              if (product.content_url.startsWith('telegram_file_id:')) {
-                const fileId = product.content_url.replace('telegram_file_id:', '');
-                await tgApi('sendDocument', {
-                  chat_id: chatId,
-                  document: fileId,
-                  caption: lang === 'ru'
-                    ? `🎉 Спасибо за покупку товара "${product.title}"!`
-                    : `🎉 Thank you for purchasing "${product.title}"!`,
-                });
-              } else {
-                await tgApi('sendMessage', {
-                  chat_id: chatId,
-                  text: lang === 'ru'
-                    ? `🎉 Спасибо за покупку товара "${product.title}"!\n\nСкачать файл: ${product.content_url}`
-                    : `🎉 Thank you for purchasing "${product.title}"!\n\nDownload file: ${product.content_url}`,
-                });
-              }
-            }
-          }
+          const { fulfillOrder } = await import('@/lib/fulfillment');
+          await fulfillOrder(payload);
         } catch (err) {
           console.error('Webhook product payment fulfillment error:', err);
         }

@@ -124,32 +124,12 @@ export async function POST(request: Request) {
     await db.updateOrderStatus(orderId, orderStatus, visionResult.fraud_score);
 
     if (orderStatus === 'approved') {
-      // Fulfill order! Deliver digital asset via Bot API
-      const contentUrl = product.content_url;
-      const buyerTgId = order.buyer_tg_id;
-
-      if (contentUrl.startsWith('telegram_file_id:')) {
-        const fileId = contentUrl.slice(17);
-        await tgApi('sendDocument', {
-          chat_id: buyerTgId,
-          document: fileId,
-          caption: `✅ *Payment Verified!*\n\nThank you for purchasing *${product.title}*. Here is your file!`,
-          parse_mode: 'Markdown',
-        });
-      } else {
-        await tgApi('sendMessage', {
-          chat_id: buyerTgId,
-          text: `✅ *Payment Verified!*\n\nThank you for purchasing *${product.title}*.\n\n🔗 *Access Link:* ${contentUrl}`,
-          parse_mode: 'Markdown',
-        });
+      try {
+        const { fulfillOrder } = await import('@/lib/fulfillment');
+        await fulfillOrder(orderId);
+      } catch (err) {
+        console.error('P2P verification fulfillment error:', err);
       }
-
-      // Notify Creator about the sale
-      await tgApi('sendMessage', {
-        chat_id: creator.telegram_id,
-        text: `💰 *New Sale!* \n\nYou sold *${product.title}* to user \`${buyerTgId}\` for $${product.price_fiat} via P2P. Payment was verified and delivered automatically!`,
-        parse_mode: 'Markdown',
-      });
 
       return NextResponse.json({
         success: true,
