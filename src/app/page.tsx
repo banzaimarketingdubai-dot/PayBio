@@ -1532,7 +1532,9 @@ function useCopy() {
 // ─── Main Storefront Component ───────────────────────────────────
 export default function Storefront() {
   const [productId, setProductId] = useState<string | null>(null);
-  const [buyerTgId, setBuyerTgId] = useState<number>(99999999);
+  const [buyerTgId, setBuyerTgId] = useState<number>(0);
+  // null = SDK not yet resolved, number = resolved (0 = no TG user)
+  const [creatorTgId, setCreatorTgId] = useState<number | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1664,19 +1666,39 @@ export default function Storefront() {
         window.history.replaceState(null, '', url.toString());
       }
       const user = webapp.initDataUnsafe?.user;
-      if (user?.id) setBuyerTgId(user.id);
-    }).catch(() => {});
+      if (user?.id) {
+        setBuyerTgId(user.id);
+        setCreatorTgId(user.id);
+      } else {
+        // No TG user (e.g. browser preview) — use URL param or 0
+        const urlParams2 = new URLSearchParams(window.location.search);
+        const urlCreator = urlParams2.get('creator_tg_id');
+        setCreatorTgId(urlCreator ? Number(urlCreator) : 0);
+      }
+    }).catch(() => {
+      // SDK failed — resolve with 0 so loadData can proceed
+      const urlParams2 = new URLSearchParams(window.location.search);
+      const urlCreator = urlParams2.get('creator_tg_id');
+      setCreatorTgId(urlCreator ? Number(urlCreator) : 0);
+    });
   }, []);
 
-  // Fetch data
+  // Fetch data — waits for creatorTgId to be resolved by SDK
   useEffect(() => {
+    // Don't fetch until SDK has resolved the creator's TG ID
+    if (creatorTgId === null) return;
+
+    const controller = new AbortController();
+    const { signal } = controller;
+
     async function loadData() {
       setLoading(true);
       setError(null);
       try {
         if (productId) {
-          const res = await fetch(`/api/store/list?product_id=${productId}`);
+          const res = await fetch(`/api/store/list?product_id=${productId}`, { signal });
           const data = await res.json();
+          if (signal.aborted) return;
           if (data.success && data.product) {
             setProduct(data.product);
             if (data.product.creator) {
@@ -1686,22 +1708,13 @@ export default function Storefront() {
             setError(data.error || 'Product not found.');
           }
         } else {
-          // Determine creator tg id. If not in URL, check if available from Telegram WebApp user, else fallback.
+          // Use the resolved creatorTgId — no guessing, no fallback to fake IDs
           const urlParams = new URLSearchParams(window.location.search);
-          let cTgId = urlParams.get('creator_tg_id');
-          if (!cTgId && typeof window !== 'undefined') {
-            const WebApp = (window as any).Telegram?.WebApp;
-            const tgUser = WebApp?.initDataUnsafe?.user;
-            if (tgUser?.id) {
-              cTgId = String(tgUser.id);
-            }
-          }
-          if (!cTgId) {
-            cTgId = String(buyerTgId); // fallback
-          }
+          const cTgId = urlParams.get('creator_tg_id') || String(creatorTgId);
 
-          const res = await fetch(`/api/store/list?creator_tg_id=${cTgId}`);
+          const res = await fetch(`/api/store/list?creator_tg_id=${cTgId}`, { signal });
           const data = await res.json();
+          if (signal.aborted) return;
           if (data.success) {
             setProductsList(data.products || []);
             if (data.creator) setCreator(data.creator);
@@ -1710,13 +1723,15 @@ export default function Storefront() {
           }
         }
       } catch (err: any) {
+        if (err.name === 'AbortError') return;
         setError(err.message || 'Network error');
       } finally {
-        setLoading(false);
+        if (!signal.aborted) setLoading(false);
       }
     }
     loadData();
-  }, [productId, buyerTgId]);
+    return () => controller.abort();
+  }, [productId, creatorTgId]);
 
   // Load custom shop customization settings from creator.profile_customization first
   useEffect(() => {
