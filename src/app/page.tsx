@@ -42,6 +42,7 @@ interface Product {
   cover_url?: string;
   creator?: Creator;
   product_type?: string;
+  sold_count?: number;
 }
 
 const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> => {
@@ -695,6 +696,61 @@ function ProductListScreen({
   const [isPaymentSettingsOpen, setIsPaymentSettingsOpen] = useState(false);
   const [tempTon, setTempTon] = useState('');
   const [tempP2p, setTempP2p] = useState('');
+
+  const [tonConnectUI, setTonConnectUI] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Load TON Connect UI SDK from CDN dynamically
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js';
+    script.async = true;
+    script.onload = () => {
+      if ((window as any).TON_CONNECT_UI) {
+        const tc = new (window as any).TON_CONNECT_UI.TonConnectUI({
+          manifestUrl: `${window.location.origin}/tonconnect-manifest.json`,
+        });
+        setTonConnectUI(tc);
+      }
+    };
+    document.body.appendChild(script);
+    
+    return () => {
+      try {
+        document.body.removeChild(script);
+      } catch (e) {
+        // Ignore
+      }
+    };
+  }, []);
+
+  const handleConnectWallet = async () => {
+    if (!tonConnectUI) {
+      showAlert(lang === 'ru' ? 'Загрузка TON SDK...' : 'Loading TON SDK...');
+      return;
+    }
+    try {
+      if (tonConnectUI.connected) {
+        await tonConnectUI.disconnect();
+      }
+      
+      await tonConnectUI.openModal();
+      
+      const unsubscribe = tonConnectUI.onStatusChange((wallet: any) => {
+        if (wallet && wallet.account) {
+          const rawAddress = wallet.account.address;
+          const friendlyAddr = (window as any).TON_CONNECT_UI.toUserFriendlyAddress(rawAddress);
+          setTempTon(friendlyAddr);
+          showAlert(lang === 'ru' ? '✓ Кошелек успешно подключен!' : '✓ Wallet connected successfully!');
+          unsubscribe();
+        }
+      });
+    } catch (e) {
+      console.error('Wallet connection error:', e);
+      showAlert(lang === 'ru' ? 'Ошибка подключения кошелька' : 'Wallet connection error');
+    }
+  };
   
   // Lists for premium users
   const [tonList, setTonList] = useState<{ id: string; label: string; address: string }[]>([]);
@@ -2020,61 +2076,6 @@ export default function Storefront() {
 
   const t = TRANSLATIONS[lang];
 
-  const [tonConnectUI, setTonConnectUI] = useState<any>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    // Load TON Connect UI SDK from CDN dynamically
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js';
-    script.async = true;
-    script.onload = () => {
-      if ((window as any).TON_CONNECT_UI) {
-        const tc = new (window as any).TON_CONNECT_UI.TonConnectUI({
-          manifestUrl: `${window.location.origin}/tonconnect-manifest.json`,
-        });
-        setTonConnectUI(tc);
-      }
-    };
-    document.body.appendChild(script);
-    
-    return () => {
-      try {
-        document.body.removeChild(script);
-      } catch (e) {
-        // Ignore
-      }
-    };
-  }, []);
-
-  const handleConnectWallet = async () => {
-    if (!tonConnectUI) {
-      showAlert(lang === 'ru' ? 'Загрузка TON SDK...' : 'Loading TON SDK...');
-      return;
-    }
-    try {
-      if (tonConnectUI.connected) {
-        await tonConnectUI.disconnect();
-      }
-      
-      await tonConnectUI.openModal();
-      
-      const unsubscribe = tonConnectUI.onStatusChange((wallet: any) => {
-        if (wallet && wallet.account) {
-          const rawAddress = wallet.account.address;
-          const friendlyAddr = (window as any).TON_CONNECT_UI.toUserFriendlyAddress(rawAddress);
-          setTempTon(friendlyAddr);
-          showAlert(lang === 'ru' ? '✓ Кошелек успешно подключен!' : '✓ Wallet connected successfully!');
-          unsubscribe();
-        }
-      });
-    } catch (e) {
-      console.error('Wallet connection error:', e);
-      showAlert(lang === 'ru' ? 'Ошибка подключения кошелька' : 'Wallet connection error');
-    }
-  };
-
   const handleSelectProduct = useCallback((id: string | null) => {
     setProductId(id);
     if (typeof window !== 'undefined') {
@@ -2638,13 +2639,13 @@ export default function Storefront() {
 
   const isSoldOut = product.product_type === 'VOUCHER' && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
 
-  const hasBookingConflict = product.product_type === 'BOOKING' && bookingDate && bookingTime && busySlots.some((slot) => {
+  const hasBookingConflict = !!(product.product_type === 'BOOKING' && bookingDate && bookingTime && busySlots.some((slot) => {
     const start = new Date(slot.start).getTime();
     const end = new Date(slot.end).getTime();
     const selStart = new Date(`${bookingDate}T${bookingTime}:00`).getTime();
     const selEnd = selStart + 60 * 60 * 1000;
     return selStart < end && selEnd > start;
-  });
+  }));
 
   const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
   const p2pList = isStorePremium && product.creator?.payment_details?.p2p_list || [];
