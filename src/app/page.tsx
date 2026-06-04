@@ -2522,6 +2522,7 @@ export default function Storefront() {
                     <p><span style={{ color: 'var(--tg-text)' }}>{lang === 'ru' ? 'Дата:' : 'Date:'}</span> {extractedData.transaction_date || '—'}</p>
                   </div>
                 )}
+              </div>
             )}
           </div>
         )}
