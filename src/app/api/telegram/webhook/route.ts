@@ -13,14 +13,14 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
       '👛 *TON Wallet:* `{ton}`\n' +
       '💳 *Card/P2P Details:* `{p2p}`\n\n' +
       '✏️ *Interactive Commands:*\n' +
-      '• `/new_product` - Create product via bot wizard 📦\n' +
-      '• `/channel_desc` - Generate channel description via AI 📢\n' +
-      '• `/carts` - View unclosed/abandoned buyer carts 🛒\n' +
-      '• `/users` - List all registered participants 👥\n\n' +
+      '• /new_product - Create product via bot wizard 📦\n' +
+      '• /channel_desc - Generate channel description via AI 📢\n' +
+      '• /carts - View unclosed/abandoned buyer carts 🛒\n' +
+      '• /users - List all registered participants 👥\n\n' +
       '✏️ *Customization Commands:*\n' +
-      '• `/name <New Name>` - Set store name\n' +
-      '• `/desc <New Description>` - Set store description\n' +
-      '• `/youtube <URL>`, `/instagram <URL>`, ... - Social links\n\n' +
+      '• /name `<New Name>` - Set store name\n' +
+      '• /desc `<New Description>` - Set store description\n' +
+      '• /youtube `<URL>`, /instagram `<URL>`, ... - Social links\n\n' +
       '📸 *Images:*\n' +
       'Send any photo directly to update store visuals (Avatar, Banner, or Product Cover).\n\n' +
       'Use the options below to configure your payment details or learn how to create your storefront.',
@@ -64,14 +64,14 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
       '👛 *TON Кошелек:* `{ton}`\n' +
       '💳 *Карта/P2P реквизиты:* `{p2p}`\n\n' +
       '✏️ *Интерактивные команды:*\n' +
-      '• `/new_product` - Создать карточку товара через пошаговый мастер 📦\n' +
-      '• `/channel_desc` - Создать описание канала с помощью ИИ 📢\n' +
-      '• `/carts` - Просмотреть незакрытые корзины покупателей 🛒\n' +
-      '• `/users` - Список участников приложения 👥\n\n' +
+      '• /new_product - Создать карточку товара через пошаговый мастер 📦\n' +
+      '• /channel_desc - Создать описание канала с помощью ИИ 📢\n' +
+      '• /carts - Просмотреть незакрытые корзины покупателей 🛒\n' +
+      '• /users - Список участников приложения 👥\n\n' +
       '✏️ *Команды персонализации:*\n' +
-      '• `/name <Новое название>` - Задать название магазина\n' +
-      '• `/desc <Новое описание>` - Задать описание магазина\n' +
-      '• `/youtube <URL>`, `/instagram <URL>`, ... - Ссылки на соцсети\n\n' +
+      '• /name `<Новое название>` - Задать название магазина\n' +
+      '• /desc `<Новое описание>` - Задать описание магазина\n' +
+      '• /youtube `<URL>`, /instagram `<URL>`, ... - Ссылки на соцсети\n\n' +
       '📸 *Изображения:*\n' +
       'Отправьте любое фото напрямую, чтобы обновить аватар, баннер или задать обложку товара.\n\n' +
       'Используйте меню ниже, чтобы настроить реквизиты или начать работу.',
