@@ -74,7 +74,14 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      busySlots: mergedBusySlots
+      busySlots: mergedBusySlots,
+      bookings: dbBookings ? dbBookings.map((b: any) => ({
+        id: b.id,
+        start: b.slot_start_time,
+        end: b.slot_end_time,
+        order_id: b.order_id,
+        status: b.status
+      })) : []
     });
   } catch (error: any) {
     console.error('Error fetching busy slots:', error);

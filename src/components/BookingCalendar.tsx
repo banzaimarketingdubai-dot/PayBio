@@ -3,21 +3,31 @@ import { useState, useMemo } from 'react';
 interface BookingCalendarProps {
   slotsText: string;
   busySlots: { start: string; end: string }[];
+  bookings?: { id: string; start: string; end: string; order_id: string | null; status: string }[];
   bookingDate: string;
   setBookingDate: (date: string) => void;
   bookingTime: string;
   setBookingTime: (time: string) => void;
   lang: 'en' | 'ru';
+  isOwner?: boolean;
+  productId?: string;
+  userTgId?: number;
+  onRefreshBusySlots?: () => void;
 }
 
 export default function BookingCalendar({
   slotsText,
   busySlots,
+  bookings = [],
   bookingDate,
   setBookingDate,
   bookingTime,
   setBookingTime,
   lang,
+  isOwner = false,
+  productId,
+  userTgId,
+  onRefreshBusySlots,
 }: BookingCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -129,7 +139,30 @@ export default function BookingCalendar({
     return slots;
   }, [slotsText]);
 
-  // Check if a specific slot is busy
+  const [isTogglingBlock, setIsTogglingBlock] = useState<string | null>(null);
+
+  const showAlert = (message: string) => {
+    if (typeof window !== 'undefined') {
+      const WebApp = (window as any).Telegram?.WebApp;
+      if (WebApp?.showAlert) {
+        WebApp.showAlert(message);
+        return;
+      }
+    }
+    alert(message);
+  };
+
+  // Find database booking for a specific hour start time
+  const getBookingForSlot = (dateStr: string, timeStr: string) => {
+    const slotStart = new Date(`${dateStr}T${timeStr}:00`).getTime();
+    return bookings.find(b => {
+      if (b.status !== 'SCHEDULED') return false;
+      const start = new Date(b.start).getTime();
+      return start === slotStart;
+    });
+  };
+
+  // Check if a specific slot is busy (either DB booking or external calendar slot)
   const isSlotBusy = (dateStr: string, timeStr: string) => {
     const slotStart = new Date(`${dateStr}T${timeStr}:00`).getTime();
     const slotEnd = slotStart + 60 * 60 * 1000; // 1-hour slots
@@ -137,8 +170,86 @@ export default function BookingCalendar({
     return busySlots.some(slot => {
       const start = new Date(slot.start).getTime();
       const end = new Date(slot.end).getTime();
-      return slotStart < end && slotEnd > start;
+      return slotStart === start || (slotStart < end && slotEnd > start);
     });
+  };
+
+  const handleSlotClickOwner = async (time: string) => {
+    if (!productId || userTgId === undefined) return;
+    const slotTimeStr = `${bookingDate}T${time}:00`;
+    const booking = getBookingForSlot(bookingDate, time);
+    const isManualBlock = booking && !booking.order_id;
+    const isCustomerBooking = booking && !!booking.order_id;
+    const extBusy = isSlotBusy(bookingDate, time) && !booking;
+
+    if (isCustomerBooking || extBusy) {
+      const msg = lang === 'ru'
+        ? 'Этот слот забронирован клиентом или внешним календарем. Его нельзя изменить вручную.'
+        : 'This slot is booked by a customer or external calendar and cannot be modified here.';
+      showAlert(msg);
+      return;
+    }
+
+    const confirmMsg = isManualBlock
+      ? (lang === 'ru'
+          ? `Разблокировать время ${time} на дату ${bookingDate}?`
+          : `Unblock time slot ${time} on ${bookingDate}?`)
+      : (lang === 'ru'
+          ? `Заблокировать время ${time} на дату ${bookingDate}?`
+          : `Block time slot ${time} on ${bookingDate}?`);
+
+    const action = async () => {
+      setIsTogglingBlock(time);
+      try {
+        if (isManualBlock) {
+          // Unblock: DELETE
+          const res = await fetch(`/api/calendar/block?product_id=${productId}&slot_time=${encodeURIComponent(slotTimeStr)}&user_tg_id=${userTgId}`, {
+            method: 'DELETE'
+          });
+          const data = await res.json();
+          if (data.success) {
+            if (onRefreshBusySlots) onRefreshBusySlots();
+          } else {
+            showAlert(data.error || 'Failed to unblock slot');
+          }
+        } else {
+          // Block: POST
+          const res = await fetch(`/api/calendar/block`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              product_id: productId,
+              slot_time: slotTimeStr,
+              user_tg_id: userTgId
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            if (onRefreshBusySlots) onRefreshBusySlots();
+          } else {
+            showAlert(data.error || 'Failed to block slot');
+          }
+        }
+      } catch (err: any) {
+        showAlert(err.message || 'Error processing slot request');
+      } finally {
+        setIsTogglingBlock(null);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      const WebApp = (window as any).Telegram?.WebApp;
+      if (WebApp?.showConfirm) {
+        WebApp.showConfirm(confirmMsg, (ok: boolean) => {
+          if (ok) action();
+        });
+        return;
+      }
+    }
+
+    if (window.confirm(confirmMsg)) {
+      action();
+    }
   };
 
   return (
@@ -272,56 +383,119 @@ export default function BookingCalendar({
           borderTop: '1px solid var(--tg-border)',
           paddingTop: '14px',
         }} className="animate-fade-in">
-          <p style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--tg-text)', margin: 0 }}>
-            {lang === 'ru' ? 'Доступное время для записи:' : 'Available slots:'}
-          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <p style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--tg-text)', margin: 0 }}>
+              {isOwner 
+                ? (lang === 'ru' ? 'Управление расписанием:' : 'Manage Schedule:')
+                : (lang === 'ru' ? 'Доступное время для записи:' : 'Available slots:')}
+            </p>
+            {isOwner && (
+              <span style={{
+                fontSize: '10px',
+                background: 'rgba(255,255,255,0.06)',
+                padding: '3px 8px',
+                borderRadius: '12px',
+                color: 'var(--tg-hint)',
+                fontWeight: 600
+              }}>
+                {lang === 'ru' ? 'Режим креатора' : 'Creator Mode'}
+              </span>
+            )}
+          </div>
           
+          {isOwner && (
+            <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: '0 0 4px 0', lineHeight: 1.4 }}>
+              💡 {lang === 'ru' 
+                ? 'Нажмите на слот, чтобы заблокировать или разблокировать это время для клиентов.' 
+                : 'Tap a slot to block or unblock this hour for customers.'}
+            </p>
+          )}
+
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
             gap: '8px',
           }}>
             {hourlySlots.map((time, idx) => {
-              const busy = isSlotBusy(bookingDate, time);
+              const booking = getBookingForSlot(bookingDate, time);
+              const isManualBlock = booking && !booking.order_id;
+              const isCustomerBooking = booking && !!booking.order_id;
+              const isExtBusy = isSlotBusy(bookingDate, time) && !booking;
+              
+              const busy = !!booking || isExtBusy;
               const isSelected = bookingTime === time;
+              const loading = isTogglingBlock === time;
+
+              // Styling variants
+              let btnBg = 'rgba(255,255,255,0.04)';
+              let btnColor = 'var(--tg-text)';
+              let border = 'none';
+              let textDecor = 'none';
+
+              if (isSelected) {
+                btnBg = 'var(--tg-accent)';
+                btnColor = '#fff';
+              } else if (isManualBlock) {
+                // Manually blocked slots (creator block) - styled differently (dark grey/reddish border or theme colored)
+                btnBg = 'rgba(233,92,92,0.08)';
+                btnColor = 'var(--tg-destructive, #e53935)';
+                border = '1px solid rgba(233,92,92,0.2)';
+                textDecor = 'line-through';
+              } else if (isCustomerBooking || isExtBusy) {
+                // Client bookings or external calendar - disabled/busy appearance
+                btnBg = 'rgba(255,255,255,0.02)';
+                btnColor = 'rgba(255,255,255,0.15)';
+                textDecor = 'line-through';
+              }
 
               return (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => {
-                    if (!busy) {
+                    if (isOwner) {
+                      handleSlotClickOwner(time);
+                    } else if (!busy) {
                       setBookingTime(time);
                     }
                   }}
-                  disabled={busy}
+                  disabled={loading || (!isOwner && busy)}
                   style={{
                     padding: '8px 0',
                     borderRadius: '8px',
-                    border: 'none',
-                    background: isSelected
-                      ? 'var(--tg-accent)'
-                      : busy
-                      ? 'rgba(255,255,255,0.02)'
-                      : 'rgba(255,255,255,0.04)',
-                    color: isSelected
-                      ? '#fff'
-                      : busy
-                      ? 'rgba(255,255,255,0.15)'
-                      : 'var(--tg-text)',
-                    cursor: busy ? 'not-allowed' : 'pointer',
+                    border,
+                    background: btnBg,
+                    color: btnColor,
+                    cursor: (loading || (!isOwner && busy)) ? 'not-allowed' : 'pointer',
                     fontSize: '12px',
-                    fontWeight: isSelected ? 'bold' : 500,
-                    textDecoration: busy ? 'line-through' : 'none',
+                    fontWeight: (isSelected || isManualBlock) ? 'bold' : 500,
+                    textDecoration: textDecor,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '4px',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s',
+                    position: 'relative'
                   }}
-                  title={busy ? (lang === 'ru' ? 'Занято' : 'Booked') : undefined}
+                  title={
+                    loading 
+                      ? '...' 
+                      : isManualBlock 
+                      ? (lang === 'ru' ? 'Заблокировано вами' : 'Blocked by you')
+                      : isCustomerBooking 
+                      ? (lang === 'ru' ? 'Забронировано клиентом' : 'Booked by customer')
+                      : isExtBusy 
+                      ? (lang === 'ru' ? 'Внешний календарь' : 'External calendar')
+                      : undefined
+                  }
                 >
-                  {busy && <span style={{ fontSize: '10px' }}>🔒</span>}
+                  {loading ? (
+                    <span style={{ fontSize: '10px' }}>⏳</span>
+                  ) : isManualBlock ? (
+                    <span style={{ fontSize: '10px' }}>🚫</span>
+                  ) : (isCustomerBooking || isExtBusy) ? (
+                    <span style={{ fontSize: '10px' }}>🔒</span>
+                  ) : null}
                   {time}
                 </button>
               );

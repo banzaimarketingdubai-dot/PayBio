@@ -598,6 +598,23 @@ export const db = {
       }
       return b;
     }
+  },
+
+  async deleteBooking(bookingId: string) {
+    if (isRealSupabaseConfigured) {
+      const { error } = await supabaseAdmin
+        .from('bookings')
+        .delete()
+        .eq('id', bookingId);
+      if (error) throw error;
+      return true;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.bookings) mockDb.bookings = [];
+      mockDb.bookings = mockDb.bookings.filter(b => b.id !== bookingId);
+      writeMockDb(mockDb);
+      return true;
+    }
   }
 };
 

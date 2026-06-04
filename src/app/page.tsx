@@ -2010,6 +2010,7 @@ export default function Storefront() {
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('');
   const [busySlots, setBusySlots] = useState<{ start: string; end: string }[]>([]);
+  const [dbBookings, setDbBookings] = useState<{ id: string; start: string; end: string; order_id: string | null; status: string }[]>([]);
   const [isLoadingBusySlots, setIsLoadingBusySlots] = useState(false);
 
   const [selectedTonIdx, setSelectedTonIdx] = useState(0);
@@ -2154,8 +2155,9 @@ export default function Storefront() {
     try {
       const res = await fetch(`/api/calendar/busy?product_id=${prodId}`);
       const data = await res.json();
-      if (data.success && data.busySlots) {
-        setBusySlots(data.busySlots);
+      if (data.success) {
+        if (data.busySlots) setBusySlots(data.busySlots);
+        if (data.bookings) setDbBookings(data.bookings);
       }
     } catch (e) {
       console.error('Failed to fetch busy slots:', e);
@@ -3065,11 +3067,16 @@ export default function Storefront() {
               <BookingCalendar
                 slotsText={slotsText}
                 busySlots={busySlots}
+                bookings={dbBookings}
                 bookingDate={bookingDate}
                 setBookingDate={setBookingDate}
                 bookingTime={bookingTime}
                 setBookingTime={setBookingTime}
                 lang={lang}
+                isOwner={!!isOwner}
+                productId={product.id}
+                userTgId={buyerTgId}
+                onRefreshBusySlots={() => fetchBusySlotsForProduct(product.id)}
               />
             )}
 
