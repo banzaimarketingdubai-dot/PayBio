@@ -162,3 +162,30 @@ export async function verifyReceiptImage(
     };
   }
 }
+
+/**
+ * Generates a short, high-conversion promo post for Telegram using Gemini.
+ */
+export async function generatePromoPost(title: string, description: string): Promise<string> {
+  const prompt = `Act as a social media manager. Based on this product title and description, write a short, high-conversion Telegram post (max 3 sentences) offering this product.
+  
+  Product Title: ${title}
+  Product Description: ${description}
+  
+  Return only the post content without other text.`;
+
+  const contents = [
+    {
+      parts: [
+        { text: prompt }
+      ]
+    }
+  ];
+
+  try {
+    return await callGemini(contents, false);
+  } catch (error) {
+    console.error('Error generating promo post:', error);
+    return `🔥 Get ${title} now! ${description ? description.slice(0, 100) : ''} - Check it out on our store!`;
+  }
+}

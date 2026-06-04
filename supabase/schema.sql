@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT, -- Used for generating Paybio storefront URL
     is_premium BOOLEAN DEFAULT FALSE,
     payment_details JSONB, -- Stores { type: 'ton'|'p2p', value: 'wallet_address_or_card_details' }
+    profile_customization JSONB, -- Stores store customization { store_name, store_description, avatar_url, banner_url, social_links }
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS products (
     price_fiat NUMERIC,
     price_stars INTEGER,
     content_url TEXT NOT NULL, -- Link to digital asset or private channel invite
+    cover_url TEXT, -- AI generated or uploaded custom product cover image
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

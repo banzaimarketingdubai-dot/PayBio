@@ -73,7 +73,11 @@ export const db = {
   },
 
   async upsertUser(tgId: number, username: string | null, paymentDetails?: any) {
-    const defaultPayment = paymentDetails || { type: 'p2p', value: '1234-5678-9012-3456 (John Doe)' };
+    const existing = await this.getUserByTelegramId(tgId);
+    const defaultPayment = paymentDetails || (existing ? existing.payment_details : { type: 'p2p', value: '1234-5678-9012-3456 (John Doe)' });
+    const isPremium = existing ? existing.is_premium : false;
+    const customization = existing ? existing.profile_customization : null;
+
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('users')
@@ -81,7 +85,8 @@ export const db = {
           telegram_id: tgId,
           username,
           payment_details: defaultPayment,
-          is_premium: false
+          is_premium: isPremium,
+          profile_customization: customization
         }, { onConflict: 'telegram_id' })
         .select()
         .single();
@@ -98,8 +103,9 @@ export const db = {
           id: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
           telegram_id: tgId,
           username,
-          is_premium: false,
+          is_premium: isPremium,
           payment_details: defaultPayment,
+          profile_customization: customization,
           created_at: new Date().toISOString()
         };
         mockDb.users.push(user);
@@ -124,6 +130,48 @@ export const db = {
       const user = mockDb.users.find(u => u.id === userId);
       if (user) {
         user.is_premium = isPremium;
+        writeMockDb(mockDb);
+      }
+      return user;
+    }
+  },
+
+  async updateUserProfile(userId: string, customization: any) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({ profile_customization: customization })
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const user = mockDb.users.find(u => u.id === userId);
+      if (user) {
+        user.profile_customization = customization;
+        writeMockDb(mockDb);
+      }
+      return user;
+    }
+  },
+
+  async updateUserPaymentDetails(userId: string, paymentDetails: any) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .update({ payment_details: paymentDetails })
+        .eq('id', userId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const user = mockDb.users.find(u => u.id === userId);
+      if (user) {
+        user.payment_details = paymentDetails;
         writeMockDb(mockDb);
       }
       return user;
@@ -178,7 +226,7 @@ export const db = {
     }
   },
 
-  async createProduct(creatorId: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string) {
+  async createProduct(creatorId: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string) {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('products')
@@ -188,7 +236,8 @@ export const db = {
           description,
           price_fiat: priceFiat,
           price_stars: priceStars,
-          content_url: contentUrl
+          content_url: contentUrl,
+          cover_url: coverUrl || null
         })
         .select()
         .single();
@@ -204,6 +253,7 @@ export const db = {
         price_fiat: priceFiat,
         price_stars: priceStars,
         content_url: contentUrl,
+        cover_url: coverUrl || null,
         created_at: new Date().toISOString()
       };
       mockDb.products.push(newProduct);
