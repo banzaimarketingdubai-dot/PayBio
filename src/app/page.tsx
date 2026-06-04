@@ -43,6 +43,46 @@ interface Product {
   creator?: Creator;
 }
 
+const compressImage = (base64Str: string, maxWidth = 800, maxHeight = 800, quality = 0.7): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height);
+          height = maxHeight;
+        }
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(base64Str);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, width, height);
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      resolve(compressed);
+    };
+    img.onerror = () => {
+      resolve(base64Str);
+    };
+  });
+};
+
 const TRANSLATIONS = {
   en: {
     loading: 'Loading…',
@@ -590,7 +630,8 @@ function ProductListScreen({
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
+        const rawBase64 = reader.result as string;
+        const base64 = await compressImage(rawBase64, 400, 400, 0.85);
         setStoreAvatar(base64);
         if (creator) {
           localStorage.setItem(`paybio_avatar_${creator.id}`, base64);
@@ -619,7 +660,8 @@ function ProductListScreen({
     if (file) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
+        const rawBase64 = reader.result as string;
+        const base64 = await compressImage(rawBase64, 1200, 400, 0.75);
         setStoreBanner(base64);
         if (creator) {
           localStorage.setItem(`paybio_banner_${creator.id}`, base64);
@@ -647,8 +689,10 @@ function ProductListScreen({
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setProdCoverUrl(reader.result as string);
+      reader.onloadend = async () => {
+        const rawBase64 = reader.result as string;
+        const base64 = await compressImage(rawBase64, 800, 600, 0.75);
+        setProdCoverUrl(base64);
       };
       reader.readAsDataURL(file);
     }
