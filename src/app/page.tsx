@@ -622,6 +622,7 @@ function ProductListScreen({
   const [isEditSocialsOpen, setIsEditSocialsOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [creationStep, setCreationStep] = useState<'TYPE_SELECT' | 'FORM'>('TYPE_SELECT');
 
   const handleOpenEditProduct = (p: Product) => {
     setEditingProduct(p);
@@ -654,6 +655,7 @@ function ProductListScreen({
     setProdUrl(urlVal);
     setProdCalendarIcsUrl(icsVal);
     setProdMaxQuantity(maxVal);
+    setCreationStep('FORM');
     setIsAddProductOpen(true);
   };
 
@@ -669,6 +671,7 @@ function ProductListScreen({
     setProdCoverUrl('');
     setAiPrompt('');
     setProdType('DIGITAL');
+    setCreationStep('TYPE_SELECT');
     setIsAddProductOpen(true);
   };
 
@@ -1730,203 +1733,301 @@ function ProductListScreen({
           </button>
           <h2 className="bottom-sheet-title">{editingProduct ? (lang === 'ru' ? 'Редактировать товар' : 'Edit Product') : t.addNewProduct}</h2>
           
-          <form onSubmit={handleCreateProduct}>
-            <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">{lang === 'ru' ? 'Тип товара' : 'Product Type'}</label>
-              <select 
-                className="tg-input"
-                value={prodType}
-                onChange={(e) => setProdType(e.target.value)}
-              >
-                <option value="DIGITAL">{lang === 'ru' ? 'Цифровой (Файл/Ссылка)' : 'Digital (File/Link)'}</option>
-                <option value="VOUCHER">{lang === 'ru' ? 'Ваучер / Билет' : 'Voucher / Ticket'}</option>
-                <option value="BOOKING">{lang === 'ru' ? 'Запись / Консультация' : 'Booking / Consultation'}</option>
-              </select>
-            </div>
+          {creationStep === 'TYPE_SELECT' && !editingProduct ? (
+            <div className="animate-fade-in" style={{ padding: '4px 0 16px' }}>
+              <p style={{ fontSize: '13px', color: 'var(--tg-hint)', textAlign: 'center', marginBottom: '20px', lineHeight: 1.4 }}>
+                {lang === 'ru'
+                  ? 'Выберите категорию товара для настройки индивидуального дизайна страницы'
+                  : 'Choose a product category to set up a customized page design'}
+              </p>
+              
+              <div className="type-selector-container">
+                {/* DIGITAL */}
+                <button
+                  type="button"
+                  className="type-card"
+                  onClick={() => {
+                    setProdType('DIGITAL');
+                    setCreationStep('FORM');
+                  }}
+                >
+                  <div className="type-card-icon" style={{ color: '#60a5fa' }}>💾</div>
+                  <div className="type-card-info">
+                    <span className="type-card-title">
+                      {lang === 'ru' ? 'Цифровой товар' : 'Digital Product'}
+                    </span>
+                    <span className="type-card-desc">
+                      {lang === 'ru' ? 'Файлы, книги, курсы, ссылки на контент' : 'Files, eBooks, courses, links to content'}
+                    </span>
+                  </div>
+                </button>
 
-            <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">{t.productTitle}</label>
-              <input 
-                type="text" 
-                className="tg-input" 
-                placeholder="e.g. Beginners Guide to AI"
-                value={prodTitle} 
-                onChange={(e) => setProdTitle(e.target.value)} 
-                required 
-              />
-            </div>
-            
-            <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">{t.productDesc}</label>
-              <textarea 
-                className="tg-input" 
-                placeholder="Describe what customers get in this product..."
-                value={prodDesc} 
-                onChange={(e) => setProdDesc(e.target.value)} 
-                rows={3}
-                style={{ resize: 'none' }}
-              />
-            </div>
+                {/* VOUCHER */}
+                <button
+                  type="button"
+                  className="type-card"
+                  onClick={() => {
+                    setProdType('VOUCHER');
+                    setCreationStep('FORM');
+                  }}
+                >
+                  <div className="type-card-icon" style={{ color: '#f87171' }}>🎟️</div>
+                  <div className="type-card-info">
+                    <span className="type-card-title">
+                      {lang === 'ru' ? 'Билет или Ваучер' : 'Ticket or Voucher'}
+                    </span>
+                    <span className="type-card-desc">
+                      {lang === 'ru' ? 'Электронный билет с QR-кодом для входа' : 'E-ticket with verification QR code'}
+                    </span>
+                  </div>
+                </button>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                {/* BOOKING */}
+                <button
+                  type="button"
+                  className="type-card"
+                  onClick={() => {
+                    setProdType('BOOKING');
+                    setCreationStep('FORM');
+                  }}
+                >
+                  <div className="type-card-icon" style={{ color: '#38bdf8' }}>📅</div>
+                  <div className="type-card-info">
+                    <span className="type-card-title">
+                      {lang === 'ru' ? 'Запись на время' : 'Booking / Session'}
+                    </span>
+                    <span className="type-card-desc">
+                      {lang === 'ru' ? 'Бронирование слотов в календаре, консультации' : 'Booking calendar slots, consultations'}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleCreateProduct} className="animate-fade-in">
+              {/* Back to Type Selection Button (Only when creating, not editing) */}
+              {!editingProduct && (
+                <button
+                  type="button"
+                  onClick={() => setCreationStep('TYPE_SELECT')}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--tg-link)',
+                    fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center',
+                    gap: '4px', cursor: 'pointer', marginBottom: '14px', padding: 0
+                  }}
+                >
+                  ← {lang === 'ru' ? 'Сменить тип товара' : 'Change product type'}
+                </button>
+              )}
+              
+              {/* Display selected type info badge */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '10px 12px', background: 'rgba(255,255,255,0.03)',
+                borderRadius: 'var(--radius-sm)', marginBottom: '16px',
+                border: '1px solid var(--tg-border)'
+              }}>
+                <span style={{ fontSize: '20px' }}>
+                  {prodType === 'VOUCHER' ? '🎟️' : prodType === 'BOOKING' ? '📅' : '💾'}
+                </span>
+                <div>
+                  <span style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 600, textTransform: 'uppercase', display: 'block' }}>
+                    {lang === 'ru' ? 'Выбранный тип' : 'Selected Type'}
+                  </span>
+                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                    {prodType === 'VOUCHER' 
+                      ? (lang === 'ru' ? 'Билет или Ваучер' : 'Ticket or Voucher')
+                      : prodType === 'BOOKING'
+                      ? (lang === 'ru' ? 'Запись на время' : 'Booking / Session')
+                      : (lang === 'ru' ? 'Цифровой товар' : 'Digital Product')}
+                  </span>
+                </div>
+              </div>
+
               <div className="bottom-sheet-form-group">
-                <label className="bottom-sheet-label">{t.priceUSD}</label>
+                <label className="bottom-sheet-label">{t.productTitle}</label>
                 <input 
-                  type="number" 
-                  step="0.01"
+                  type="text" 
                   className="tg-input" 
-                  placeholder="9.99"
-                  value={prodPriceUSD} 
-                  onChange={(e) => setProdPriceUSD(e.target.value)} 
+                  placeholder="e.g. Beginners Guide to AI"
+                  value={prodTitle} 
+                  onChange={(e) => setProdTitle(e.target.value)} 
                   required 
                 />
               </div>
+              
               <div className="bottom-sheet-form-group">
-                <label className="bottom-sheet-label">{t.priceStarsLabel}</label>
-                <input 
-                  type="number" 
+                <label className="bottom-sheet-label">{t.productDesc}</label>
+                <textarea 
                   className="tg-input" 
-                  placeholder={t.calculatedStars}
-                  value={prodPriceStars} 
-                  onChange={(e) => setProdPriceStars(e.target.value)} 
+                  placeholder="Describe what customers get in this product..."
+                  value={prodDesc} 
+                  onChange={(e) => setProdDesc(e.target.value)} 
+                  rows={3}
+                  style={{ resize: 'none' }}
                 />
               </div>
-            </div>
 
-            <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">
-                {prodType === 'BOOKING' 
-                  ? (lang === 'ru' ? 'Свободные часы (например: Пн 10:00-12:00, Ср 15:00-18:00)' : 'Available Slots (e.g. Mon 10:00-12:00, Wed 15:00-18:00)')
-                  : t.fulfillmentUrl}
-              </label>
-              <input 
-                type="text" 
-                className="tg-input" 
-                placeholder={prodType === 'BOOKING' ? "e.g. Mon 10:00-12:00" : "https://example.com/ebook.pdf"}
-                value={prodUrl} 
-                onChange={(e) => setProdUrl(e.target.value)} 
-                required={prodType === 'BOOKING'}
-              />
-            </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="bottom-sheet-form-group">
+                  <label className="bottom-sheet-label">{t.priceUSD}</label>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    className="tg-input" 
+                    placeholder="9.99"
+                    value={prodPriceUSD} 
+                    onChange={(e) => setProdPriceUSD(e.target.value)} 
+                    required 
+                  />
+                </div>
+                <div className="bottom-sheet-form-group">
+                  <label className="bottom-sheet-label">{t.priceStarsLabel}</label>
+                  <input 
+                    type="number" 
+                    className="tg-input" 
+                    placeholder={t.calculatedStars}
+                    value={prodPriceStars} 
+                    onChange={(e) => setProdPriceStars(e.target.value)} 
+                  />
+                </div>
+              </div>
 
-            {prodType === 'BOOKING' && (
-              <div className="bottom-sheet-form-group animate-fade-in">
+              <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">
-                  {lang === 'ru' ? 'Ссылка на Google/Apple Календарь (.ics) [Опционально]' : 'Google/Apple Calendar Link (.ics) [Optional]'}
+                  {prodType === 'BOOKING' 
+                    ? (lang === 'ru' ? 'Свободные часы (например: Пн 10:00-12:00, Ср 15:00-18:00)' : 'Available Slots (e.g. Mon 10:00-12:00, Wed 15:00-18:00)')
+                    : t.fulfillmentUrl}
                 </label>
                 <input 
                   type="text" 
                   className="tg-input" 
-                  placeholder="webcal://... or https://...ics"
-                  value={prodCalendarIcsUrl} 
-                  onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+                  placeholder={prodType === 'BOOKING' ? "e.g. Mon 10:00-12:00" : "https://example.com/ebook.pdf"}
+                  value={prodUrl} 
+                  onChange={(e) => setProdUrl(e.target.value)} 
+                  required={prodType === 'BOOKING'}
                 />
               </div>
-            )}
 
-            {prodType === 'VOUCHER' && (
-              <div className="bottom-sheet-form-group animate-fade-in">
-                <label className="bottom-sheet-label">
-                  {lang === 'ru' ? 'Лимит билетов (Максимум) [Опционально]' : 'Max Ticket Limit [Optional]'}
-                </label>
-                <input 
-                  type="number" 
-                  className="tg-input" 
-                  placeholder="e.g. 50"
-                  value={prodMaxQuantity} 
-                  onChange={(e) => setProdMaxQuantity(e.target.value)} 
-                />
-              </div>
-            )}
-
-            {/* Product Cover Image Upload / AI Generation */}
-            <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">{t.productCover}</label>
-              
-              {prodCoverUrl && (
-                <div style={{
-                  width: '100%',
-                  height: '140px',
-                  borderRadius: '10px',
-                  backgroundImage: `url(${prodCoverUrl})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  marginBottom: '10px',
-                  position: 'relative'
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => setProdCoverUrl('')}
-                    style={{
-                      position: 'absolute', top: '8px', right: '8px',
-                      background: 'rgba(0,0,0,0.6)', color: '#fff',
-                      border: 'none', borderRadius: '50%', width: '24px', height: '24px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      cursor: 'pointer', fontSize: '12px'
-                    }}
-                  >
-                    ✕
-                  </button>
+              {prodType === 'BOOKING' && (
+                <div className="bottom-sheet-form-group animate-fade-in">
+                  <label className="bottom-sheet-label">
+                    {lang === 'ru' ? 'Ссылка на Google/Apple Календарь (.ics) [Опционально]' : 'Google/Apple Calendar Link (.ics) [Optional]'}
+                  </label>
+                  <input 
+                    type="text" 
+                    className="tg-input" 
+                    placeholder="webcal://... or https://...ics"
+                    value={prodCalendarIcsUrl} 
+                    onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+                  />
                 </div>
               )}
 
-              {isCreatorPremium ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <input 
-                      type="text" 
-                      className="tg-input" 
-                      placeholder={t.enterPrompt}
-                      value={aiPrompt} 
-                      onChange={(e) => setAiPrompt(e.target.value)} 
-                    />
+              {prodType === 'VOUCHER' && (
+                <div className="bottom-sheet-form-group animate-fade-in">
+                  <label className="bottom-sheet-label">
+                    {lang === 'ru' ? 'Лимит билетов (Максимум) [Опционально]' : 'Max Ticket Limit [Optional]'}
+                  </label>
+                  <input 
+                    type="number" 
+                    className="tg-input" 
+                    placeholder="e.g. 50"
+                    value={prodMaxQuantity} 
+                    onChange={(e) => setProdMaxQuantity(e.target.value)} 
+                  />
+                </div>
+              )}
+
+              {/* Product Cover Image Upload / AI Generation */}
+              <div className="bottom-sheet-form-group">
+                <label className="bottom-sheet-label">{t.productCover}</label>
+                
+                {prodCoverUrl && (
+                  <div style={{
+                    width: '100%',
+                    height: '140px',
+                    borderRadius: '10px',
+                    backgroundImage: `url(${prodCoverUrl})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    marginBottom: '10px',
+                    position: 'relative'
+                  }}>
                     <button
                       type="button"
-                      className="btn-primary"
-                      style={{ width: 'auto', padding: '0 16px', background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', whiteSpace: 'nowrap' }}
-                      onClick={handleGenerateAICover}
-                      disabled={isGeneratingCover || !aiPrompt}
+                      onClick={() => setProdCoverUrl('')}
+                      style={{
+                        position: 'absolute', top: '8px', right: '8px',
+                        background: 'rgba(0,0,0,0.6)', color: '#fff',
+                        border: 'none', borderRadius: '50%', width: '24px', height: '24px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', fontSize: '12px'
+                      }}
                     >
-                      {isGeneratingCover ? t.generating : t.generateAI}
+                      ✕
                     </button>
                   </div>
-                  <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--tg-hint)' }}>
-                    — or —
-                  </div>
-                  <label className="btn-secondary" style={{ textAlign: 'center', display: 'block', cursor: 'pointer' }}>
-                    📁 {t.uploadCustom}
-                    <input type="file" accept="image/*" onChange={handleProdCoverUpload} style={{ display: 'none' }} />
-                  </label>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label className="btn-secondary" style={{ textAlign: 'center', display: 'block', cursor: 'pointer' }}>
-                    📁 {t.uploadCustom}
-                    <input type="file" accept="image/*" onChange={handleProdCoverUpload} style={{ display: 'none' }} />
-                  </label>
-                  
-                  <div style={{
-                    padding: '10px 12px',
-                    background: 'rgba(255,215,0,0.08)',
-                    border: '1px solid rgba(255,215,0,0.2)',
-                    borderRadius: '8px',
-                    fontSize: '11px',
-                    lineHeight: '1.4',
-                    color: 'var(--tg-text)'
-                  }}>
-                    {t.botNotice}
-                  </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            <button type="submit" className="btn-primary" style={{ marginTop: '14px' }} disabled={isAdding}>
-              {isAdding 
-                ? (editingProduct ? (lang === 'ru' ? 'Сохранение...' : 'Saving...') : t.addingProduct) 
-                : (editingProduct ? (lang === 'ru' ? 'Сохранить изменения ✓' : 'Save Changes ✓') : t.addProductBtn)
-              }
-            </button>
-          </form>
+                {isCreatorPremium ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input 
+                        type="text" 
+                        className="tg-input" 
+                        placeholder={t.enterPrompt}
+                        value={aiPrompt} 
+                        onChange={(e) => setAiPrompt(e.target.value)} 
+                      />
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        style={{ width: 'auto', padding: '0 16px', background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', whiteSpace: 'nowrap' }}
+                        onClick={handleGenerateAICover}
+                        disabled={isGeneratingCover || !aiPrompt}
+                      >
+                        {isGeneratingCover ? t.generating : t.generateAI}
+                      </button>
+                    </div>
+                    <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--tg-hint)' }}>
+                      — or —
+                    </div>
+                    <label className="btn-secondary" style={{ textAlign: 'center', display: 'block', cursor: 'pointer' }}>
+                      📁 {t.uploadCustom}
+                      <input type="file" accept="image/*" onChange={handleProdCoverUpload} style={{ display: 'none' }} />
+                    </label>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label className="btn-secondary" style={{ textAlign: 'center', display: 'block', cursor: 'pointer' }}>
+                      📁 {t.uploadCustom}
+                      <input type="file" accept="image/*" onChange={handleProdCoverUpload} style={{ display: 'none' }} />
+                    </label>
+                    
+                    <div style={{
+                      padding: '10px 12px',
+                      background: 'rgba(255,215,0,0.08)',
+                      border: '1px solid rgba(255,215,0,0.2)',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                      lineHeight: '1.4',
+                      color: 'var(--tg-text)'
+                    }}>
+                      {t.botNotice}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button type="submit" className="btn-primary" style={{ marginTop: '14px' }} disabled={isAdding}>
+                {isAdding 
+                  ? (editingProduct ? (lang === 'ru' ? 'Сохранение...' : 'Saving...') : t.addingProduct) 
+                  : (editingProduct ? (lang === 'ru' ? 'Сохранить изменения ✓' : 'Save Changes ✓') : t.addProductBtn)
+                }
+              </button>
+            </form>
+          )}
         </div>
       </div>
 
@@ -3063,68 +3164,250 @@ export default function Storefront() {
           </span>
         </div>
 
-        {/* Product visual / Cover */}
-        <div style={{
-          background: 'var(--tg-surface)',
-          borderRadius: '16px',
-          padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
-          textAlign: 'center',
-          marginBottom: '20px',
-          position: 'relative', overflow: 'hidden',
-          border: '1px solid var(--tg-border)'
-        }}>
-          {product.cover_url && (
-            <div style={{
-              width: '100%',
-              height: '180px',
-              backgroundImage: `url(${product.cover_url})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              marginBottom: '16px',
-              position: 'relative'
-            }}>
+        {/* Category-Specific Storefront Product Layout */}
+        {product.product_type === 'VOUCHER' ? (
+          /* ── VOUCHER / TICKET CATEGORY LAYOUT (TICKET STUB) ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '16px',
+            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
+            textAlign: 'center',
+            marginBottom: '20px',
+            position: 'relative', overflow: 'hidden',
+            border: '1px solid var(--tg-border)',
+          }}>
+            {/* Ticket Notches */}
+            <div className="ticket-notch-left" />
+            <div className="ticket-notch-right" />
+
+            {product.cover_url && (
               <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                height: '60px',
-                background: 'linear-gradient(to top, var(--tg-surface), transparent)'
-              }} />
-            </div>
-          )}
-          
-          <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
-            {/* Subtle accent glow */}
-            {!product.cover_url && (
-              <div style={{
-                position: 'absolute', top: '-40px', left: '50%',
-                transform: 'translateX(-50%)',
-                width: '200px', height: '120px',
-                background: `rgba(var(--tg-accent-rgb), 0.12)`,
-                borderRadius: '50%', filter: 'blur(40px)',
-                pointerEvents: 'none',
-              }} />
+                width: '100%',
+                height: '180px',
+                backgroundImage: `url(${product.cover_url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '16px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '60px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
             )}
-            <span className="chip chip-hint" style={{ marginBottom: '14px', display: 'inline-flex' }}>
-              {product.product_type === 'VOUCHER'
-                ? (lang === 'ru' ? '🎟️ Билет / Ваучер' : '🎟️ Ticket / Voucher')
-                : product.product_type === 'BOOKING'
-                ? (lang === 'ru' ? '📅 Запись / Консультация' : '📅 Booking / Consultation')
-                : t.digitalProduct}
-            </span>
-            <h1 style={{
-              fontSize: '22px', fontWeight: 800,
-              color: 'var(--tg-text)', lineHeight: 1.3,
-              letterSpacing: '-0.3px',
-            }}>
-              {product.title}
-            </h1>
-            <p style={{
-              marginTop: '10px', fontSize: '13px',
-              color: 'var(--tg-hint)', lineHeight: 1.6,
-            }}>
-              {product.description}
-            </p>
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              {!product.cover_url && (
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.2)',
+                  color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '26px', margin: '0 auto 16px',
+                  boxShadow: '0 4px 12px rgba(248,113,113,0.1)'
+                }}>
+                  🎟️
+                </div>
+              )}
+              
+              <span className="chip" style={{ marginBottom: '14px', display: 'inline-flex', background: 'rgba(248,113,113,0.15)', color: '#f87171' }}>
+                {lang === 'ru' ? '🎟️ Билет / Ваучер' : '🎟️ Ticket / Voucher'}
+              </span>
+              
+              <h1 style={{
+                fontSize: '22px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.3px',
+              }}>
+                {product.title}
+              </h1>
+              
+              <p style={{
+                marginTop: '10px', fontSize: '13px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+              }}>
+                {product.description}
+              </p>
+
+              {/* Dotted separator for ticket stub effect */}
+              <div style={{
+                borderTop: '2px dashed var(--tg-border)',
+                margin: '18px 0',
+                position: 'relative'
+              }} />
+
+              <div style={{
+                padding: '10px 12px',
+                background: 'rgba(248,113,113,0.06)', borderRadius: '10px',
+                border: '1.5px dashed rgba(248,113,113,0.2)',
+                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>🎟️</span>
+                <span>
+                  {lang === 'ru' 
+                    ? 'После покупки билет появится в вашем кабинете. Предъявите его QR-код на входе.' 
+                    : 'Your e-ticket with a secure QR code will be generated immediately after payment.'}
+                </span>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : product.product_type === 'BOOKING' ? (
+          /* ── BOOKING / CALENDAR CATEGORY LAYOUT ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '16px',
+            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
+            textAlign: 'center',
+            marginBottom: '20px',
+            position: 'relative', overflow: 'hidden',
+            border: '1px solid var(--tg-border)'
+          }}>
+            {product.cover_url && (
+              <div style={{
+                width: '100%',
+                height: '180px',
+                backgroundImage: `url(${product.cover_url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '16px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '60px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
+            )}
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              {!product.cover_url && (
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.2)',
+                  color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '26px', margin: '0 auto 16px',
+                  boxShadow: '0 4px 12px rgba(56,189,248,0.1)'
+                }}>
+                  📅
+                </div>
+              )}
+              
+              <span className="chip" style={{ marginBottom: '14px', display: 'inline-flex', background: 'rgba(56,189,248,0.15)', color: '#38bdf8' }}>
+                {lang === 'ru' ? '📅 Запись / Консультация' : '📅 Booking / Consultation'}
+              </span>
+              
+              <h1 style={{
+                fontSize: '22px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.3px',
+              }}>
+                {product.title}
+              </h1>
+              
+              <p style={{
+                marginTop: '10px', fontSize: '13px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+              }}>
+                {product.description}
+              </p>
+
+              <div style={{
+                marginTop: '16px', padding: '10px 12px',
+                background: 'rgba(56,189,248,0.06)', borderRadius: '10px',
+                border: '1.5px dashed rgba(56,189,248,0.2)',
+                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>🕒</span>
+                <span>
+                  {lang === 'ru' 
+                    ? 'Выберите свободную дату и время перед совершением оплаты.' 
+                    : 'Select your preferred date and slot from the menu below before paying.'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── DIGITAL DELIVERY LAYOUT (DEFAULT) ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '16px',
+            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
+            textAlign: 'center',
+            marginBottom: '20px',
+            position: 'relative', overflow: 'hidden',
+            border: '1px solid var(--tg-border)'
+          }}>
+            {product.cover_url && (
+              <div style={{
+                width: '100%',
+                height: '180px',
+                backgroundImage: `url(${product.cover_url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '16px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '60px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
+            )}
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              {!product.cover_url && (
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.2)',
+                  color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '26px', margin: '0 auto 16px',
+                  boxShadow: '0 4px 12px rgba(96,165,250,0.1)'
+                }}>
+                  💾
+                </div>
+              )}
+              
+              <span className="chip chip-blue" style={{ marginBottom: '14px', display: 'inline-flex' }}>
+                {t.digitalProduct}
+              </span>
+              
+              <h1 style={{
+                fontSize: '22px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.3px',
+              }}>
+                {product.title}
+              </h1>
+              
+              <p style={{
+                marginTop: '10px', fontSize: '13px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+              }}>
+                {product.description}
+              </p>
+
+              <div style={{
+                marginTop: '16px', padding: '10px 12px',
+                background: 'rgba(96,165,250,0.06)', borderRadius: '10px',
+                border: '1.5px dashed rgba(96,165,250,0.2)',
+                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>⚡</span>
+                <span>
+                  {lang === 'ru' 
+                    ? 'Мгновенная выдача! Ссылку или файл вы получите сразу же после завершения платежа.' 
+                    : 'Instant access! File downloads or access links are provided right after checkout.'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
             {product.product_type === 'VOUCHER' && hasLimit && (
               <div style={{ margin: '0 0 16px 0', padding: '12px 16px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)', display: 'flex', flexDirection: 'column', gap: '8px' }} className="animate-fade-up">
@@ -3140,11 +3423,20 @@ export default function Storefront() {
                   <div style={{
                     width: `${Math.min(100, ((product.sold_count || 0) / (maxQuantity || 1)) * 100)}%`,
                     height: '100%',
-                    background: (product.sold_count || 0) >= (maxQuantity || 0) ? 'var(--tg-red)' : 'var(--tg-accent)',
+                    background: (product.sold_count || 0) >= (maxQuantity || 0) 
+                      ? 'var(--tg-red)' 
+                      : (maxQuantity || 0) - (product.sold_count || 0) <= 5 
+                      ? 'linear-gradient(90deg, #f48020, #e95c5c)' 
+                      : 'var(--tg-accent)',
                     borderRadius: '3px',
                     transition: 'width 0.4s ease'
                   }} />
                 </div>
+                {(maxQuantity || 0) - (product.sold_count || 0) <= 5 && (maxQuantity || 0) - (product.sold_count || 0) > 0 && (
+                  <p style={{ fontSize: '11px', color: '#e95c5c', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }} className="animate-pulse-soft">
+                    <span>🔥</span> {lang === 'ru' ? 'Почти все раскуплено! Спешите!' : 'Almost sold out! Hurry up!'}
+                  </p>
+                )}
               </div>
             )}
 

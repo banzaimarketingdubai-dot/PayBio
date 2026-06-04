@@ -663,3 +663,82 @@ body {
 .floating-add-btn:active {
   transform: scale(0.9);
 }
+
+/* Product Type Selector Screen */
+.type-selector-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+.type-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--tg-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  width: 100%;
+}
+.type-card:hover, .type-card:focus {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--tg-accent);
+  transform: translateY(-2px);
+}
+.type-card:active {
+  transform: scale(0.98) translateY(0);
+}
+.type-card-icon {
+  font-size: 26px;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+.type-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.type-card-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--tg-text);
+}
+.type-card-desc {
+  font-size: 11.5px;
+  color: var(--tg-hint);
+  line-height: 1.4;
+}
+
+/* Category Specific Styles */
+.ticket-notch-left {
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--tg-bg);
+  z-index: 5;
+}
+.ticket-notch-right {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--tg-bg);
+  z-index: 5;
+}
