@@ -340,5 +340,44 @@ export const db = {
       }
       return order;
     }
+  },
+
+  async getAllUsers() {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      return mockDb.users;
+    }
+  },
+
+  async getPendingOrdersByCreatorId(creatorId: string) {
+    if (isRealSupabaseConfigured) {
+      // Perform inner join to filter orders of creator's products
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('*, product:product_id!inner(*)')
+        .eq('status', 'pending')
+        .eq('product.creator_id', creatorId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const creatorProducts = mockDb.products.filter(p => p.creator_id === creatorId);
+      const productIds = creatorProducts.map(p => p.id);
+      return mockDb.orders
+        .filter(o => o.status === 'pending' && productIds.includes(o.product_id))
+        .map(o => {
+          const product = creatorProducts.find(p => p.id === o.product_id);
+          return { ...o, product };
+        });
+    }
   }
 };
+

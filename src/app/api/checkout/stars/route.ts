@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
+import { sendTelegramNotification } from '@/lib/telegram';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
@@ -22,6 +23,25 @@ export async function POST(request: Request) {
 
     // 2. Create a pending order
     const order = await db.createOrder(product_id, buyer_tg_id, 'stars');
+
+    // Notify creator about checkout initiation
+    if (product.creator) {
+      const creatorTgId = Number(product.creator.telegram_id);
+      const buyerTgId = Number(buyer_tg_id);
+      // Only notify if buyer is different from creator
+      if (buyerTgId > 0 && buyerTgId !== creatorTgId) {
+        const buyer = await db.getUserByTelegramId(buyerTgId);
+        const buyerName = buyer 
+          ? `@${buyer.username || 'user'}` 
+          : `ID: ${buyerTgId}`;
+        
+        await sendTelegramNotification(
+          creatorTgId,
+          `🛒 *Checkout Initiated!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"* ($${product.price_fiat} / ${product.price_stars} Stars).`
+        );
+      }
+    }
+
 
     // 3. Request Telegram Stars Invoice Link
     // For Telegram Stars, provider_token must be empty, and currency must be "XTR"

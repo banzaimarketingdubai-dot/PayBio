@@ -189,3 +189,31 @@ export async function generatePromoPost(title: string, description: string): Pro
     return `🔥 Get ${title} now! ${description ? description.slice(0, 100) : ''} - Check it out on our store!`;
   }
 }
+
+/**
+ * Generates a professional, high-conversion description for a Telegram channel.
+ */
+export async function generateChannelDescription(topics: string): Promise<string> {
+  const prompt = `Act as a professional copywriter. Write a clean, high-conversion Telegram channel description based on these topics or ideas:
+  
+  Topics/Ideas: "${topics.replace(/"/g, '\\"')}"
+  
+  The description must be engaging, clear about what the subscriber gets, and max 3 sentences. Include relevant emojis.
+  Return only the description text. Do not wrap in quotes or add other introductory text.`;
+
+  const contents = [
+    {
+      parts: [
+        { text: prompt }
+      ]
+    }
+  ];
+
+  try {
+    return await callGemini(contents, false);
+  } catch (error) {
+    console.error('Error generating channel description:', error);
+    return `📢 Welcome to our channel! We publish content about ${topics}. Subscribe for updates!`;
+  }
+}
+

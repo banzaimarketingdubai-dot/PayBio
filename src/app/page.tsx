@@ -1696,7 +1696,16 @@ export default function Storefront() {
       setError(null);
       try {
         if (productId) {
-          const res = await fetch(`/api/store/list?product_id=${productId}`, { signal });
+          let bTgId = String(buyerTgId);
+          let bUsername = '';
+          let bName = '';
+          if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp?.initDataUnsafe?.user) {
+            const u = (window as any).Telegram.WebApp.initDataUnsafe.user;
+            bTgId = String(u.id);
+            bUsername = u.username || '';
+            bName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+          }
+          const res = await fetch(`/api/store/list?product_id=${productId}&buyer_tg_id=${bTgId}&buyer_username=${encodeURIComponent(bUsername)}&buyer_name=${encodeURIComponent(bName)}`, { signal });
           const data = await res.json();
           if (signal.aborted) return;
           if (data.success && data.product) {

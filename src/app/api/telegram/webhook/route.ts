@@ -12,14 +12,15 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     welcome: '✨ *Welcome to PayBio, @{username}!* \n\nPayBio is the fastest AI-powered storefront for digital assets inside Telegram.\n\n' +
       '👛 *TON Wallet:* `{ton}`\n' +
       '💳 *Card/P2P Details:* `{p2p}`\n\n' +
+      '✏️ *Interactive Commands:*\n' +
+      '• `/new_product` - Create product via bot wizard 📦\n' +
+      '• `/channel_desc` - Generate channel description via AI 📢\n' +
+      '• `/carts` - View unclosed/abandoned buyer carts 🛒\n' +
+      '• `/users` - List all registered participants 👥\n\n' +
       '✏️ *Customization Commands:*\n' +
       '• `/name <New Name>` - Set store name\n' +
       '• `/desc <New Description>` - Set store description\n' +
-      '• `/youtube <URL>` - Add YouTube link\n' +
-      '• `/instagram <URL>` - Add Instagram link\n' +
-      '• `/tiktok <URL>` - Add TikTok link\n' +
-      '• `/vk <URL>` - Add VKontakte link\n' +
-      '• `/max <URL>` - Add Max (X) link\n\n' +
+      '• `/youtube <URL>`, `/instagram <URL>`, ... - Social links\n\n' +
       '📸 *Images:*\n' +
       'Send any photo directly to update store visuals (Avatar, Banner, or Product Cover).\n\n' +
       'Use the options below to configure your payment details or learn how to create your storefront.',
@@ -27,7 +28,7 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     set_p2p_btn: '💳 Set P2P Details',
     create_info_btn: '🚀 How to Create a Product',
     open_storefront_btn: '🏪 Open Web Storefront',
-    no_products: '❌ You don\'t have any products yet! Send me a PDF file to get started.',
+    no_products: '❌ You don\'t have any products yet! Send /new_product to get started.',
     your_products: '✨ *Your Storefront Products:*\n\n',
     ton_updated: '✅ *TON Wallet updated successfully!*\n`{wallet}`',
     p2p_updated: '✅ *P2P Card details updated successfully!*\n`{cardInfo}`',
@@ -62,22 +63,23 @@ const TRANSLATIONS: Record<string, Record<string, string>> = {
     welcome: '✨ *Добро пожаловать в PayBio, @{username}!* \n\nPayBio — это самый быстрый ИИ-магазин для продажи цифровых активов прямо в Telegram.\n\n' +
       '👛 *TON Кошелек:* `{ton}`\n' +
       '💳 *Карта/P2P реквизиты:* `{p2p}`\n\n' +
+      '✏️ *Интерактивные команды:*\n' +
+      '• `/new_product` - Создать карточку товара через пошаговый мастер 📦\n' +
+      '• `/channel_desc` - Создать описание канала с помощью ИИ 📢\n' +
+      '• `/carts` - Просмотреть незакрытые корзины покупателей 🛒\n' +
+      '• `/users` - Список участников приложения 👥\n\n' +
       '✏️ *Команды персонализации:*\n' +
       '• `/name <Новое название>` - Задать название магазина\n' +
       '• `/desc <Новое описание>` - Задать описание магазина\n' +
-      '• `/youtube <URL>` - Добавить ссылку на YouTube\n' +
-      '• `/instagram <URL>` - Добавить ссылку на Instagram\n' +
-      '• `/tiktok <URL>` - Добавить ссылку на TikTok\n' +
-      '• `/vk <URL>` - Добавить ссылку на ВКонтакте\n' +
-      '• `/max <URL>` - Добавить ссылку на Max (X)\n\n' +
+      '• `/youtube <URL>`, `/instagram <URL>`, ... - Ссылки на соцсети\n\n' +
       '📸 *Изображения:*\n' +
       'Отправьте любое фото напрямую, чтобы обновить аватар, баннер или задать обложку товара.\n\n' +
-      'Используйте меню ниже, чтобы настроить реквизиты или узнать, как создать товар.',
+      'Используйте меню ниже, чтобы настроить реквизиты или начать работу.',
     set_ton_btn: '👛 Привязать TON',
     set_p2p_btn: '💳 Привязать карту',
     create_info_btn: '🚀 Инструкция создания',
     open_storefront_btn: '🏪 Открыть веб-витрину',
-    no_products: '❌ У вас пока нет созданных товаров! Отправьте мне PDF-файл, чтобы начать.',
+    no_products: '❌ У вас пока нет созданных товаров! Отправьте /new_product чтобы начать.',
     your_products: '✨ *Товары вашего магазина:*\n\n',
     ton_updated: '✅ *TON Кошелек успешно обновлен!*\n`{wallet}`',
     p2p_updated: '✅ *Карта/Реквизиты успешно обновлены!*\n`{cardInfo}`',
@@ -281,7 +283,224 @@ export async function POST(request: Request) {
       creator = await db.upsertUser(userId, username, creator.payment_details);
     }
 
-    // 1. Handle commands
+    // Check conversational bot state
+    const botState = creator.payment_details?.bot_state || null;
+
+    // 0. Handle cancellation / state reset
+    if (text === '/cancel') {
+      const currentDetails = creator.payment_details || {};
+      const newDetails = { ...currentDetails };
+      delete newDetails.bot_state;
+      await db.upsertUser(userId, username, newDetails);
+      await tgApi('sendMessage', {
+        chat_id: chatId,
+        text: lang === 'ru' 
+          ? '❌ Текущий процесс отменен. Возвращаемся в главное меню.' 
+          : '❌ Current process cancelled. Returning to main menu.',
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // 1. Intercept state machine first (if they didn't send a command starting with / other than /skip or /ai)
+    const isCommand = text?.startsWith('/') && text !== '/skip' && text !== '/ai';
+    if (botState && !isCommand) {
+      if (botState.step === 'waiting_for_title') {
+        if (!text) {
+          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Пожалуйста, отправьте текстовое название товара.' : 'Please send a text title for the product.' });
+          return NextResponse.json({ ok: true });
+        }
+        botState.data.title = text.trim().slice(0, 100);
+        botState.step = 'waiting_for_desc';
+        const currentDetails = creator.payment_details || {};
+        const newDetails = { ...currentDetails, bot_state: botState };
+        await db.upsertUser(userId, username, newDetails);
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? `Принято название: *${text}*\n\nШаг 2 из 5: Отправьте описание товара.\nВы можете отправить \`/skip\` для пропуска или \`/ai\` для автоматической генерации описания с помощью ИИ.`
+            : `Title saved: *${text}*\n\nStep 2 of 5: Send the product description.\nYou can send \`/skip\` to skip, or \`/ai\` to auto-generate a description using AI.`,
+          parse_mode: 'Markdown',
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (botState.step === 'waiting_for_desc') {
+        if (!text) {
+          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Пожалуйста, отправьте описание текстом, /skip или /ai.' : 'Please send a description, /skip or /ai.' });
+          return NextResponse.json({ ok: true });
+        }
+        if (text === '/skip') {
+          botState.data.description = '';
+        } else if (text === '/ai') {
+          botState.data.description = 'AI_GENERATE';
+        } else {
+          botState.data.description = text.trim();
+        }
+        botState.step = 'waiting_for_price';
+        const currentDetails = creator.payment_details || {};
+        const newDetails = { ...currentDetails, bot_state: botState };
+        await db.upsertUser(userId, username, newDetails);
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? `Описание сохранено.\n\nШаг 3 из 5: Укажите цену в USD (например, 5 или 9.99).`
+            : `Description saved.\n\nStep 3 of 5: Send the price in USD (e.g. 5 or 9.99).`,
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (botState.step === 'waiting_for_price') {
+        if (!text) {
+          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Пожалуйста, отправьте цену числом.' : 'Please send the price as a number.' });
+          return NextResponse.json({ ok: true });
+        }
+        const price = Number(text.trim().replace(',', '.'));
+        if (isNaN(price) || price <= 0) {
+          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Некорректная цена. Пожалуйста, укажите положительное число.' : 'Invalid price. Please send a positive number.' });
+          return NextResponse.json({ ok: true });
+        }
+        botState.data.price_fiat = price;
+        botState.data.price_stars = Math.round(price * 50);
+        botState.step = 'waiting_for_file';
+        const currentDetails = creator.payment_details || {};
+        const newDetails = { ...currentDetails, bot_state: botState };
+        await db.upsertUser(userId, username, newDetails);
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? `Цена установлена: $${price} (~${botState.data.price_stars} Stars).\n\nШаг 4 из 5: Загрузите цифровой файл (PDF, архив) или отправьте ссылку-приглашение в приватный канал, которую получит покупатель.`
+            : `Price set: $${price} (~${botState.data.price_stars} Stars).\n\nStep 4 of 5: Upload the digital file (PDF, archive) or send a channel invite link that buyers will receive.`,
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (botState.step === 'waiting_for_file') {
+        let contentUrl = '';
+        if (message.document) {
+          contentUrl = `telegram_file_id:${message.document.file_id}`;
+        } else if (text && (text.startsWith('http') || text.startsWith('tg://') || text.includes('t.me'))) {
+          contentUrl = text.trim();
+        } else {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: lang === 'ru'
+              ? 'Пожалуйста, загрузите документ (файл) или отправьте ссылку.'
+              : 'Please upload a file or send a link.',
+          });
+          return NextResponse.json({ ok: true });
+        }
+        botState.data.content_url = contentUrl;
+        botState.step = 'waiting_for_cover';
+        const currentDetails = creator.payment_details || {};
+        const newDetails = { ...currentDetails, bot_state: botState };
+        await db.upsertUser(userId, username, newDetails);
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? `Файл/ссылка привязаны.\n\nШаг 5 из 5 (Необязательно): Отправьте изображение/фотографию для обложки карточки товара, или отправьте \`/skip\` для стандартной обложки.`
+            : `File/link saved.\n\nStep 5 of 5 (Optional): Send a photo for the product cover, or send \`/skip\` to finish with a default cover.`,
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (botState.step === 'waiting_for_cover') {
+        let coverUrl: string | undefined = undefined;
+        if (message.photo) {
+          const photoArray = message.photo;
+          const largestPhoto = photoArray[photoArray.length - 1];
+          coverUrl = `/api/telegram/file?file_id=${largestPhoto.file_id}`;
+        } else if (text !== '/skip') {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: lang === 'ru'
+              ? 'Пожалуйста, отправьте фотографию или \`/skip\`.'
+              : 'Please send a photo or \`/skip\`.',
+          });
+          return NextResponse.json({ ok: true });
+        }
+
+        await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' });
+
+        let description = botState.data.description;
+        if (description === 'AI_GENERATE') {
+          const aiPrompt = `Generate a short, engaging description for product titled "${botState.data.title}" priced at $${botState.data.price_fiat}`;
+          const { extractProductFromText } = await import('@/lib/gemini');
+          const extracted = await extractProductFromText(aiPrompt);
+          description = extracted.description;
+        }
+
+        const product = await db.createProduct(
+          creator.id,
+          botState.data.title,
+          description || '',
+          Number(botState.data.price_fiat),
+          Number(botState.data.price_stars),
+          botState.data.content_url,
+          coverUrl
+        );
+
+        // Clear bot state
+        const currentDetails = creator.payment_details || {};
+        const newDetails = { ...currentDetails };
+        delete newDetails.bot_state;
+        await db.upsertUser(userId, username, newDetails);
+
+        const getMe = await tgApi('getMe', {});
+        const botUser = getMe?.result?.username || 'PaybioBot';
+        const deepLink = `https://t.me/${botUser}/app?startapp=${product.id}`;
+
+        const responseText = (lang === 'ru'
+          ? `🏪 *Карточка товара успешно создана!* \n\n🏷️ *Название:* {title}\n📝 *Описание:* {description}\n💵 *Цена:* \${priceFiat} (~{priceStars} Stars)\n\n🔗 *Ссылка на ваш товар:* \n{deepLink}`
+          : `🏪 *Storefront Product Generated!* \n\n🏷️ *Title:* {title}\n📝 *Description:* {description}\n💵 *Price:* \${priceFiat} (~{priceStars} Stars)\n\n🔗 *Your store link:* \n{deepLink}`)
+          .replace('{title}', product.title)
+          .replace('{description}', product.description || '')
+          .replace('{priceFiat}', String(product.price_fiat))
+          .replace('{priceStars}', String(product.price_stars))
+          .replace('{deepLink}', deepLink);
+
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: responseText,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: t.open_storefront_btn, url: deepLink }
+              ]
+            ]
+          }
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      if (botState.step === 'gen_channel_desc') {
+        if (!text) {
+          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Пожалуйста, опишите тематику канала текстом.' : 'Please describe the channel topic.' });
+          return NextResponse.json({ ok: true });
+        }
+        await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' });
+
+        const { generateChannelDescription } = await import('@/lib/gemini');
+        const genDesc = await generateChannelDescription(text);
+
+        // Clear bot state
+        const currentDetails = creator.payment_details || {};
+        const newDetails = { ...currentDetails };
+        delete newDetails.bot_state;
+        await db.upsertUser(userId, username, newDetails);
+
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? `✨ *Ваше описание канала готово:*\n\n\`\`\`\n${genDesc}\n\`\`\``
+            : `✨ *Your channel description is ready:*\n\n\`\`\`\n${genDesc}\n\`\`\``,
+          parse_mode: 'Markdown',
+        });
+        return NextResponse.json({ ok: true });
+      }
+    }
+
+    // 2. Handle commands
     if (text?.startsWith('/start')) {
       const getMe = await tgApi('getMe', {});
       const botUser = getMe?.result?.username || 'PaybioBot';
@@ -341,7 +560,85 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 2. Handle payment details updates
+    if (text === '/new_product') {
+      const currentDetails = creator.payment_details || {};
+      const newDetails = { 
+        ...currentDetails,
+        bot_state: { step: 'waiting_for_title', data: {} }
+      };
+      await db.upsertUser(userId, username, newDetails);
+      await tgApi('sendMessage', {
+        chat_id: chatId,
+        text: lang === 'ru'
+          ? '📦 *Создание новой карточки товара*\n\nШаг 1 из 5: Отправьте название товара или краткое описание того, что вы хотите продать (до 100 символов).'
+          : '📦 *Create a New Product Card*\n\nStep 1 of 5: Send the product title or a short description of what you sell (max 100 chars).',
+        parse_mode: 'Markdown',
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/channel_desc') {
+      const currentDetails = creator.payment_details || {};
+      const newDetails = { 
+        ...currentDetails,
+        bot_state: { step: 'gen_channel_desc', data: {} }
+      };
+      await db.upsertUser(userId, username, newDetails);
+      await tgApi('sendMessage', {
+        chat_id: chatId,
+        text: lang === 'ru'
+          ? '📢 *Генератор описания канала*\n\nРасскажите, о чем ваш канал, для кого он и какой контент вы публикуете. Наш ИИ сгенерирует привлекательное описание!'
+          : '📢 *Channel Description Generator*\n\nTell me what your channel is about, who it is for, and what content you post. Our AI will generate an engaging description!',
+        parse_mode: 'Markdown',
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/carts' || text === '/abandoned') {
+      const pendingOrders = await db.getPendingOrdersByCreatorId(creator.id);
+      if (!pendingOrders || pendingOrders.length === 0) {
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? '🛒 У вас нет незакрытых корзин/заказов в статусе ожидания.'
+            : '🛒 You have no abandoned/pending carts.',
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      let cartMsg = lang === 'ru' ? '🛒 *Незакрытые корзины покупателей:*\n\n' : '🛒 *Abandoned Buyer Carts:*\n\n';
+      pendingOrders.forEach((o: any, idx: number) => {
+        const date = new Date(o.created_at).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US');
+        const buyer = o.buyer_tg_id;
+        const pTitle = o.product?.title || 'Product';
+        const price = o.product?.price_fiat || 0;
+        cartMsg += `${idx + 1}. Покупатель \`${buyer}\`\n📦 Товар: *${pTitle}* ($${price})\n⏰ Создана: ${date}\n\n`;
+      });
+      await tgApi('sendMessage', {
+        chat_id: chatId,
+        text: cartMsg,
+        parse_mode: 'Markdown',
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/users') {
+      const allUsers = await db.getAllUsers();
+      let usersMsg = lang === 'ru' ? '👥 *Зарегистрированные участники:*\n\n' : '👥 *Registered Participants:*\n\n';
+      allUsers.forEach((u: any, idx: number) => {
+        const usernameStr = u.username ? `@${u.username}` : '(без юзернейма)';
+        const date = new Date(u.created_at).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US');
+        usersMsg += `${idx + 1}. \`${u.telegram_id}\` - *${usernameStr}* (с ${date})\n`;
+      });
+      await tgApi('sendMessage', {
+        chat_id: chatId,
+        text: usersMsg,
+        parse_mode: 'Markdown',
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    // 3. Handle payment details updates
     if (text?.startsWith('/ton ')) {
       const wallet = text.slice(5).trim();
       const currentDetails = creator.payment_details || {};
@@ -368,7 +665,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 3. Handle Storefront Customization Commands
+    // 4. Handle Storefront Customization Commands
     if (text?.startsWith('/name ')) {
       const name = text.slice(6).trim();
       const currentCustom = creator.profile_customization || {};
@@ -471,7 +768,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 4. Handle photos upload
+    // 5. Handle photos upload (when not in guided wizard)
     if (message.photo) {
       const photoArray = message.photo;
       const largestPhoto = photoArray[photoArray.length - 1];
@@ -496,7 +793,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 5. Handle document upload (PDF, etc.)
+    // 6. Handle document upload (when not in guided wizard)
     if (message.document) {
       const doc = message.document;
       const fileId = doc.file_id;
@@ -519,7 +816,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // 6. Handle storefront generation text description
+    // 7. General text input fallback: quick storefront creation
     if (text) {
       await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' });
 
@@ -545,7 +842,7 @@ export async function POST(request: Request) {
         coverUrl
       );
 
-      // Clear pending file and pending cover from user metadata
+      // Clear pending details from metadata
       const currentDetails = creator.payment_details || {};
       const newDetails = { ...currentDetails };
       delete newDetails.pending_file_id;
