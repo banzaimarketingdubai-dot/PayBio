@@ -1805,8 +1805,20 @@ export default function Storefront() {
     contentUrl?: string,
     coverUrl?: string
   ): Promise<boolean> => {
-    if (!creator) {
-      showAlert('Creator profile not loaded.');
+    // If creator not loaded yet — try to fetch it now using resolved TG ID
+    let activeCreator = creator;
+    if (!activeCreator && creatorTgId) {
+      try {
+        const r = await fetch(`/api/store/list?creator_tg_id=${creatorTgId}`);
+        const d = await r.json();
+        if (d.success && d.creator) {
+          setCreator(d.creator);
+          activeCreator = d.creator;
+        }
+      } catch {/* ignore */}
+    }
+    if (!activeCreator) {
+      showAlert(lang === 'ru' ? 'Профиль не загружен. Попробуйте перезапустить приложение.' : 'Profile not loaded. Please restart the app.');
       return false;
     }
     try {
@@ -1814,7 +1826,7 @@ export default function Storefront() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          creator_id: creator.id,
+          creator_id: activeCreator.id,
           title,
           description,
           price_fiat: priceFiat,
