@@ -1753,13 +1753,24 @@ function ProductListScreen({
           <form onSubmit={handleSavePaymentSettings} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
             <div className="bottom-sheet-form-group">
               <label className="bottom-sheet-label">{lang === 'ru' ? 'Основной TON кошелек' : 'Default TON Wallet'}</label>
-              <input 
-                type="text" 
-                className="tg-input" 
-                placeholder="UQ..."
-                value={tempTon} 
-                onChange={(e) => setTempTon(e.target.value)} 
-              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="text" 
+                  className="tg-input" 
+                  placeholder="UQ..."
+                  value={tempTon} 
+                  onChange={(e) => setTempTon(e.target.value)} 
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  className="btn-primary"
+                  style={{ width: 'auto', padding: '0 12px', whiteSpace: 'nowrap', fontSize: '12px', background: 'var(--tg-accent)' }}
+                  onClick={handleConnectWallet}
+                >
+                  💎 {lang === 'ru' ? 'Подключить Wallet' : 'Connect Wallet'}
+                </button>
+              </div>
             </div>
             
             <div className="bottom-sheet-form-group">
@@ -2008,6 +2019,61 @@ export default function Storefront() {
   const { copied, copy } = useCopy();
 
   const t = TRANSLATIONS[lang];
+
+  const [tonConnectUI, setTonConnectUI] = useState<any>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Load TON Connect UI SDK from CDN dynamically
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js';
+    script.async = true;
+    script.onload = () => {
+      if ((window as any).TON_CONNECT_UI) {
+        const tc = new (window as any).TON_CONNECT_UI.TonConnectUI({
+          manifestUrl: `${window.location.origin}/tonconnect-manifest.json`,
+        });
+        setTonConnectUI(tc);
+      }
+    };
+    document.body.appendChild(script);
+    
+    return () => {
+      try {
+        document.body.removeChild(script);
+      } catch (e) {
+        // Ignore
+      }
+    };
+  }, []);
+
+  const handleConnectWallet = async () => {
+    if (!tonConnectUI) {
+      showAlert(lang === 'ru' ? 'Загрузка TON SDK...' : 'Loading TON SDK...');
+      return;
+    }
+    try {
+      if (tonConnectUI.connected) {
+        await tonConnectUI.disconnect();
+      }
+      
+      await tonConnectUI.openModal();
+      
+      const unsubscribe = tonConnectUI.onStatusChange((wallet: any) => {
+        if (wallet && wallet.account) {
+          const rawAddress = wallet.account.address;
+          const friendlyAddr = (window as any).TON_CONNECT_UI.toUserFriendlyAddress(rawAddress);
+          setTempTon(friendlyAddr);
+          showAlert(lang === 'ru' ? '✓ Кошелек успешно подключен!' : '✓ Wallet connected successfully!');
+          unsubscribe();
+        }
+      });
+    } catch (e) {
+      console.error('Wallet connection error:', e);
+      showAlert(lang === 'ru' ? 'Ошибка подключения кошелька' : 'Wallet connection error');
+    }
+  };
 
   const handleSelectProduct = useCallback((id: string | null) => {
     setProductId(id);
