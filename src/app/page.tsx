@@ -536,6 +536,9 @@ interface ProductListScreenProps {
   onOpenPremium: () => void;
   lang: 'en' | 'ru';
   setLang: (lang: 'en' | 'ru') => void;
+  isOwner: boolean;
+  onDeleteProduct: (id: string) => Promise<boolean>;
+  onUpdateProduct: (id: string, title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string) => Promise<boolean>;
 }
 
 const showAlert = (message: string) => {
@@ -547,6 +550,17 @@ const showAlert = (message: string) => {
     }
   }
   alert(message);
+};
+
+const cleanProductId = (id: string | null): string | null => {
+  if (!id) return null;
+  if (id.startsWith('ref_')) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('paybio_referrer_tg_id', id.substring(4));
+    }
+    return null;
+  }
+  return id;
 };
 
 // Social Icons SVGs Helper
@@ -599,11 +613,64 @@ function ProductListScreen({
   onAddProduct,
   onOpenPremium,
   lang,
-  setLang
+  setLang,
+  isOwner,
+  onDeleteProduct,
+  onUpdateProduct
 }: ProductListScreenProps) {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditSocialsOpen, setIsEditSocialsOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  const handleOpenEditProduct = (p: Product) => {
+    setEditingProduct(p);
+    setProdTitle(p.title);
+    setProdDesc(p.description || '');
+    setProdPriceUSD(String(p.price_fiat));
+    setProdPriceStars(p.price_stars ? String(p.price_stars) : '');
+    setProdCoverUrl(p.cover_url || '');
+    setProdType(p.product_type || 'DIGITAL');
+
+    let urlVal = p.content_url || '';
+    let icsVal = '';
+    let maxVal = '';
+    if (p.product_type === 'BOOKING' || p.product_type === 'VOUCHER') {
+      try {
+        const parsed = JSON.parse(p.content_url);
+        if (parsed) {
+          if (p.product_type === 'BOOKING') {
+            urlVal = parsed.slots || '';
+            icsVal = parsed.ics_url || '';
+          } else if (p.product_type === 'VOUCHER') {
+            urlVal = parsed.fulfillment_url || '';
+            maxVal = parsed.max_quantity ? String(parsed.max_quantity) : '';
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    setProdUrl(urlVal);
+    setProdCalendarIcsUrl(icsVal);
+    setProdMaxQuantity(maxVal);
+    setIsAddProductOpen(true);
+  };
+
+  const handleOpenCreateProduct = () => {
+    setEditingProduct(null);
+    setProdTitle('');
+    setProdDesc('');
+    setProdPriceUSD('');
+    setProdPriceStars('');
+    setProdUrl('');
+    setProdCalendarIcsUrl('');
+    setProdMaxQuantity('');
+    setProdCoverUrl('');
+    setAiPrompt('');
+    setProdType('DIGITAL');
+    setIsAddProductOpen(true);
+  };
 
   // Edit profile form state
   const [tempName, setTempName] = useState(storeName);
@@ -647,6 +714,41 @@ function ProductListScreen({
   const [isGeneratingPromo, setIsGeneratingPromo] = useState(false);
   const [selectedPromoProduct, setSelectedPromoProduct] = useState<any>(null);
   const [promoCopied, setPromoCopied] = useState(false);
+
+  const handleConfirmDelete = (productId: string, productTitle: string) => {
+    const confirmMsg = lang === 'ru' 
+      ? `Вы уверены, что хотите удалить товар "${productTitle}"?`
+      : `Are you sure you want to delete product "${productTitle}"?`;
+
+    if (typeof window !== 'undefined') {
+      const WebApp = (window as any).Telegram?.WebApp;
+      if (WebApp?.showConfirm) {
+        WebApp.showConfirm(confirmMsg, async (ok: boolean) => {
+          if (ok) {
+            await executeDelete(productId);
+          }
+        });
+        return;
+      }
+    }
+    
+    if (window.confirm(confirmMsg)) {
+      executeDelete(productId);
+    }
+  };
+
+  const executeDelete = async (productId: string) => {
+    try {
+      const success = await onDeleteProduct(productId);
+      if (success) {
+        showAlert(lang === 'ru' ? '✓ Товар успешно удален' : '✓ Product deleted successfully');
+      } else {
+        showAlert(lang === 'ru' ? 'Не удалось удалить товар' : 'Failed to delete product');
+      }
+    } catch (err: any) {
+      showAlert(err.message || 'Error deleting product');
+    }
+  };
 
   const handleGeneratePromo = async (p: any) => {
     setSelectedPromoProduct(p);
@@ -902,15 +1004,30 @@ function ProductListScreen({
         });
       }
 
-      const success = await onAddProduct(
-        prodTitle, 
-        prodDesc, 
-        priceUSD, 
-        priceStars, 
-        finalContentUrl || undefined, 
-        prodCoverUrl || undefined,
-        prodType
-      );
+      let success = false;
+      if (editingProduct) {
+        success = await onUpdateProduct(
+          editingProduct.id,
+          prodTitle,
+          prodDesc,
+          priceUSD,
+          priceStars,
+          finalContentUrl,
+          prodCoverUrl || undefined,
+          prodType
+        );
+      } else {
+        success = await onAddProduct(
+          prodTitle, 
+          prodDesc, 
+          priceUSD, 
+          priceStars, 
+          finalContentUrl || undefined, 
+          prodCoverUrl || undefined,
+          prodType
+        );
+      }
+
       if (success) {
         setProdTitle('');
         setProdDesc('');
@@ -922,6 +1039,7 @@ function ProductListScreen({
         setProdCoverUrl('');
         setAiPrompt('');
         setProdType('DIGITAL');
+        setEditingProduct(null);
         setIsAddProductOpen(false);
       }
     } catch (err) {
@@ -1019,49 +1137,53 @@ function ProductListScreen({
     }
   };
 
+  const executeRedeem = async (qrData: string) => {
+    try {
+      const res = await fetch('/api/vouchers/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qr_data: qrData })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showAlert(lang === 'ru' ? `✅ Билет успешно погашен!\nТовар: "${data.voucher.order?.product?.title || 'Ваучер'}"` : `✅ Voucher Redeemed Successfully!\nProduct: "${data.voucher.order?.product?.title || 'Voucher'}"`);
+      } else {
+        showAlert(lang === 'ru' ? `❌ Ошибка: ${data.error}` : `❌ Error: ${data.error}`);
+      }
+    } catch (err: any) {
+      showAlert(err.message || 'Error processing ticket redemption.');
+    }
+  };
+
   const handleScanTicket = () => {
     if (typeof window !== 'undefined') {
       const WebApp = (window as any).Telegram?.WebApp;
+      const confirmMsg = lang === 'ru'
+        ? "Вы хотите погасить билет?"
+        : "Do you want to redeem the ticket?";
+
       if (WebApp?.showScanQrPopup) {
         WebApp.showScanQrPopup({ text: lang === 'ru' ? "Сканируйте QR-код билета" : "Scan Buyer's QR" }, async (text: string) => {
           WebApp.closeScanQrPopup();
-          try {
-            const res = await fetch('/api/vouchers/redeem', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ qr_data: text })
+          if (WebApp?.showConfirm) {
+            WebApp.showConfirm(confirmMsg, async (ok: boolean) => {
+              if (ok) {
+                await executeRedeem(text);
+              }
             });
-            const data = await res.json();
-            if (res.ok && data.success) {
-              showAlert(lang === 'ru' ? `✅ Билет успешно погашен!\nТовар: "${data.voucher.order?.product?.title || 'Ваучер'}"` : `✅ Voucher Redeemed Successfully!\nProduct: "${data.voucher.order?.product?.title || 'Voucher'}"`);
-            } else {
-              showAlert(lang === 'ru' ? `❌ Ошибка: ${data.error}` : `❌ Error: ${data.error}`);
+          } else {
+            if (window.confirm(confirmMsg)) {
+              await executeRedeem(text);
             }
-          } catch (err: any) {
-            showAlert(err.message || 'Error processing ticket redemption.');
           }
           return true;
         });
       } else {
         const qr = prompt(lang === 'ru' ? "Введите хэш QR-кода билета:" : "Enter scanned QR voucher code:");
         if (qr) {
-          (async () => {
-            try {
-              const res = await fetch('/api/vouchers/redeem', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ qr_data: qr })
-              });
-              const data = await res.json();
-              if (res.ok && data.success) {
-                showAlert(lang === 'ru' ? `✅ Билет успешно погашен!` : `✅ Voucher Redeemed Successfully!`);
-              } else {
-                showAlert(lang === 'ru' ? `❌ Ошибка: ${data.error}` : `❌ Error: ${data.error}`);
-              }
-            } catch (err: any) {
-              showAlert(err.message || 'Error.');
-            }
-          })();
+          if (window.confirm(confirmMsg)) {
+            executeRedeem(qr);
+          }
         }
       }
     }
@@ -1111,10 +1233,12 @@ function ProductListScreen({
         style={storeBanner ? { backgroundImage: `url(${storeBanner})` } : undefined}
       >
         <div className="store-banner-glow" />
-        <label className="store-banner-edit">
-          📸 Change Cover
-          <input type="file" accept="image/*" onChange={handleBannerUpload} style={{ display: 'none' }} />
-        </label>
+        {isOwner && (
+          <label className="store-banner-edit">
+            📸 Change Cover
+            <input type="file" accept="image/*" onChange={handleBannerUpload} style={{ display: 'none' }} />
+          </label>
+        )}
       </div>
 
       {/* ─── PROFILE HEADER CARD ─── */}
@@ -1126,10 +1250,12 @@ function ProductListScreen({
             {storeName.slice(0, 1).toUpperCase()}
           </div>
         )}
-        <label className="store-upload-trigger">
-          📷
-          <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
-        </label>
+        {isOwner && (
+          <label className="store-upload-trigger">
+            📷
+            <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+          </label>
+        )}
       </div>
 
       {/* ─── SHOP INFORMATION ─── */}
@@ -1139,39 +1265,43 @@ function ProductListScreen({
             {storeName}
           </h1>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button 
-              onClick={() => setIsEditProfileOpen(true)}
-              style={{
-                background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
-                width: '28px', height: '28px', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', cursor: 'pointer', fontSize: '13px'
-              }}
-              title={t.editShopDetails}
-            >
-              ✏️
-            </button>
-            <button 
-              onClick={() => setIsEditSocialsOpen(true)}
-              style={{
-                background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
-                width: '28px', height: '28px', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', cursor: 'pointer', fontSize: '13px'
-              }}
-              title={t.configureSocials}
-            >
-              🔗
-            </button>
-            <button 
-              onClick={() => setIsPaymentSettingsOpen(true)}
-              style={{
-                background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
-                width: '28px', height: '28px', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', cursor: 'pointer', fontSize: '13px'
-              }}
-              title={lang === 'ru' ? 'Настройки оплаты' : 'Payment Settings'}
-            >
-              💳
-            </button>
+            {isOwner && (
+              <>
+                <button 
+                  onClick={() => setIsEditProfileOpen(true)}
+                  style={{
+                    background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', cursor: 'pointer', fontSize: '13px'
+                  }}
+                  title={t.editShopDetails}
+                >
+                  ✏️
+                </button>
+                <button 
+                  onClick={() => setIsEditSocialsOpen(true)}
+                  style={{
+                    background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', cursor: 'pointer', fontSize: '13px'
+                  }}
+                  title={t.configureSocials}
+                >
+                  🔗
+                </button>
+                <button 
+                  onClick={() => setIsPaymentSettingsOpen(true)}
+                  style={{
+                    background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', cursor: 'pointer', fontSize: '13px'
+                  }}
+                  title={lang === 'ru' ? 'Настройки оплаты' : 'Payment Settings'}
+                >
+                  💳
+                </button>
+              </>
+            )}
             
             {/* Language Switcher */}
             <button 
@@ -1187,32 +1317,36 @@ function ProductListScreen({
               🌐 {lang === 'en' ? 'EN' : 'RU'}
             </button>
 
-            {/* Scan Ticket (Zero-Backend QR scanner) */}
-            <button 
-              onClick={handleScanTicket}
-              style={{
-                background: 'rgba(77,202,90,0.15)', border: 'none', borderRadius: '14px',
-                padding: '0 8px', height: '28px', display: 'flex', alignItems: 'center',
-                justifyContent: 'center', cursor: 'pointer', fontSize: '11px', fontWeight: 600,
-                color: '#4dca5a'
-              }}
-              title={lang === 'ru' ? 'Сканировать билет' : 'Scan Ticket'}
-            >
-              📷 {lang === 'ru' ? 'Сканировать' : 'Scan Ticket'}
-            </button>
+            {isOwner && (
+              /* Scan Ticket (Zero-Backend QR scanner) */
+              <button 
+                onClick={handleScanTicket}
+                style={{
+                  background: 'rgba(77,202,90,0.15)', border: 'none', borderRadius: '14px',
+                  padding: '0 8px', height: '28px', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', cursor: 'pointer', fontSize: '11px', fontWeight: 600,
+                  color: '#4dca5a'
+                }}
+                title={lang === 'ru' ? 'Сканировать билет' : 'Scan Ticket'}
+              >
+                📷 {lang === 'ru' ? 'Сканировать' : 'Scan Ticket'}
+              </button>
+            )}
 
             {isCreatorPremium ? (
               <span className="chip" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontSize: '10px', padding: '2px 8px' }}>
                 {t.premiumCreator}
               </span>
             ) : (
-              <button 
-                onClick={onOpenPremium}
-                className="chip chip-blue" 
-                style={{ border: 'none', cursor: 'pointer', fontSize: '10px', padding: '2px 8px' }}
-              >
-                {t.goPremium}
-              </button>
+              isOwner && (
+                <button 
+                  onClick={onOpenPremium}
+                  className="chip chip-blue" 
+                  style={{ border: 'none', cursor: 'pointer', fontSize: '10px', padding: '2px 8px' }}
+                >
+                  {t.goPremium}
+                </button>
+              )
             )}
           </div>
         </div>
@@ -1281,7 +1415,7 @@ function ProductListScreen({
           )}
           
           {/* Quick link config helper for editor */}
-          {!hasSocials && (
+          {isOwner && !hasSocials && (
             <button 
               onClick={() => setIsEditSocialsOpen(true)}
               style={{
@@ -1391,14 +1525,34 @@ function ProductListScreen({
                       <button className="large-product-action-btn" onClick={() => onSelect(p.id)}>
                         {t.viewStorefront}
                       </button>
-                      <button 
-                        className="large-product-action-btn animate-scale-in" 
-                        style={{ background: 'rgba(255,165,0,0.15)', color: '#ffa500', border: '1px solid rgba(255,165,0,0.2)', width: 'auto', padding: '0 12px' }} 
-                        onClick={(e) => { e.stopPropagation(); handleGeneratePromo(p); }}
-                        title={lang === 'ru' ? 'Создать промо' : 'Create promo'}
-                      >
-                        📢
-                      </button>
+                      {isOwner && (
+                        <>
+                          <button 
+                            className="large-product-action-btn animate-scale-in" 
+                            style={{ background: 'rgba(255,165,0,0.15)', color: '#ffa500', border: '1px solid rgba(255,165,0,0.2)', width: 'auto', padding: '0 12px' }} 
+                            onClick={(e) => { e.stopPropagation(); handleGeneratePromo(p); }}
+                            title={lang === 'ru' ? 'Создать промо' : 'Create promo'}
+                          >
+                            📢
+                          </button>
+                          <button 
+                            className="large-product-action-btn animate-scale-in" 
+                            style={{ background: 'rgba(255,255,255,0.07)', color: 'var(--tg-text)', border: '1px solid var(--tg-border)', width: 'auto', padding: '0 12px' }} 
+                            onClick={(e) => { e.stopPropagation(); handleOpenEditProduct(p); }}
+                            title={lang === 'ru' ? 'Редактировать' : 'Edit'}
+                          >
+                            ✏️
+                          </button>
+                          <button 
+                            className="large-product-action-btn animate-scale-in" 
+                            style={{ background: 'rgba(233,92,92,0.15)', color: '#ff4d4d', border: '1px solid rgba(233,92,92,0.2)', width: 'auto', padding: '0 12px' }} 
+                            onClick={(e) => { e.stopPropagation(); handleConfirmDelete(p.id, p.title); }}
+                            title={lang === 'ru' ? 'Удалить' : 'Delete'}
+                          >
+                            🗑️
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1407,24 +1561,40 @@ function ProductListScreen({
           })}
 
           {/* Add product blank card */}
-          <div className="large-product-create-card animate-fade-up" onClick={() => setIsAddProductOpen(true)}>
-            <div style={{ fontSize: '28px' }}>➕</div>
-            <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>{t.addNewProduct}</p>
-            <p style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>{t.clickToCreate}</p>
-          </div>
+          {isOwner && (
+            <div className="large-product-create-card animate-fade-up" onClick={handleOpenCreateProduct}>
+              <div style={{ fontSize: '28px' }}>➕</div>
+              <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>{t.addNewProduct}</p>
+              <p style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>{t.clickToCreate}</p>
+            </div>
+          )}
 
         </div>
       </div>
 
       {/* ─── FLOATING ACTION BUTTON ─── */}
-      <button className="floating-add-btn" onClick={() => setIsAddProductOpen(true)}>
-        ➕
-      </button>
+      {isOwner && (
+        <button className="floating-add-btn" onClick={handleOpenCreateProduct}>
+          ➕
+        </button>
+      )}
 
       {/* ─── BOTTOM SHEET: EDIT PROFILE ─── */}
       <div className={`bottom-sheet-overlay ${isEditProfileOpen ? 'active' : ''}`} onClick={() => setIsEditProfileOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="bottom-sheet-handle" />
+          <button 
+            type="button" 
+            onClick={() => setIsEditProfileOpen(false)}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+              width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+            }}
+          >
+            ✕
+          </button>
           <h2 className="bottom-sheet-title">{t.editShopDetails}</h2>
           
           <form onSubmit={handleSaveProfile}>
@@ -1462,6 +1632,18 @@ function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isEditSocialsOpen ? 'active' : ''}`} onClick={() => setIsEditSocialsOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="bottom-sheet-handle" />
+          <button 
+            type="button" 
+            onClick={() => setIsEditSocialsOpen(false)}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+              width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+            }}
+          >
+            ✕
+          </button>
           <h2 className="bottom-sheet-title">{t.configureSocials}</h2>
           <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', textAlign: 'center', marginBottom: '20px' }}>
             {t.socialsHelp}
@@ -1534,7 +1716,19 @@ function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isAddProductOpen ? 'active' : ''}`} onClick={() => setIsAddProductOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="bottom-sheet-handle" />
-          <h2 className="bottom-sheet-title">{t.addNewProduct}</h2>
+          <button 
+            type="button" 
+            onClick={() => setIsAddProductOpen(false)}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+              width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+            }}
+          >
+            ✕
+          </button>
+          <h2 className="bottom-sheet-title">{editingProduct ? (lang === 'ru' ? 'Редактировать товар' : 'Edit Product') : t.addNewProduct}</h2>
           
           <form onSubmit={handleCreateProduct}>
             <div className="bottom-sheet-form-group">
@@ -1727,7 +1921,10 @@ function ProductListScreen({
             </div>
 
             <button type="submit" className="btn-primary" style={{ marginTop: '14px' }} disabled={isAdding}>
-              {isAdding ? t.addingProduct : t.addProductBtn}
+              {isAdding 
+                ? (editingProduct ? (lang === 'ru' ? 'Сохранение...' : 'Saving...') : t.addingProduct) 
+                : (editingProduct ? (lang === 'ru' ? 'Сохранить изменения ✓' : 'Save Changes ✓') : t.addProductBtn)
+              }
             </button>
           </form>
         </div>
@@ -1752,6 +1949,18 @@ function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isPromoOpen ? 'active' : ''}`} onClick={() => setIsPromoOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="bottom-sheet-handle" />
+          <button 
+            type="button" 
+            onClick={() => setIsPromoOpen(false)}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+              width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+            }}
+          >
+            ✕
+          </button>
           <h2 className="bottom-sheet-title">📢 {lang === 'ru' ? 'ИИ Промо-пост' : 'AI Promo Post'}</h2>
           
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
@@ -1804,6 +2013,18 @@ function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isPaymentSettingsOpen ? 'active' : ''}`} onClick={() => setIsPaymentSettingsOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '85svh', overflowY: 'auto' }}>
           <div className="bottom-sheet-handle" />
+          <button 
+            type="button" 
+            onClick={() => setIsPaymentSettingsOpen(false)}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+              width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+            }}
+          >
+            ✕
+          </button>
           <h2 className="bottom-sheet-title">💳 {lang === 'ru' ? 'Реквизиты оплаты' : 'Payment Settings'}</h2>
           
           <form onSubmit={handleSavePaymentSettings} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px' }}>
@@ -2102,7 +2323,8 @@ export default function Storefront() {
   useEffect(() => {
     const handlePopState = () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const pid = urlParams.get('product_id') || urlParams.get('startapp') || urlParams.get('tgWebAppStartParam');
+      const rawPid = urlParams.get('product_id') || urlParams.get('startapp') || urlParams.get('tgWebAppStartParam');
+      const pid = cleanProductId(rawPid);
       setProductId(pid);
     };
     window.addEventListener('popstate', handlePopState);
@@ -2131,18 +2353,25 @@ export default function Storefront() {
   // Init Telegram SDK & URL params & language detection
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    let pid = urlParams.get('startapp')
+    let rawPid = urlParams.get('startapp')
       || urlParams.get('product_id')
       || urlParams.get('tgWebAppStartParam');
     
-    if (!pid && typeof window !== 'undefined') {
-      pid = localStorage.getItem('paybio_current_product_id');
+    if (!rawPid && typeof window !== 'undefined') {
+      rawPid = localStorage.getItem('paybio_current_product_id');
     }
+    
+    const pid = cleanProductId(rawPid);
     
     if (pid) {
       setProductId(pid);
       if (typeof window !== 'undefined') {
         localStorage.setItem('paybio_current_product_id', pid);
+      }
+    } else {
+      setProductId(null);
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('paybio_current_product_id');
       }
     }
 
@@ -2153,6 +2382,13 @@ export default function Storefront() {
       const webapp = twa.default;
       webapp.ready();
       webapp.expand();
+      try {
+        if ('isVerticalSwipesEnabled' in webapp) {
+          (webapp as any).isVerticalSwipesEnabled = false;
+        }
+      } catch (e) {
+        console.error('Failed to disable vertical swipes:', e);
+      }
       
       // Auto language selection
       const tgLang = webapp.initDataUnsafe?.user?.language_code;
@@ -2164,11 +2400,14 @@ export default function Storefront() {
 
       const startParam = webapp.initDataUnsafe?.start_param;
       if (startParam) {
-        setProductId(startParam);
-        // Sync URL param as well
-        const url = new URL(window.location.href);
-        url.searchParams.set('product_id', startParam);
-        window.history.replaceState(null, '', url.toString());
+        const cleaned = cleanProductId(startParam);
+        setProductId(cleaned);
+        if (cleaned) {
+          // Sync URL param as well
+          const url = new URL(window.location.href);
+          url.searchParams.set('product_id', cleaned);
+          window.history.replaceState(null, '', url.toString());
+        }
       }
       const user = webapp.initDataUnsafe?.user;
       if (user?.id) {
@@ -2384,6 +2623,62 @@ export default function Storefront() {
     }
   };
 
+  const handleDeleteProduct = async (prodId: string): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/store/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: prodId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProductsList((prev) => prev.filter((p) => p.id !== prodId));
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to delete product:', err);
+      return false;
+    }
+  };
+
+  const handleUpdateProduct = async (
+    prodId: string,
+    title: string,
+    description: string,
+    priceFiat: number,
+    priceStars?: number,
+    contentUrl?: string,
+    coverUrl?: string,
+    productType?: string
+  ): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/store/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: prodId,
+          title,
+          description,
+          price_fiat: priceFiat,
+          price_stars: priceStars,
+          content_url: contentUrl,
+          cover_url: coverUrl,
+          product_type: productType
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProductsList((prev) => prev.map((p) => p.id === prodId ? { ...p, ...data.product } : p));
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to update product:', err);
+      return false;
+    }
+  };
+
   // Stars payment
   const handleStarsPayment = async () => {
     if (!product) return;
@@ -2505,6 +2800,8 @@ export default function Storefront() {
     }, 4500);
   };
 
+  const isOwner = creator && Number(buyerTgId) === Number(creator.telegram_id);
+
   // ─── Render logic ────────────────────────────────────────────
   if (loading) return <LoadingScreen lang={lang} />;
   if (!productId) {
@@ -2528,12 +2825,27 @@ export default function Storefront() {
           onOpenPremium={() => setIsPremiumOpen(true)}
           lang={lang}
           setLang={setLang}
+          isOwner={!!isOwner}
+          onDeleteProduct={handleDeleteProduct}
+          onUpdateProduct={handleUpdateProduct}
         />
         
         {/* Premium dialog bottom sheet */}
         <div className={`bottom-sheet-overlay ${isPremiumOpen ? 'active' : ''}`} onClick={() => setIsPremiumOpen(false)}>
           <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="bottom-sheet-handle" />
+            <button 
+              type="button" 
+              onClick={() => setIsPremiumOpen(false)}
+              style={{
+                position: 'absolute', top: '16px', right: '16px',
+                background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+                width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+              }}
+            >
+              ✕
+            </button>
             
             {/* Header / Graphic icon */}
             <div style={{
@@ -2678,6 +2990,41 @@ export default function Storefront() {
       background: 'var(--tg-bg)',
       display: 'flex', flexDirection: 'column',
     }} className="animate-fade-in">
+
+      {/* Top sticky navigation bar for buyer page */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        background: 'var(--tg-secondary-bg)',
+        borderBottom: '1px solid var(--tg-border)',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <button 
+          onClick={() => handleSelectProduct(null)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--tg-link)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: 0
+          }}
+        >
+          ← {lang === 'ru' ? 'Назад в каталог' : 'Back to Catalog'}
+        </button>
+        <span style={{ fontSize: '13px', color: 'var(--tg-hint)', fontWeight: 500 }}>
+          PayBio
+        </span>
+      </div>
 
       {/* ── PRODUCT HERO ── */}
       <div style={{

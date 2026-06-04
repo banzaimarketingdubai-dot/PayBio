@@ -14,6 +14,11 @@ export async function GET(request: Request) {
       );
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(productId)) {
+      return NextResponse.json({ error: 'Invalid product ID format.' }, { status: 400 });
+    }
+
     // 1. Fetch product
     const product = await db.getProductById(productId);
     if (!product) {

@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
 
 /* ─────────────────────────────────────────
    TELEGRAM MINI APP DESIGN SYSTEM
@@ -40,6 +40,7 @@ html, body {
   height: 100%;
   width: 100%;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -196,7 +197,7 @@ body {
   color: var(--tg-text);
   border: 1px solid var(--tg-border);
   border-radius: var(--radius-md);
-  font-size: 14px;
+  font-size: 16px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.2s;

@@ -11,6 +11,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Missing product_id parameter' }, { status: 400 });
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(productId)) {
+      return NextResponse.json({ error: 'Invalid product ID format.' }, { status: 400 });
+    }
+
     const product = await db.getProductById(productId);
     if (!product) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });

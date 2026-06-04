@@ -266,6 +266,57 @@ export const db = {
     }
   },
 
+  async deleteProduct(id: string) {
+    if (isRealSupabaseConfigured) {
+      const { error } = await supabaseAdmin
+        .from('products')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    } else {
+      const mockDb = readMockDb();
+      mockDb.products = mockDb.products.filter(p => p.id !== id);
+      writeMockDb(mockDb);
+      return true;
+    }
+  },
+
+  async updateProduct(id: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string, productType = 'DIGITAL') {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('products')
+        .update({
+          title,
+          description,
+          price_fiat: priceFiat,
+          price_stars: priceStars,
+          content_url: contentUrl,
+          cover_url: coverUrl || null,
+          product_type: productType
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const product = mockDb.products.find(p => p.id === id);
+      if (product) {
+        product.title = title;
+        product.description = description;
+        product.price_fiat = priceFiat;
+        product.price_stars = priceStars;
+        product.content_url = contentUrl;
+        product.cover_url = coverUrl || null;
+        product.product_type = productType;
+      }
+      writeMockDb(mockDb);
+      return product;
+    }
+  },
+
   // --- Orders Operations ---
   async getOrderById(id: string) {
     if (isRealSupabaseConfigured) {
