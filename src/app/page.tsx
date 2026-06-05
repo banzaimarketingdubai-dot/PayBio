@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
 import ImageCropper from '@/components/ImageCropper';
 import BookingCalendar from '@/components/BookingCalendar';
 import { TRANSLATIONS } from '@/lib/translations';
@@ -247,7 +247,7 @@ const MaxIcon = () => (
   </svg>
 );
 
-function ProductListScreen({
+const ProductListScreen = memo(function ProductListScreen({
   products,
   onSelect,
   creator,
@@ -2452,7 +2452,7 @@ setIsGeneratingCover(false);
 
     </div>
   );
-}
+});
 
 // ─── Copy hook ───────────────────────────────────────────────────
 function useCopy() {
@@ -2681,7 +2681,7 @@ export default function Storefront() {
     });
   }, []);
 
-  const fetchBusySlotsForProduct = async (prodId: string) => {
+  const fetchBusySlotsForProduct = useCallback(async (prodId: string) => {
     setIsLoadingBusySlots(true);
     try {
       const res = await fetch(`/api/calendar/busy?product_id=${prodId}`);
@@ -2695,7 +2695,7 @@ export default function Storefront() {
     } finally {
       setIsLoadingBusySlots(false);
     }
-  };
+  }, []);
 
   // Fetch data — waits for creatorTgId to be resolved by SDK
   useEffect(() => {
@@ -2799,9 +2799,9 @@ export default function Storefront() {
       setSectionOrder(pc.section_order || ['DIGITAL', 'VOUCHER', 'BOOKING']);
       setProductSections(pc.product_sections || {});
     }
-  }, [creator, lang]);
+  }, [creator]);
 
-  const refreshCreatorData = async () => {
+  const refreshCreatorData = useCallback(async () => {
     const activeTgId = creator?.telegram_id || creatorTgId;
     if (!activeTgId) return;
     try {
@@ -2814,10 +2814,10 @@ export default function Storefront() {
     } catch (err) {
       console.error('Error refreshing creator:', err);
     }
-  };
+  }, [creator, creatorTgId]);
 
   // Premium activation (legacy toggle, kept for compatibility/manual triggers)
-  const handleActivatePremium = async () => {
+  const handleActivatePremium = useCallback(async () => {
     if (!creator) return;
     setIsUpgrading(true);
     try {
@@ -2839,9 +2839,9 @@ export default function Storefront() {
     } finally {
       setIsUpgrading(false);
     }
-  };
+  }, [creator, lang, t]);
 
-  const handleBuyPremiumWithStars = async (isSubscription = false) => {
+  const handleBuyPremiumWithStars = useCallback(async (isSubscription = false) => {
     if (!creator) return;
     setIsUpgrading(true);
     try {
@@ -2895,9 +2895,9 @@ export default function Storefront() {
     } finally {
       setIsUpgrading(false);
     }
-  };
+  }, [creator, lang, refreshCreatorData]);
 
-  const handleApplyPromoCode = async () => {
+  const handleApplyPromoCode = useCallback(async () => {
     if (!creator || !promoCodeInput.trim()) return;
     setIsApplyingPromo(true);
     setPromoCodeStatus({ type: null, message: '' });
@@ -2944,9 +2944,9 @@ export default function Storefront() {
     } finally {
       setIsApplyingPromo(false);
     }
-  };
+  }, [creator, promoCodeInput, lang, refreshCreatorData]);
 
-  const handleSaveSettings = async (
+  const handleSaveSettings = useCallback(async (
     name: string,
     description: string,
     avatar: string,
@@ -3006,10 +3006,10 @@ export default function Storefront() {
     } catch (err: any) {
       showAlert(err.message || 'Error saving settings.');
     }
-  };
+  }, [creator, lang]);
 
   // Direct product creation in frontend
-  const handleAddProduct = async (
+  const handleAddProduct = useCallback(async (
     title: string,
     description: string,
     priceFiat: number,
@@ -3081,9 +3081,9 @@ export default function Storefront() {
       showAlert(err.message || 'Error creating product.');
       return false;
     }
-  };
+  }, [creator, creatorTgId, productSections, lang]);
 
-  const handleDeleteProduct = async (prodId: string): Promise<boolean> => {
+  const handleDeleteProduct = useCallback(async (prodId: string): Promise<boolean> => {
     try {
       const res = await fetch('/api/store/delete', {
         method: 'POST',
@@ -3100,9 +3100,9 @@ export default function Storefront() {
       console.error('Failed to delete product:', err);
       return false;
     }
-  };
+  }, []);
 
-  const handleUpdateProduct = async (
+  const handleUpdateProduct = useCallback(async (
     prodId: string,
     title: string,
     description: string,
@@ -3154,10 +3154,10 @@ export default function Storefront() {
       console.error('Failed to update product:', err);
       return false;
     }
-  };
+  }, [creator, productSections]);
 
   // Stars payment
-  const handleStarsPayment = async () => {
+  const handleStarsPayment = useCallback(async () => {
     if (!product) return;
     if (product.product_type === 'BOOKING') {
       if (!bookingDate || !bookingTime) {
@@ -3187,9 +3187,9 @@ export default function Storefront() {
     } catch (e: any) {
       showAlert('Error initiating payment.');
     }
-  };
+  }, [product, bookingDate, bookingTime, buyerTgId, lang, t]);
 
-  const handleBuyDirect = async () => {
+  const handleBuyDirect = useCallback(async () => {
     if (!product) return;
     const creatorUsername = product.creator?.username;
     const contactUrl = creatorUsername 
@@ -3214,10 +3214,10 @@ export default function Storefront() {
     } catch (e) {
       window.open(contactUrl, '_blank');
     }
-  };
+  }, [product, lang]);
 
   // P2P verification
-  const handleVerifyReceipt = async (e: React.FormEvent) => {
+  const handleVerifyReceipt = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!product || !file) return;
     if (product.product_type === 'BOOKING') {
@@ -3275,7 +3275,7 @@ export default function Storefront() {
         setVerifying(false);
       }
     }, 4500);
-  };
+  }, [product, file, bookingDate, bookingTime, buyerTgId]);
 
   const isOwner = creator && Number(buyerTgId) === Number(creator.telegram_id);
 
