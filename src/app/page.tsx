@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
 import ImageCropper from '@/components/ImageCropper';
 import BookingCalendar from '@/components/BookingCalendar';
 import LoadingScreen from '@/components/LoadingScreen';
+import ProductCard from '@/components/ProductCard';
 import ErrorScreen from '@/components/ErrorScreen';
 import ReviewsDashboard from '@/components/ReviewsDashboard';
 import { YoutubeIcon, InstagramIcon, TiktokIcon, VkIcon, MaxIcon } from '@/components/Icons';
@@ -1843,67 +1844,22 @@ setIsGeneratingCover(false);
 
                 {secProducts.length > 0 ? (
                   <div className="section-gallery" style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory' }}>
-                    {secProducts.map((p, idx) => {
-                      const styleIdx = idx % coverStyles.length;
-                      const cover = coverStyles[styleIdx];
-                      const isStarred = starredIds.includes(p.id);
-                      return (
-                        <div 
-                          key={p.id}
-                          className="large-product-card animate-fade-up"
-                          style={{ width: '80vw', minWidth: '80vw', maxWidth: '80vw', scrollSnapAlign: 'start', flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column' }}
-                        >
-                          <div 
-                            className="large-product-cover" 
-                            style={p.cover_url ? { backgroundImage: `url("${p.cover_url}")`, height: '110px', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : { background: cover.bg, height: '110px' }}
-                          >
-                            {!p.cover_url && <div className="large-product-icon" style={{ fontSize: '24px' }}>{cover.icon}</div>}
-                            
-                            {isOwner && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleToggleStar(p.id, e)}
-                                style={{
-                                  position: 'absolute', top: '8px', right: '8px',
-                                  background: 'rgba(0,0,0,0.6)', border: 'none', borderRadius: '50%',
-                                  width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  cursor: 'pointer', zIndex: 5, fontSize: '13px'
-                                }}
-                              >
-                                {isStarred ? '⭐' : '☆'}
-                              </button>
-                            )}
-                          </div>
-                          
-                          <div className="large-product-body" style={{ padding: '10px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                            <div>
-                              <h4 style={{ margin: '0 0 4px 0', fontSize: '14.5px', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--tg-text)' }}>{p.title}</h4>
-                              <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--tg-hint)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '34px', lineHeight: 1.4 }}>{p.description}</p>
-                            </div>
- 
-                            <div style={{ marginTop: '10px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
-                                <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--tg-text)' }}>${p.price_fiat}</span>
-                                <span style={{ fontSize: '10.5px', color: 'var(--tg-hint)' }}>⭐️ {p.price_stars}</span>
-                              </div>
- 
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                <button className="large-product-action-btn" style={{ fontSize: '11px', padding: '6px' }} onClick={() => onSelect(p.id)}>
-                                  {t.viewStorefront}
-                                </button>
-                                {isOwner && (
-                                  <>
-                                    <button className="large-product-action-btn" style={{ background: 'rgba(255,165,0,0.12)', color: '#ffa500', width: '30px', padding: 0 }} onClick={(e) => { e.stopPropagation(); handleGeneratePromo(p); }}>📢</button>
-                                    <button className="large-product-action-btn" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--tg-text)', width: '30px', padding: 0 }} onClick={(e) => { e.stopPropagation(); handleOpenEditProduct(p); }}>✏️</button>
-                                    <button className="large-product-action-btn" style={{ background: 'rgba(233,92,92,0.12)', color: '#ff4d4d', width: '30px', padding: 0 }} onClick={(e) => { e.stopPropagation(); handleConfirmDelete(p.id, p.title); }}>🗑️</button>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {secProducts.map((p, idx) => (
+                      <ProductCard
+                        key={p.id}
+                        product={p}
+                        idx={idx}
+                        isOwner={isOwner}
+                        starredIds={starredIds}
+                        lang={lang}
+                        t={t}
+                        onSelect={onSelect}
+                        onToggleStar={handleToggleStar}
+                        onGeneratePromo={handleGeneratePromo}
+                        onOpenEditProduct={handleOpenEditProduct}
+                        onConfirmDelete={handleConfirmDelete}
+                      />
+                    ))}
                     {secProducts.length === 1 && (
                       <div
                         onClick={isOwner ? () => handleOpenCreateProduct(sectionName) : undefined}
