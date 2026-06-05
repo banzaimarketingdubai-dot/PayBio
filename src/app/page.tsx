@@ -5,6 +5,15 @@ import ImageCropper from '@/components/ImageCropper';
 import BookingCalendar from '@/components/BookingCalendar';
 import { TRANSLATIONS } from '@/lib/translations';
 
+// Singleton: resolved once at startup to prevent dynamic import latency on button taps
+let _twaSDK: any = null;
+const getTWA = async () => {
+  if (!_twaSDK) {
+    _twaSDK = (await import('@twa-dev/sdk')).default;
+  }
+  return _twaSDK;
+};
+
 interface Creator {
   id: string;
   telegram_id: number;
@@ -577,6 +586,7 @@ const ProductListScreen = memo(function ProductListScreen({
     }
   };
 
+  const dragThrottleRef = useRef(0);
   // 6. Section Drag & Drop Reordering
   const [draggedSection, setDraggedSection] = useState<string | null>(null);
   
@@ -586,7 +596,9 @@ const ProductListScreen = memo(function ProductListScreen({
   
   const handleDragOver = (e: React.DragEvent, targetSection: string) => {
     e.preventDefault();
-    if (draggedSection && draggedSection !== targetSection) {
+    const now = Date.now();
+    if (draggedSection && draggedSection !== targetSection && now - dragThrottleRef.current > 80) {
+      dragThrottleRef.current = now;
       const oldIdx = sectionOrder.indexOf(draggedSection);
       const newIdx = sectionOrder.indexOf(targetSection);
       const newOrder = [...sectionOrder];
@@ -956,7 +968,7 @@ const ProductListScreen = memo(function ProductListScreen({
         }
       } else if (action === 'send') {
         try {
-          const WebApp = (await import('@twa-dev/sdk')).default;
+          const WebApp = await getTWA();
           WebApp.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(`t.me/PaybioBot/app?startapp=${selectedPromoProduct?.id}`)}&text=${encodeURIComponent(promoText)}`);
         } catch {
           window.open(`https://t.me/share/url?url=${encodeURIComponent(`t.me/PaybioBot/app?startapp=${selectedPromoProduct?.id}`)}&text=${encodeURIComponent(promoText)}`, '_blank');
@@ -979,7 +991,7 @@ const ProductListScreen = memo(function ProductListScreen({
       : '🚀 Build your AI-powered Telegram storefront for digital products in 1 minute with PayBio!';
       
     try {
-      const WebApp = (await import('@twa-dev/sdk')).default;
+      const WebApp = await getTWA();
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(affiliateLink)}&text=${encodeURIComponent(shareText)}`;
       WebApp.openTelegramLink(shareUrl);
     } catch (err) {
@@ -2587,8 +2599,7 @@ export default function Storefront() {
 
   // Sync Telegram native Back Button with productId state
   useEffect(() => {
-    import('@twa-dev/sdk').then((twa) => {
-      const WebApp = twa.default;
+    getTWA().then((WebApp) => {
       if (productId) {
         WebApp.BackButton.show();
         const handleBack = () => {
@@ -2632,8 +2643,7 @@ export default function Storefront() {
     const testId = urlParams.get('buyer_tg_id');
     if (testId) setBuyerTgId(Number(testId));
 
-    import('@twa-dev/sdk').then((twa) => {
-      const webapp = twa.default;
+    getTWA().then((webapp) => {
       webapp.ready();
       webapp.expand();
       try {
@@ -2856,8 +2866,8 @@ export default function Storefront() {
         return;
       }
 
-      const WebApp = (await import('@twa-dev/sdk')).default;
-      WebApp.openInvoice(data.invoice_link, async (status) => {
+      const WebApp = await getTWA();
+      WebApp.openInvoice(data.invoice_link, async (status: string) => {
         if (status === 'paid') {
           showAlert(lang === 'ru' ? '🎉 Премиум успешно активирован!' : '🎉 Premium activated successfully!');
           await refreshCreatorData();
@@ -3179,8 +3189,8 @@ export default function Storefront() {
       const data = await res.json();
       if (!res.ok) { showAlert(data.error || 'Failed to create invoice.'); return; }
 
-      const WebApp = (await import('@twa-dev/sdk')).default;
-      WebApp.openInvoice(data.invoice_link, (status) => {
+      const WebApp = await getTWA();
+      WebApp.openInvoice(data.invoice_link, (status: string) => {
         if (status === 'paid') showAlert(t.fileDelivered);
         else showAlert(`Payment status: ${status}`);
       });
@@ -3201,7 +3211,7 @@ export default function Storefront() {
       : `Hi! I want to buy your product: "${product.title}"`;
       
     try {
-      const WebApp = (await import('@twa-dev/sdk')).default;
+      const WebApp = await getTWA();
       navigator.clipboard.writeText(text).then(() => {
         showAlert(lang === 'ru' 
           ? 'Сообщение скопировано! Открываем диалог с автором.' 
