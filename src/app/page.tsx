@@ -103,6 +103,8 @@ const ProductListScreen = memo(function ProductListScreen({
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [creationStep, setCreationStep] = useState<'TYPE_SELECT' | 'FORM'>('TYPE_SELECT');
+  const [isBioLinkExpanded, setIsBioLinkExpanded] = useState(false);
+  const [isShareEarnExpanded, setIsShareEarnExpanded] = useState(false);
 
   const isCreatorPremium = !!creator?.is_premium;
   const hasSocials = !!(socialLinks.youtube || socialLinks.instagram || socialLinks.tiktok || socialLinks.vk || socialLinks.max);
@@ -1644,112 +1646,139 @@ setIsGeneratingCover(false);
 
       {/* ─── BIO LINK & QUICK INSTRUCTIONS (OWNER ONLY) ─── */}
       {isOwner && (
-        <div style={{ padding: '0 20px', marginBottom: '24px' }}>
-          <div className="tg-card" style={{ padding: '14px', border: '1px solid rgba(82,158,255,0.2)', background: 'rgba(82,158,255,0.02)' }}>
-            <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 800, color: 'var(--tg-accent)' }}>
-              🔗 {lang === 'ru' ? 'Ссылка для описания профиля (Bio)' : 'Link for Telegram Bio'}
-            </p>
-            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
-              {lang === 'ru' 
-                ? 'Скопируйте ссылку на магазин и рекомендуемый текст описания ниже, затем вставьте их в поле «О себе» (Bio) в настройках вашего профиля Telegram.' 
-                : 'Copy the storefront link and suggested bio description text below, then paste them into your Telegram "About" (Bio) profile settings.'}
-            </p>
+        <div style={{ padding: '0 20px', marginBottom: '14px' }}>
+          <div className="tg-card" style={{ padding: '12px 16px', border: '1px solid rgba(82,158,255,0.2)', background: 'rgba(82,158,255,0.02)', borderRadius: '12px' }}>
+            <div 
+              onClick={() => setIsBioLinkExpanded(!isBioLinkExpanded)}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+            >
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tg-accent)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                🔗 {lang === 'ru' ? 'Ссылка для описания профиля (Bio)' : 'Link for Telegram Bio'}
+              </span>
+              <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{isBioLinkExpanded ? '▲' : '▼'}</span>
+            </div>
             
-            {/* Storefront Link */}
-            <p style={{ margin: '8px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
-              🌐 {lang === 'ru' ? 'Ссылка на ваш магазин:' : 'Your storefront link:'}
-            </p>
-            <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '12px' }}>
-              <span className="copy-value" style={{ fontSize: '12px' }}>
-                {`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`}
-              </span>
-              <button 
-                type="button" 
-                className="copy-btn" 
-                onClick={() => {
-                  navigator.clipboard.writeText(`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`);
-                  showAlert(lang === 'ru' ? '✓ Ссылка скопирована!' : '✓ Link copied!');
-                }}
-              >
-                {lang === 'ru' ? 'Копировать' : 'Copy'}
-              </button>
-            </div>
+            {isBioLinkExpanded && (
+              <div style={{ marginTop: '12px' }} className="animate-fade-in">
+                <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
+                  {lang === 'ru' 
+                    ? 'Скопируйте ссылку на магазин и рекомендуемый текст описания ниже, затем вставьте их в поле «О себе» (Bio) в настройках вашего профиля Telegram.' 
+                    : 'Copy the storefront link and suggested bio description text below, then paste them into your Telegram "About" (Bio) profile settings.'}
+                </p>
+                
+                {/* Storefront Link */}
+                <p style={{ margin: '8px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                  🌐 {lang === 'ru' ? 'Ссылка на ваш магазин:' : 'Your storefront link:'}
+                </p>
+                <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '12px' }}>
+                  <span className="copy-value" style={{ fontSize: '12px' }}>
+                    {`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`}
+                  </span>
+                  <button 
+                    type="button" 
+                    className="copy-btn" 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`);
+                      showAlert(lang === 'ru' ? '✓ Ссылка скопирована!' : '✓ Link copied!');
+                    }}
+                  >
+                    {lang === 'ru' ? 'Копировать' : 'Copy'}
+                  </button>
+                </div>
 
-            {/* Suggested Bio Copy */}
-            <p style={{ margin: '12px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
-              📝 {lang === 'ru' ? 'Рекомендуемый текст для БИО:' : 'Suggested bio description:'}
-            </p>
-            <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '16px' }}>
-              <span className="copy-value" style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
-                {lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇'}
-              </span>
-              <button 
-                type="button" 
-                className="copy-btn" 
-                onClick={() => {
-                  navigator.clipboard.writeText(lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇');
-                  showAlert(lang === 'ru' ? '✓ Текст скопирован!' : '✓ Text copied!');
-                }}
-              >
-                {lang === 'ru' ? 'Копировать' : 'Copy'}
-              </button>
-            </div>
+                {/* Suggested Bio Copy */}
+                <p style={{ margin: '12px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                  📝 {lang === 'ru' ? 'Рекомендуемый текст для БИО:' : 'Suggested bio description:'}
+                </p>
+                <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '16px' }}>
+                  <span className="copy-value" style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
+                    {lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇'}
+                  </span>
+                  <button 
+                    type="button" 
+                    className="copy-btn" 
+                    onClick={() => {
+                      navigator.clipboard.writeText(lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇');
+                      showAlert(lang === 'ru' ? '✓ Текст скопирован!' : '✓ Text copied!');
+                    }}
+                  >
+                    {lang === 'ru' ? 'Копировать' : 'Copy'}
+                  </button>
+                </div>
 
-            {/* Step-by-step Guide */}
-            <div style={{ marginTop: '12px', borderTop: '1px solid rgba(82,158,255,0.1)', paddingTop: '10px' }}>
-              <p style={{ margin: '0 0 6px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
-                {lang === 'ru' ? 'Инструкция по настройке:' : 'How to set up:'}
-              </p>
-              <ol style={{ margin: 0, paddingLeft: '16px', fontSize: '11.5px', color: 'var(--tg-hint)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <li>{lang === 'ru' ? 'Скопируйте ссылку и предложенный текст БИО.' : 'Copy the storefront link and suggested bio text.'}</li>
-                <li>{lang === 'ru' ? 'Откройте настройки Telegram -> Изменить профиль (или поле "О себе").' : 'Open Telegram Settings -> Edit Profile (or "About" field).'}</li>
-                <li>{lang === 'ru' ? 'Вставьте ссылку и текст в поле описания и сохраните!' : 'Paste the link and text into the description field and save changes!'}</li>
-              </ol>
-            </div>
+                {/* Step-by-step Guide */}
+                <div style={{ marginTop: '12px', borderTop: '1px solid rgba(82,158,255,0.1)', paddingTop: '10px' }}>
+                  <p style={{ margin: '0 0 6px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                    {lang === 'ru' ? 'Инструкция по настройке:' : 'How to set up:'}
+                  </p>
+                  <ol style={{ margin: 0, paddingLeft: '16px', fontSize: '11.5px', color: 'var(--tg-hint)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <li>{lang === 'ru' ? 'Скопируйте ссылку и предложенный текст БИО.' : 'Copy the storefront link and suggested bio text.'}</li>
+                    <li>{lang === 'ru' ? 'Откройте настройки Telegram -> Изменить профиль (или поле "О себе").' : 'Open Telegram Settings -> Edit Profile (or "About" field).'}</li>
+                    <li>{lang === 'ru' ? 'Вставьте ссылку и текст в поле описания и сохраните!' : 'Paste the link and text into the description field and save changes!'}</li>
+                  </ol>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* ─── SHARE STORE & PARTNER BLOCK ─── */}
-      <div style={{ padding: '0 20px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-          <button 
-            onClick={handleShareStore}
-            className="btn-primary"
-            style={{ 
-              background: 'var(--tg-accent)', 
-              color: '#fff', 
-              padding: '10px', 
-              fontSize: '13px',
-              fontWeight: 700
-            }}
+      <div style={{ padding: '0 20px', marginBottom: '24px' }}>
+        <div className="tg-card" style={{ padding: '12px 16px', border: '1px dashed var(--tg-border)', background: 'rgba(255,255,255,0.01)', borderRadius: '12px' }}>
+          <div 
+            onClick={() => setIsShareEarnExpanded(!isShareEarnExpanded)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
           >
-            📢 {lang === 'ru' ? 'Поделиться' : 'Share Store'}
-          </button>
-          <button 
-            onClick={handleShareAffiliateLink}
-            className="btn-secondary"
-            style={{ 
-              padding: '10px', 
-              fontSize: '13px',
-              fontWeight: 700
-            }}
-          >
-            🤝 {lang === 'ru' ? 'Пригласить и заработать 10%' : 'Invite & Earn 10%'}
-          </button>
-        </div>
-        <div style={{
-          padding: '10px 12px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1.5px dashed var(--tg-border)',
-          borderRadius: '8px',
-          fontSize: '11.5px',
-          color: 'var(--tg-hint)',
-          lineHeight: '1.4'
-        }}>
-          💡 {lang === 'ru' 
-            ? 'Попросите клиентов делиться ссылкой на ваш магазин, чтобы привлечь больше покупателей!' 
-            : 'Ask clients to share your storefront link to drive more sales!'}
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tg-text)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              📢 {lang === 'ru' ? 'Поделиться и заработать 10%' : 'Share & Earn 10%'}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{isShareEarnExpanded ? '▲' : '▼'}</span>
+          </div>
+
+          {isShareEarnExpanded && (
+            <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }} className="animate-fade-in">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <button 
+                  onClick={handleShareStore}
+                  className="btn-primary"
+                  style={{ 
+                    background: 'var(--tg-accent)', 
+                    color: '#fff', 
+                    padding: '10px', 
+                    fontSize: '13px',
+                    fontWeight: 700
+                  }}
+                >
+                  📢 {lang === 'ru' ? 'Поделиться' : 'Share Store'}
+                </button>
+                <button 
+                  onClick={handleShareAffiliateLink}
+                  className="btn-secondary"
+                  style={{ 
+                    padding: '10px', 
+                    fontSize: '13px',
+                    fontWeight: 700
+                  }}
+                >
+                  🤝 {lang === 'ru' ? 'Пригласить' : 'Invite'}
+                </button>
+              </div>
+              <div style={{
+                padding: '10px 12px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1.5px dashed var(--tg-border)',
+                borderRadius: '8px',
+                fontSize: '11.5px',
+                color: 'var(--tg-hint)',
+                lineHeight: '1.4'
+              }}>
+                💡 {lang === 'ru' 
+                  ? 'Попросите клиентов делиться ссылкой на ваш магазин, чтобы привлечь больше покупателей!' 
+                  : 'Ask clients to share your storefront link to drive more sales!'}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
