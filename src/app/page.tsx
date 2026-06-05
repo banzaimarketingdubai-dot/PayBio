@@ -1314,7 +1314,7 @@ setIsGeneratingCover(false);
   // Render Settings Screen if currentScreen is SETTINGS
   if (currentScreen === 'SETTINGS') {
     return (
-      <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', padding: '20px 16px 80px', color: 'var(--tg-text)' }} className="animate-fade-in">
+      <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 16px 80px', color: 'var(--tg-text)' }} className="animate-fade-in">
         {/* Settings Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
           <button 
@@ -1632,12 +1632,12 @@ setIsGeneratingCover(false);
 
   // Normal Storefront View
   return (
-    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative' }} className="animate-fade-in">
+    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)' }} className="animate-fade-in">
       
       {/* ─── BANNER ─── */}
       <div 
         className="store-banner animate-fade-in" 
-        style={storeBanner ? { backgroundImage: `url(${storeBanner})` } : undefined}
+        style={storeBanner ? { backgroundImage: `url("${storeBanner}")` } : undefined}
       >
         <div className="store-banner-glow" />
         {isOwner && (
@@ -1838,6 +1838,74 @@ setIsGeneratingCover(false);
         </div>
       </div>
 
+      {/* ─── BIO LINK & QUICK INSTRUCTIONS (OWNER ONLY) ─── */}
+      {isOwner && (
+        <div style={{ padding: '0 20px', marginBottom: '24px' }}>
+          <div className="tg-card" style={{ padding: '14px', border: '1px solid rgba(82,158,255,0.2)', background: 'rgba(82,158,255,0.02)' }}>
+            <p style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 800, color: 'var(--tg-accent)' }}>
+              🔗 {lang === 'ru' ? 'Ссылка для описания профиля (Bio)' : 'Link for Telegram Bio'}
+            </p>
+            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
+              {lang === 'ru' 
+                ? 'Скопируйте ссылку на магазин и рекомендуемый текст описания ниже, затем вставьте их в поле «О себе» (Bio) в настройках вашего профиля Telegram.' 
+                : 'Copy the storefront link and suggested bio description text below, then paste them into your Telegram "About" (Bio) profile settings.'}
+            </p>
+            
+            {/* Storefront Link */}
+            <p style={{ margin: '8px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+              🌐 {lang === 'ru' ? 'Ссылка на ваш магазин:' : 'Your storefront link:'}
+            </p>
+            <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '12px' }}>
+              <span className="copy-value" style={{ fontSize: '12px' }}>
+                {`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`}
+              </span>
+              <button 
+                type="button" 
+                className="copy-btn" 
+                onClick={() => {
+                  navigator.clipboard.writeText(`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`);
+                  showAlert(lang === 'ru' ? '✓ Ссылка скопирована!' : '✓ Link copied!');
+                }}
+              >
+                {lang === 'ru' ? 'Копировать' : 'Copy'}
+              </button>
+            </div>
+
+            {/* Suggested Bio Copy */}
+            <p style={{ margin: '12px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+              📝 {lang === 'ru' ? 'Рекомендуемый текст для БИО:' : 'Suggested bio description:'}
+            </p>
+            <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '16px' }}>
+              <span className="copy-value" style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
+                {lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇'}
+              </span>
+              <button 
+                type="button" 
+                className="copy-btn" 
+                onClick={() => {
+                  navigator.clipboard.writeText(lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇');
+                  showAlert(lang === 'ru' ? '✓ Текст скопирован!' : '✓ Text copied!');
+                }}
+              >
+                {lang === 'ru' ? 'Копировать' : 'Copy'}
+              </button>
+            </div>
+
+            {/* Step-by-step Guide */}
+            <div style={{ marginTop: '12px', borderTop: '1px solid rgba(82,158,255,0.1)', paddingTop: '10px' }}>
+              <p style={{ margin: '0 0 6px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                {lang === 'ru' ? 'Инструкция по настройке:' : 'How to set up:'}
+              </p>
+              <ol style={{ margin: 0, paddingLeft: '16px', fontSize: '11.5px', color: 'var(--tg-hint)', lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <li>{lang === 'ru' ? 'Скопируйте ссылку и предложенный текст БИО.' : 'Copy the storefront link and suggested bio text.'}</li>
+                <li>{lang === 'ru' ? 'Откройте настройки Telegram -> Изменить профиль (или поле "О себе").' : 'Open Telegram Settings -> Edit Profile (or "About" field).'}</li>
+                <li>{lang === 'ru' ? 'Вставьте ссылку и текст в поле описания и сохраните!' : 'Paste the link and text into the description field and save changes!'}</li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ─── SHARE STORE & PARTNER BLOCK ─── */}
       <div style={{ padding: '0 20px', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
@@ -1896,8 +1964,8 @@ setIsGeneratingCover(false);
                 const styleIdx = idx % coverStyles.length;
                 const cover = coverStyles[styleIdx];
                 return (
-                  <div key={p.id} className="promoted-glow-card animate-fade-up" style={{ minWidth: '220px', maxWidth: '220px', scrollSnapAlign: 'start', flexShrink: 0 }} onClick={() => onSelect(p.id)}>
-                    <div className="large-product-cover" style={p.cover_url ? { backgroundImage: `url(${p.cover_url})`, height: '110px' } : { background: cover.bg, height: '110px' }}>
+                  <div key={p.id} className="promoted-glow-card animate-fade-up" style={{ width: '80vw', minWidth: '80vw', maxWidth: '80vw', scrollSnapAlign: 'start', flexShrink: 0 }} onClick={() => onSelect(p.id)}>
+                    <div className="large-product-cover" style={p.cover_url ? { backgroundImage: `url("${p.cover_url}")`, height: '110px', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : { background: cover.bg, height: '110px' }}>
                       {!p.cover_url && <div className="large-product-icon">{cover.icon}</div>}
                     </div>
                     <div style={{ padding: '10px' }}>
@@ -1981,11 +2049,11 @@ setIsGeneratingCover(false);
                         <div 
                           key={p.id}
                           className="large-product-card animate-fade-up"
-                          style={{ minWidth: '240px', maxWidth: '240px', scrollSnapAlign: 'start', flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column' }}
+                          style={{ width: '80vw', minWidth: '80vw', maxWidth: '80vw', scrollSnapAlign: 'start', flexShrink: 0, margin: 0, display: 'flex', flexDirection: 'column' }}
                         >
                           <div 
                             className="large-product-cover" 
-                            style={p.cover_url ? { backgroundImage: `url(${p.cover_url})`, height: '110px' } : { background: cover.bg, height: '110px' }}
+                            style={p.cover_url ? { backgroundImage: `url("${p.cover_url}")`, height: '110px', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : { background: cover.bg, height: '110px' }}
                           >
                             {!p.cover_url && <div className="large-product-icon" style={{ fontSize: '24px' }}>{cover.icon}</div>}
                             
@@ -2010,13 +2078,13 @@ setIsGeneratingCover(false);
                               <h4 style={{ margin: '0 0 4px 0', fontSize: '14.5px', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--tg-text)' }}>{p.title}</h4>
                               <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--tg-hint)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '34px', lineHeight: 1.4 }}>{p.description}</p>
                             </div>
-
+ 
                             <div style={{ marginTop: '10px' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '8px' }}>
                                 <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--tg-text)' }}>${p.price_fiat}</span>
                                 <span style={{ fontSize: '10.5px', color: 'var(--tg-hint)' }}>⭐️ {p.price_stars}</span>
                               </div>
-
+ 
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 <button className="large-product-action-btn" style={{ fontSize: '11px', padding: '6px' }} onClick={() => onSelect(p.id)}>
                                   {t.viewStorefront}
@@ -2034,6 +2102,45 @@ setIsGeneratingCover(false);
                         </div>
                       );
                     })}
+                    {secProducts.length === 1 && (
+                      <div
+                        onClick={isOwner ? () => handleOpenCreateProduct(sectionName) : undefined}
+                        className="large-product-card animate-fade-up"
+                        style={{
+                          width: '80vw',
+                          minWidth: '80vw',
+                          maxWidth: '80vw',
+                          height: '215px',
+                          scrollSnapAlign: 'start',
+                          flexShrink: 0,
+                          margin: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          border: '2px dashed var(--tg-border)',
+                          background: 'rgba(255, 255, 255, 0.02)',
+                          borderRadius: 'var(--radius-xl)',
+                          cursor: isOwner ? 'pointer' : 'default'
+                        }}
+                      >
+                        {isOwner ? (
+                          <>
+                            <div style={{ fontSize: '36px', color: 'var(--tg-hint)', fontWeight: 'bold' }}>＋</div>
+                            <div style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', fontWeight: 600 }}>
+                              {lang === 'ru' ? 'Добавить товар' : 'Add Product'}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: '36px', color: 'var(--tg-hint)', fontWeight: 'bold' }}>✨</div>
+                            <div style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', fontWeight: 600 }}>
+                              {lang === 'ru' ? 'Скоро новые товары!' : 'More products coming soon!'}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ padding: '20px', background: 'var(--tg-secondary-bg)', borderRadius: '10px', textAlign: 'center', border: '1px dashed var(--tg-border)' }}>
@@ -2049,22 +2156,33 @@ setIsGeneratingCover(false);
 
         {/* Custom Section creation */}
         {isOwner && (
-          <div style={{ marginTop: '30px', borderTop: '1px solid var(--tg-border)', paddingTop: '20px' }}>
-            <p style={{ fontSize: '13px', fontWeight: 800, marginBottom: '10px' }}>
+          <div style={{ marginTop: '30px', borderTop: '1px solid var(--tg-border)', paddingTop: '16px' }}>
+            <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--tg-hint)', marginBottom: '8px' }}>
               📁 {lang === 'ru' ? 'Добавить новый раздел каталога' : 'Create Custom Catalog Section'}
             </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               <input
                 type="text"
                 placeholder={lang === 'ru' ? 'Название раздела' : 'Section title'}
                 className="tg-input"
                 id="new-section-input"
-                style={{ flex: 1 }}
+                style={{ flex: 1, padding: '4px 10px', fontSize: '12px', height: '28px', borderRadius: '6px' }}
               />
               <button
                 type="button"
-                className="btn-primary"
-                style={{ width: 'auto', padding: '0 16px' }}
+                style={{
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid var(--tg-border)',
+                  color: 'var(--tg-hint)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '0 10px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'background 0.15s'
+                }}
                 onClick={() => {
                   const el = document.getElementById('new-section-input') as HTMLInputElement;
                   if (el && el.value) {
@@ -2315,7 +2433,7 @@ setIsGeneratingCover(false);
                     width: '100%',
                     height: '140px',
                     borderRadius: '10px',
-                    backgroundImage: `url(${prodCoverUrl})`,
+                    backgroundImage: `url("${prodCoverUrl}")`,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     marginBottom: '10px',
@@ -2478,6 +2596,25 @@ function useCopy() {
   return { copied, copy };
 }
 
+// ─── Safe Link Opener Utility ────────────────────────────────────
+const handleOpenLink = (url: string) => {
+  if (typeof window !== 'undefined') {
+    const WebApp = (window as any).Telegram?.WebApp;
+    if (url.startsWith('tg://') || url.includes('t.me/')) {
+      if (WebApp?.openTelegramLink) {
+        WebApp.openTelegramLink(url);
+        return;
+      }
+    } else {
+      if (WebApp?.openLink) {
+        WebApp.openLink(url);
+        return;
+      }
+    }
+  }
+  window.open(url, '_blank');
+};
+
 // ─── Main Storefront Component ───────────────────────────────────
 export default function Storefront() {
   const [productId, setProductId] = useState<string | null>(null);
@@ -2511,6 +2648,10 @@ export default function Storefront() {
   const [isPremiumOpen, setIsPremiumOpen] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isProductReviewsOpen, setIsProductReviewsOpen] = useState(false);
+
+  // Stars purchase assistant states
+  const [isStarsHelpOpen, setIsStarsHelpOpen] = useState(false);
+  const [isPremiumStarsHelpOpen, setIsPremiumStarsHelpOpen] = useState(false);
 
   // Promo code states
   const [promoCodeInput, setPromoCodeInput] = useState('');
@@ -2625,13 +2766,40 @@ export default function Storefront() {
     if (!rawPid && typeof window !== 'undefined') {
       rawPid = localStorage.getItem('paybio_current_product_id');
     }
+
+    const isUuid = (str: string | null): boolean => {
+      if (!str) return false;
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    };
+
+    const isNumeric = (str: string | null): boolean => {
+      if (!str) return false;
+      return /^\d+$/.test(str);
+    };
+
+    let detectedPid: string | null = null;
+    let detectedCreatorTgId: number | null = null;
+
+    if (rawPid) {
+      if (rawPid.startsWith('ref_')) {
+        const refIdStr = rawPid.substring(4);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('paybio_referrer_tg_id', refIdStr);
+        }
+        if (isNumeric(refIdStr)) {
+          detectedCreatorTgId = Number(refIdStr);
+        }
+      } else if (isNumeric(rawPid)) {
+        detectedCreatorTgId = Number(rawPid);
+      } else if (isUuid(rawPid)) {
+        detectedPid = rawPid;
+      }
+    }
     
-    const pid = cleanProductId(rawPid);
-    
-    if (pid) {
-      setProductId(pid);
+    if (detectedPid) {
+      setProductId(detectedPid);
       if (typeof window !== 'undefined') {
-        localStorage.setItem('paybio_current_product_id', pid);
+        localStorage.setItem('paybio_current_product_id', detectedPid);
       }
     } else {
       setProductId(null);
@@ -2662,32 +2830,57 @@ export default function Storefront() {
         setLang('en');
       }
 
+      let activeCreatorTgId = detectedCreatorTgId;
       const startParam = webapp.initDataUnsafe?.start_param;
       if (startParam) {
-        const cleaned = cleanProductId(startParam);
-        setProductId(cleaned);
-        if (cleaned) {
+        if (startParam.startsWith('ref_')) {
+          const refIdStr = startParam.substring(4);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('paybio_referrer_tg_id', refIdStr);
+          }
+          if (isNumeric(refIdStr)) {
+            activeCreatorTgId = Number(refIdStr);
+          }
+          setProductId(null);
+        } else if (isNumeric(startParam)) {
+          activeCreatorTgId = Number(startParam);
+          setProductId(null);
+        } else if (isUuid(startParam)) {
+          setProductId(startParam);
           // Sync URL param as well
           const url = new URL(window.location.href);
-          url.searchParams.set('product_id', cleaned);
+          url.searchParams.set('product_id', startParam);
           window.history.replaceState(null, '', url.toString());
         }
       }
+
       const user = webapp.initDataUnsafe?.user;
       if (user?.id) {
         setBuyerTgId(user.id);
-        setCreatorTgId(user.id);
+        if (activeCreatorTgId === null) {
+          setCreatorTgId(user.id);
+        } else {
+          setCreatorTgId(activeCreatorTgId);
+        }
       } else {
         // No TG user (e.g. browser preview) — use URL param or 0
         const urlParams2 = new URLSearchParams(window.location.search);
         const urlCreator = urlParams2.get('creator_tg_id');
-        setCreatorTgId(urlCreator ? Number(urlCreator) : 0);
+        if (activeCreatorTgId !== null) {
+          setCreatorTgId(activeCreatorTgId);
+        } else {
+          setCreatorTgId(urlCreator ? Number(urlCreator) : 0);
+        }
       }
     }).catch(() => {
       // SDK failed — resolve with 0 so loadData can proceed
       const urlParams2 = new URLSearchParams(window.location.search);
       const urlCreator = urlParams2.get('creator_tg_id');
-      setCreatorTgId(urlCreator ? Number(urlCreator) : 0);
+      if (detectedCreatorTgId !== null) {
+        setCreatorTgId(detectedCreatorTgId);
+      } else {
+        setCreatorTgId(urlCreator ? Number(urlCreator) : 0);
+      }
     });
   }, []);
 
@@ -3466,6 +3659,64 @@ export default function Storefront() {
                 {isUpgrading ? (lang === 'ru' ? 'Оформление…' : 'Processing…') : (lang === 'ru' ? 'Подписка на месяц (500 Stars/мес)' : 'Monthly Subscription (500 Stars/mo)')}
               </button>
             </div>
+
+            {/* Stars Purchase Assistant for Premium Purchase */}
+            <div style={{ marginTop: '14px', borderTop: '1px solid var(--tg-border)', paddingTop: '10px' }}>
+              <button 
+                type="button"
+                onClick={() => setIsPremiumStarsHelpOpen(!isPremiumStarsHelpOpen)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--tg-link)',
+                  fontSize: '12px', cursor: 'pointer', padding: '4px 0',
+                  display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto',
+                  fontWeight: 500
+                }}
+              >
+                {isPremiumStarsHelpOpen ? '▲' : '▼'} {lang === 'ru' ? 'Как получить Telegram Stars?' : 'How to get Telegram Stars?'}
+              </button>
+              
+              {isPremiumStarsHelpOpen && (
+                <div style={{
+                  marginTop: '8px', padding: '10px', background: 'rgba(255,255,255,0.01)',
+                  border: '1px solid var(--tg-border)', borderRadius: '8px',
+                  fontSize: '12px', lineHeight: 1.5, textAlign: 'left'
+                }}>
+                  <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>
+                    {lang === 'ru' ? 'Купить Звёзды можно двумя способами:' : 'You can buy Stars in two ways:'}
+                  </p>
+                  <ol style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <li>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenLink('https://fragment.com/stars')}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
+                      >
+                        Fragment.com/stars
+                      </button>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--tg-hint)', marginTop: '2px' }}>
+                        {lang === 'ru' 
+                          ? '💡 Дешевле! Оплата криптовалютой TON / кошельком TON.' 
+                          : '💡 Cheaper! Pay with TON cryptocurrency / TON wallet.'}
+                      </span>
+                    </li>
+                    <li>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenLink('tg://settings')}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
+                      >
+                        {lang === 'ru' ? 'Настройки Telegram' : 'Telegram Settings'}
+                      </button>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--tg-hint)', marginTop: '2px' }}>
+                        {lang === 'ru'
+                          ? '📱 Быстрая покупка через App Store / Google Play на мобильном.'
+                          : '📱 Fast top-up via App Store / Google Play on mobile.'}
+                      </span>
+                    </li>
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </>
@@ -3551,7 +3802,7 @@ export default function Storefront() {
         zIndex: 100,
         background: 'var(--tg-secondary-bg)',
         borderBottom: '1px solid var(--tg-border)',
-        padding: '12px 16px',
+        padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px 16px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -3636,7 +3887,7 @@ export default function Storefront() {
               <div style={{
                 width: '100%',
                 height: '180px',
-                backgroundImage: `url(${product.cover_url})`,
+                backgroundImage: `url("${product.cover_url}")`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 marginBottom: '16px',
@@ -3743,7 +3994,7 @@ export default function Storefront() {
               <div style={{
                 width: '100%',
                 height: '180px',
-                backgroundImage: `url(${product.cover_url})`,
+                backgroundImage: `url("${product.cover_url}")`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 marginBottom: '16px',
@@ -3843,7 +4094,7 @@ export default function Storefront() {
               <div style={{
                 width: '100%',
                 height: '180px',
-                backgroundImage: `url(${product.cover_url})`,
+                backgroundImage: `url("${product.cover_url}")`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 marginBottom: '16px',
@@ -4074,6 +4325,64 @@ export default function Storefront() {
             >
               {t.payStars.replace('{stars}', String(product.price_stars))}
             </button>
+
+            {/* Stars Purchase Assistant for Product Checkout */}
+            <div style={{ marginTop: '12px', borderTop: '1px solid var(--tg-border)', paddingTop: '10px' }}>
+              <button 
+                type="button"
+                onClick={() => setIsStarsHelpOpen(!isStarsHelpOpen)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--tg-link)',
+                  fontSize: '12px', cursor: 'pointer', padding: '4px 0',
+                  display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto',
+                  fontWeight: 500
+                }}
+              >
+                {isStarsHelpOpen ? '▲' : '▼'} {lang === 'ru' ? 'Как получить Telegram Stars?' : 'How to get Telegram Stars?'}
+              </button>
+              
+              {isStarsHelpOpen && (
+                <div style={{
+                  marginTop: '8px', padding: '10px', background: 'rgba(255,255,255,0.01)',
+                  border: '1px solid var(--tg-border)', borderRadius: '8px',
+                  fontSize: '12px', lineHeight: 1.5, textAlign: 'left'
+                }}>
+                  <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>
+                    {lang === 'ru' ? 'Купить Звёзды можно двумя способами:' : 'You can buy Stars in two ways:'}
+                  </p>
+                  <ol style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <li>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenLink('https://fragment.com/stars')}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
+                      >
+                        Fragment.com/stars
+                      </button>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--tg-hint)', marginTop: '2px' }}>
+                        {lang === 'ru' 
+                          ? '💡 Дешевле! Оплата криптовалютой TON / кошельком TON.' 
+                          : '💡 Cheaper! Pay with TON cryptocurrency / TON wallet.'}
+                      </span>
+                    </li>
+                    <li>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenLink('tg://settings')}
+                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
+                      >
+                        {lang === 'ru' ? 'Настройки Telegram' : 'Telegram Settings'}
+                      </button>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--tg-hint)', marginTop: '2px' }}>
+                        {lang === 'ru'
+                          ? '📱 Быстрая покупка через App Store / Google Play на мобильном.'
+                          : '📱 Fast top-up via App Store / Google Play on mobile.'}
+                      </span>
+                    </li>
+                  </ol>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
