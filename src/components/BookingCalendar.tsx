@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 interface BookingCalendarProps {
   slotsText: string;
@@ -33,6 +33,36 @@ export default function BookingCalendar({
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+
+  const [activeView, setActiveView] = useState<'month' | 'week' | 'day'>('month');
+
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  // Auto-select today if Day View is selected and no date is set
+  useEffect(() => {
+    if (activeView === 'day' && !bookingDate) {
+      setBookingDate(todayStr);
+    }
+  }, [activeView, bookingDate, todayStr, setBookingDate]);
+
+  const weekDays = useMemo(() => {
+    const today = new Date();
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      days.push({
+        dateStr,
+        dateObj: d,
+        dayNum: d.getDate(),
+        dayName: d.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'short' })
+      });
+    }
+    return days;
+  }, [lang]);
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
@@ -120,7 +150,7 @@ export default function BookingCalendar({
     return days;
   }, [year, month]);
 
-  // Hourly slots generation
+  // Hourly slots generation (actually 30-minute intervals now)
   const hourlySlots = useMemo(() => {
     let startHour = 9;
     let endHour = 20;
@@ -135,6 +165,7 @@ export default function BookingCalendar({
     const slots: string[] = [];
     for (let h = startHour; h < endHour; h++) {
       slots.push(`${String(h).padStart(2, '0')}:00`);
+      slots.push(`${String(h).padStart(2, '0')}:30`);
     }
     return slots;
   }, [slotsText]);
@@ -165,7 +196,7 @@ export default function BookingCalendar({
   // Check if a specific slot is busy (either DB booking or external calendar slot)
   const isSlotBusy = (dateStr: string, timeStr: string) => {
     const slotStart = new Date(`${dateStr}T${timeStr}:00`).getTime();
-    const slotEnd = slotStart + 60 * 60 * 1000; // 1-hour slots
+    const slotEnd = slotStart + 30 * 60 * 1000; // 30-minute slots
     
     return busySlots.some(slot => {
       const start = new Date(slot.start).getTime();
@@ -262,117 +293,199 @@ export default function BookingCalendar({
       flexDirection: 'column',
       gap: '16px',
     }} className="animate-fade-up">
-      
-      {/* Month Header Navigation */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        borderBottom: '1px solid var(--tg-border)',
-        paddingBottom: '12px'
-      }}>
-        <button
-          type="button"
-          onClick={handlePrevMonth}
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: 'none',
-            borderRadius: '50%',
-            width: '32px',
-            height: '32px',
-            color: 'var(--tg-text)',
-            cursor: 'pointer',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'background 0.2s'
-          }}
+
+      {/* Tabs Selector */}
+      <div className="calendar-view-tabs">
+        <button 
+          type="button" 
+          className={`calendar-view-tab ${activeView === 'month' ? 'active' : ''}`}
+          onClick={() => setActiveView('month')}
         >
-          ←
+          {lang === 'ru' ? 'Месяц' : 'Month'}
         </button>
-        <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tg-text)' }}>
-          {lang === 'ru' ? monthNamesRU[month] : monthNamesEN[month]} {year}
-        </span>
-        <button
-          type="button"
-          onClick={handleNextMonth}
-          style={{
-            background: 'rgba(255,255,255,0.06)',
-            border: 'none',
-            borderRadius: '50%',
-            width: '32px',
-            height: '32px',
-            color: 'var(--tg-text)',
-            cursor: 'pointer',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'background 0.2s'
-          }}
+        <button 
+          type="button" 
+          className={`calendar-view-tab ${activeView === 'week' ? 'active' : ''}`}
+          onClick={() => setActiveView('week')}
         >
-          →
+          {lang === 'ru' ? 'Неделя' : 'Week'}
+        </button>
+        <button 
+          type="button" 
+          className={`calendar-view-tab ${activeView === 'day' ? 'active' : ''}`}
+          onClick={() => setActiveView('day')}
+        >
+          {lang === 'ru' ? 'День' : 'Day'}
         </button>
       </div>
 
-      {/* Calendar Grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {/* Weekday headers */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
-          {(lang === 'ru' ? weekdayNamesRU : weekdayNamesEN).map((day, idx) => (
-            <span key={idx} style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
-              {day}
+      {/* 1. MONTH VIEW */}
+      {activeView === 'month' && (
+        <>
+          {/* Month Header Navigation */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1px solid var(--tg-border)',
+            paddingBottom: '12px'
+          }}>
+            <button
+              type="button"
+              onClick={handlePrevMonth}
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                color: 'var(--tg-text)',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s'
+              }}
+            >
+              ←
+            </button>
+            <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tg-text)' }}>
+              {lang === 'ru' ? monthNamesRU[month] : monthNamesEN[month]} {year}
             </span>
-          ))}
-        </div>
+            <button
+              type="button"
+              onClick={handleNextMonth}
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                color: 'var(--tg-text)',
+                cursor: 'pointer',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s'
+              }}
+            >
+              →
+            </button>
+          </div>
 
-        {/* Days grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
-          {calendarDays.map((day, idx) => {
-            const isSelected = bookingDate === day.dateStr;
-            const disabled = day.isPast || !day.isCurrentMonth;
-            
-            return (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => {
-                  if (!disabled) {
+          {/* Calendar Grid */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {/* Weekday headers */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+              {(lang === 'ru' ? weekdayNamesRU : weekdayNamesEN).map((day, idx) => (
+                <span key={idx} style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
+                  {day}
+                </span>
+              ))}
+            </div>
+
+            {/* Days grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+              {calendarDays.map((day, idx) => {
+                const isSelected = bookingDate === day.dateStr;
+                const disabled = day.isPast || !day.isCurrentMonth;
+                
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      if (!disabled) {
+                        setBookingDate(day.dateStr);
+                        setBookingTime(''); // reset time when date changes
+                      }
+                    }}
+                    disabled={disabled}
+                    style={{
+                      height: '38px',
+                      borderRadius: '10px',
+                      border: 'none',
+                      background: isSelected 
+                        ? 'var(--tg-accent)' 
+                        : !day.isCurrentMonth
+                        ? 'transparent'
+                        : 'rgba(255,255,255,0.03)',
+                      color: isSelected
+                        ? '#fff'
+                        : disabled
+                        ? 'rgba(255,255,255,0.15)'
+                        : 'var(--tg-text)',
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      fontWeight: isSelected ? 'bold' : 'normal',
+                      fontSize: '13px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {day.dayNum}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 2. WEEK VIEW */}
+      {activeView === 'week' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0, fontWeight: 600 }}>
+            {lang === 'ru' ? 'Выберите день:' : 'Select day:'}
+          </p>
+          <div className="week-selector-container">
+            {weekDays.map((day, idx) => {
+              const isSelected = bookingDate === day.dateStr;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
                     setBookingDate(day.dateStr);
-                    setBookingTime(''); // reset time when date changes
-                  }
-                }}
-                disabled={disabled}
-                style={{
-                  height: '38px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: isSelected 
-                    ? 'var(--tg-accent)' 
-                    : !day.isCurrentMonth
-                    ? 'transparent'
-                    : 'rgba(255,255,255,0.03)',
-                  color: isSelected
-                    ? '#fff'
-                    : disabled
-                    ? 'rgba(255,255,255,0.15)'
-                    : 'var(--tg-text)',
-                  cursor: disabled ? 'not-allowed' : 'pointer',
-                  fontWeight: isSelected ? 'bold' : 'normal',
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {day.dayNum}
-              </button>
-            );
-          })}
+                    setBookingTime('');
+                  }}
+                  className={`week-day-btn ${isSelected ? 'active' : ''}`}
+                >
+                  <span style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase' }}>{day.dayName}</span>
+                  <span style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '2px' }}>{day.dayNum}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* 3. DAY VIEW */}
+      {activeView === 'day' && (
+        <div style={{ padding: '8px 0', borderBottom: '1px solid var(--tg-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
+            📅 {new Date(bookingDate || todayStr).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </span>
+          {bookingDate !== todayStr && (
+            <button
+              type="button"
+              onClick={() => {
+                setBookingDate(todayStr);
+                setBookingTime('');
+              }}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '12px',
+                padding: '4px 10px', fontSize: '11px', color: 'var(--tg-text)', cursor: 'pointer'
+              }}
+            >
+              {lang === 'ru' ? 'Сегодня' : 'Today'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Hourly Slots Selection */}
       {bookingDate && (

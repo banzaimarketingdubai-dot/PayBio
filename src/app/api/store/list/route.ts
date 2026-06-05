@@ -42,7 +42,20 @@ export async function GET(request: Request) {
       }
 
       const soldCount = await db.getApprovedOrderCount(productId);
-      return NextResponse.json({ success: true, product: { ...product, sold_count: soldCount } });
+      
+      let hasBought = false;
+      if (buyerTgIdParam) {
+        hasBought = await db.hasBoughtProduct(Number(buyerTgIdParam), productId);
+      }
+
+      return NextResponse.json({ 
+        success: true, 
+        product: { 
+          ...product, 
+          sold_count: soldCount,
+          has_bought: hasBought
+        } 
+      });
     }
 
     if (creatorTgIdParam) {

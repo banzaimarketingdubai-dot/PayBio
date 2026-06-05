@@ -27,9 +27,10 @@ interface DatabaseSchema {
   orders: any[];
   vouchers?: any[];
   bookings?: any[];
+  reviews?: any[];
 }
 
-let memoryDb: DatabaseSchema = { users: [], products: [], orders: [], vouchers: [], bookings: [] };
+let memoryDb: DatabaseSchema = { users: [], products: [], orders: [], vouchers: [], bookings: [], reviews: [] };
 
 function readMockDb(): DatabaseSchema {
   return memoryDb;
@@ -397,6 +398,63 @@ export const db = {
     }
   },
 
+  async getLatestPendingOrderByBuyer(buyerTgId: number) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('*, product:product_id(*)')
+        .eq('buyer_tg_id', buyerTgId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      
+      if (data && data.product) {
+        const creator = await this.getUserById(data.product.creator_id);
+        data.product.creator = creator;
+      }
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const pending = mockDb.orders
+        .filter(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.status === 'pending')
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      if (pending.length > 0) {
+        const order = pending[0];
+        const product = mockDb.products.find(p => p.id === order.product_id);
+        let creator = null;
+        if (product) {
+          creator = mockDb.users.find(u => u.id === product.creator_id);
+        }
+        return { ...order, product: product ? { ...product, creator } : null };
+      }
+      return null;
+    }
+  },
+
+  async updateOrderReceiptAndStatus(orderId: string, receiptUrl: string, status: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .update({ receipt_url: receiptUrl, status: status })
+        .eq('id', orderId)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const order = mockDb.orders.find(o => o.id === orderId);
+      if (order) {
+        order.receipt_url = receiptUrl;
+        order.status = status;
+        writeMockDb(mockDb);
+      }
+      return order;
+    }
+  },
+
   async getApprovedOrderCount(productId: string) {
     if (isRealSupabaseConfigured) {
       const { count, error } = await supabaseAdmin
@@ -614,6 +672,92 @@ export const db = {
       mockDb.bookings = mockDb.bookings.filter(b => b.id !== bookingId);
       writeMockDb(mockDb);
       return true;
+    }
+  },
+
+  // --- Reviews Operations ---
+  async hasBoughtProduct(buyerTgId: number, productId: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('id')
+        .eq('buyer_tg_id', buyerTgId)
+        .eq('product_id', productId)
+        .eq('status', 'approved')
+        .limit(1);
+      if (error) throw error;
+      return data && data.length > 0;
+    } else {
+      const mockDb = readMockDb();
+      return mockDb.orders.some(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.product_id === productId && o.status === 'approved');
+    }
+  },
+
+  async getReviews(creatorId: string, productId?: string | null) {
+    if (isRealSupabaseConfigured) {
+      let query = supabaseAdmin
+        .from('reviews')
+        .select('*')
+        .eq('creator_id', creatorId);
+      
+      if (productId !== undefined) {
+        if (productId === null) {
+          query = query.is('product_id', null);
+        } else {
+          query = query.eq('product_id', productId);
+        }
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.reviews) mockDb.reviews = [];
+      let list = mockDb.reviews.filter(r => r.creator_id === creatorId);
+      if (productId !== undefined) {
+        if (productId === null) {
+          list = list.filter(r => !r.product_id);
+        } else {
+          list = list.filter(r => r.product_id === productId);
+        }
+      }
+      return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+  },
+
+  async createReview(creatorId: string, productId: string | null, buyerTgId: number, buyerName: string, rating: number, text: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('reviews')
+        .insert({
+          creator_id: creatorId,
+          product_id: productId,
+          buyer_tg_id: buyerTgId,
+          buyer_name: buyerName,
+          rating,
+          text
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.reviews) mockDb.reviews = [];
+      const newReview = {
+        id: Math.random().toString(36).substring(2, 15),
+        creator_id: creatorId,
+        product_id: productId,
+        buyer_tg_id: buyerTgId,
+        buyer_name: buyerName,
+        rating,
+        text,
+        created_at: new Date().toISOString()
+      };
+      mockDb.reviews.push(newReview);
+      writeMockDb(mockDb);
+      return newReview;
     }
   }
 };

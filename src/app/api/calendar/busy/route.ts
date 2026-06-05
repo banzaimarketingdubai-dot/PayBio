@@ -53,13 +53,17 @@ export async function GET(request: Request) {
 
     // 3. Fetch external calendar bookings if configured
     let icsUrl = '';
-    try {
-      const content = JSON.parse(product.content_url);
-      if (content && typeof content.ics_url === 'string') {
-        icsUrl = content.ics_url.trim();
+    if (product.creator?.payment_details?.ics_url) {
+      icsUrl = product.creator.payment_details.ics_url.trim();
+    } else {
+      try {
+        const content = JSON.parse(product.content_url);
+        if (content && typeof content.ics_url === 'string') {
+          icsUrl = content.ics_url.trim();
+        }
+      } catch {
+        // Not a JSON structure, ignore external calendar
       }
-    } catch {
-      // Not a JSON structure, ignore external calendar
     }
 
     if (icsUrl) {

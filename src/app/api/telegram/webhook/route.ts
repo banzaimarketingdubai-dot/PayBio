@@ -205,6 +205,39 @@ export async function POST(request: Request) {
           text: t.cover_updated,
           parse_mode: 'Markdown',
         });
+      } else if (data.startsWith('confirm_p2p:')) {
+        const orderId = data.split(':')[1];
+        try {
+          const { fulfillOrder } = await import('@/lib/fulfillment');
+          const success = await fulfillOrder(orderId);
+          if (success) {
+            await tgApi('sendMessage', {
+              chat_id: chatId,
+              text: lang === 'ru'
+                ? '✅ Оплата успешно подтверждена. Покупателю отправлено сообщение с товаром!'
+                : '✅ Payment successfully confirmed. The product has been sent to the buyer!',
+            });
+            // Update photo caption and remove confirmation button
+            const oldCaption = cb.message?.caption || '';
+            const newCaption = oldCaption + (lang === 'ru' ? '\n\n✅ Оплата подтверждена!' : '\n\n✅ Payment Confirmed!');
+            await tgApi('editMessageCaption', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              caption: newCaption,
+              reply_markup: { inline_keyboard: [] }
+            });
+          } else {
+            await tgApi('sendMessage', {
+              chat_id: chatId,
+              text: lang === 'ru' ? '❌ Ошибка при выдаче товара.' : '❌ Failed to fulfill order.',
+            });
+          }
+        } catch (err: any) {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: `❌ Error: ${err.message}`,
+          });
+        }
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
@@ -751,6 +784,46 @@ export async function POST(request: Request) {
       const photoArray = message.photo;
       const largestPhoto = photoArray[photoArray.length - 1];
       const fileId = largestPhoto.file_id;
+
+      // Check if this photo is a payment receipt screenshot from a buyer
+      const pendingOrder = await (db as any).getLatestPendingOrderByBuyer(userId);
+      if (pendingOrder) {
+        const photoUrl = `/api/telegram/file?file_id=${fileId}`;
+        await (db as any).updateOrderReceiptAndStatus(pendingOrder.id, photoUrl, 'manual_review');
+
+        // Notify Buyer
+        await tgApi('sendMessage', {
+          chat_id: chatId,
+          text: lang === 'ru'
+            ? '✅ Скриншот оплаты отправлен продавцу на подтверждение. Как только продавец подтвердит платеж, вы получите ваш товар здесь.'
+            : '✅ Receipt screenshot sent to the seller for confirmation. You will receive your product as soon as the seller confirms the payment.',
+        });
+
+        // Forward to Creator (seller)
+        const creatorTgId = pendingOrder.product?.creator?.telegram_id;
+        if (creatorTgId) {
+          const buyerName = username ? `@${username}` : `ID: ${userId}`;
+          const captionText = lang === 'ru'
+            ? `📥 *Пришла оплата за услугу/товар:* \n"${pendingOrder.product.title}"\n\n👤 *Покупатель:* ${buyerName} (ID: \`${userId}\`)\n💵 *Сумма:* $${pendingOrder.product.price_fiat}\n💳 *Способ оплаты:* Картой (P2P)\n\nПожалуйста, проверьте перевод на вашей карте и подтвердите получение оплаты кнопкой ниже.`
+            : `📥 *Payment received for:* \n"${pendingOrder.product.title}"\n\n👤 *Buyer:* ${buyerName} (ID: \`${userId}\`)\n💵 *Amount:* $${pendingOrder.product.price_fiat}\n💳 *Method:* Card (P2P)\n\nPlease check the transfer on your card and confirm receipt by tapping the button below.`;
+
+          await tgApi('sendPhoto', {
+            chat_id: creatorTgId,
+            photo: fileId,
+            caption: captionText,
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: lang === 'ru' ? '✅ Подтверждаю' : '✅ Confirm', callback_data: `confirm_p2p:${pendingOrder.id}` },
+                  { text: lang === 'ru' ? '💬 Написать покупателю' : '💬 Write to buyer', url: `tg://user?id=${userId}` }
+                ]
+              ]
+            }
+          });
+        }
+        return NextResponse.json({ ok: true });
+      }
 
       await tgApi('sendMessage', {
         chat_id: chatId,
