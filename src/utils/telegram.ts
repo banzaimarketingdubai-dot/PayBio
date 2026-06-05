@@ -28,3 +28,22 @@ export const cleanProductId = (id: string | null): string | null => {
   }
   return id;
 };
+
+export const handleOpenLink = (url: string) => {
+  if (typeof window !== 'undefined') {
+    const WebApp = (window as any).Telegram?.WebApp;
+    if (url.startsWith('tg://') || url.includes('t.me/')) {
+      if (WebApp?.openTelegramLink) {
+        WebApp.openTelegramLink(url);
+        return;
+      }
+    } else {
+      if (WebApp?.openLink) {
+        WebApp.openLink(url);
+        return;
+      }
+    }
+  }
+  window.open(url, '_blank');
+};
+
