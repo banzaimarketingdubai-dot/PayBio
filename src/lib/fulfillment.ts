@@ -26,19 +26,37 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
     const buyerTgId = order.buyer_tg_id;
     const creator = product.creator;
 
-    // 2. Route based on product_type
     const productType = product.product_type || 'DIGITAL';
+    const isRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
+    const promoMarkup = {
+      inline_keyboard: [
+        [
+          {
+            text: isRussian 
+              ? '🤖 Начать продавать свои цифровые товары' 
+              : '🤖 Start selling your own digital products',
+            url: 'https://t.me/PaybioBot'
+          }
+        ]
+      ]
+    };
 
     if (productType === 'DIGITAL') {
       // Baseline baseline: PDF & private links
       const contentUrl = product.content_url;
       if (contentUrl.startsWith('telegram_file_id:')) {
         const fileId = contentUrl.slice(17);
-        await sendTelegramDocument(buyerTgId, fileId, `🎉 *Спасибо за покупку!* \n\nВы успешно приобрели книгу/файл: *"${product.title}"*.`);
+        await sendTelegramDocument(
+          buyerTgId,
+          fileId,
+          `🎉 *Спасибо за покупку!* \n\nВы успешно приобрели книгу/файл: *"${product.title}"*.`,
+          promoMarkup
+        );
       } else {
         await sendTelegramNotification(
           buyerTgId,
-          `🎉 *Спасибо за покупку!* \n\nВы успешно приобрели товар *"${product.title}"*.\n\n🔗 *Ссылка для скачивания:* ${contentUrl}`
+          `🎉 *Спасибо за покупку!* \n\nВы успешно приобрели товар *"${product.title}"*.\n\n🔗 *Ссылка для скачивания:* ${contentUrl}`,
+          promoMarkup
         );
       }
 
@@ -60,7 +78,8 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       await sendTelegramPhoto(
         buyerTgId,
         qrUrl,
-        `🎟️ *Ваш билет готов!*\n\nВы успешно приобрели билет на услугу/событие: *"${product.title}"*.\n\nПредъявите этот QR-код организатору для сканирования и подтверждения входа.`
+        `🎟️ *Ваш билет готов!*\n\nВы успешно приобрели билет на услугу/событие: *"${product.title}"*.\n\nПредъявите этот QR-код организатору для сканирования и подтверждения входа.`,
+        promoMarkup
       );
 
       // Notify Creator
@@ -102,7 +121,8 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
         await sendTelegramNotification(
           buyerTgId,
-          `📅 *Запись подтверждена!*\n\nВы успешно записались на консультацию: *"${product.title}"*.\n\n⏰ *Время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})\n\nОрганизатор свяжется с вами или предоставит ссылку на звонок ближе к назначенному времени.`
+          `📅 *Запись подтверждена!*\n\nВы успешно записались на консультацию: *"${product.title}"*.\n\n⏰ *Время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})\n\nОрганизатор свяжется с вами или предоставит ссылку на звонок ближе к назначенному времени.`,
+          promoMarkup
         );
 
         if (creator) {

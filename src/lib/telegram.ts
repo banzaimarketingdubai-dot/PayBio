@@ -1,6 +1,6 @@
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
-export async function sendTelegramNotification(chatId: number | string, text: string) {
+export async function sendTelegramNotification(chatId: number | string, text: string, replyMarkup?: any) {
   if (!TELEGRAM_BOT_TOKEN) {
     console.warn('TELEGRAM_BOT_TOKEN is not set. Cannot send notification.');
     return null;
@@ -13,6 +13,7 @@ export async function sendTelegramNotification(chatId: number | string, text: st
         chat_id: chatId,
         text,
         parse_mode: 'Markdown',
+        reply_markup: replyMarkup,
       }),
     });
     return await res.json();
@@ -22,7 +23,7 @@ export async function sendTelegramNotification(chatId: number | string, text: st
   }
 }
 
-export async function sendTelegramPhoto(chatId: number | string, photo: string, caption?: string) {
+export async function sendTelegramPhoto(chatId: number | string, photo: string, caption?: string, replyMarkup?: any) {
   if (!TELEGRAM_BOT_TOKEN) return null;
   try {
     const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
@@ -33,6 +34,7 @@ export async function sendTelegramPhoto(chatId: number | string, photo: string, 
         photo,
         caption,
         parse_mode: 'Markdown',
+        reply_markup: replyMarkup,
       }),
     });
     return await res.json();
@@ -42,7 +44,7 @@ export async function sendTelegramPhoto(chatId: number | string, photo: string, 
   }
 }
 
-export async function sendTelegramDocument(chatId: number | string, document: string, caption?: string) {
+export async function sendTelegramDocument(chatId: number | string, document: string, caption?: string, replyMarkup?: any) {
   if (!TELEGRAM_BOT_TOKEN) return null;
   try {
     const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
@@ -53,6 +55,7 @@ export async function sendTelegramDocument(chatId: number | string, document: st
         document,
         caption,
         parse_mode: 'Markdown',
+        reply_markup: replyMarkup,
       }),
     });
     return await res.json();

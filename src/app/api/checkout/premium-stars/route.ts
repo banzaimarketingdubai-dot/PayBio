@@ -5,7 +5,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 
 export async function POST(request: Request) {
   try {
-    const { user_id } = await request.json();
+    const { user_id, is_subscription } = await request.json();
 
     if (!user_id) {
       return NextResponse.json(
@@ -21,19 +21,27 @@ export async function POST(request: Request) {
 
     // Request Telegram Stars Invoice Link for Premium Subscription (500 Stars)
     const tgUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/createInvoiceLink`;
-    const payload = {
+    const payload: any = {
       title: 'PayBio Premium',
-      description: 'Remove branding watermark, unlock custom avatars/banners, and generate AI covers instantly.',
-      payload: `premium_user_id:${creator.id}`,
+      description: is_subscription
+        ? 'Monthly subscription: Remove watermark, unlock custom designs, and generate AI covers.'
+        : '1 Month Premium: Remove watermark, unlock custom designs, and generate AI covers.',
+      payload: is_subscription
+        ? `premium_subscription_user_id:${creator.id}`
+        : `premium_user_id:${creator.id}`,
       provider_token: '', // Empty for Stars
       currency: 'XTR',
       prices: [
         {
-          label: 'Premium Subscription (1 Month)',
+          label: is_subscription ? 'Premium Subscription (Monthly)' : 'Premium (1 Month)',
           amount: 500, // 500 Stars
         },
       ],
     };
+
+    if (is_subscription) {
+      payload.subscription_period = 2592000; // 30 days
+    }
 
     const tgRes = await fetch(tgUrl, {
       method: 'POST',

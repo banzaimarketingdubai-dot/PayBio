@@ -263,9 +263,9 @@ export async function POST(request: Request) {
       const payload = sp.invoice_payload;
       console.log('Received successful payment for payload:', payload);
 
-      if (payload.startsWith('premium_user_id:')) {
+      if (payload.startsWith('premium_user_id:') || payload.startsWith('premium_subscription_user_id:')) {
         const premiumUserId = payload.split(':')[1];
-        await db.updateUserPremium(premiumUserId, true);
+        await db.activatePremium(premiumUserId, 30);
         await tgApi('sendMessage', {
           chat_id: chatId,
           text: lang === 'ru' 

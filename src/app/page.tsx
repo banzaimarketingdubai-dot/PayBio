@@ -10,6 +10,7 @@ interface Creator {
   telegram_id: number;
   username: string | null;
   is_premium?: boolean;
+  premium_until?: string | null;
   payment_details?: {
     ton?: string;
     p2p?: string;
@@ -1289,6 +1290,15 @@ setIsGeneratingCover(false);
     }
   };
 
+  const formatPremiumDate = (dateStr?: string | null) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}.${month}.${year}`;
+  };
+
   // Render Settings Screen if currentScreen is SETTINGS
   if (currentScreen === 'SETTINGS') {
     return (
@@ -1313,6 +1323,54 @@ setIsGeneratingCover(false);
             <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>👤</span> {lang === 'ru' ? 'Профиль магазина' : 'Shop Profile'}
             </h3>
+
+            {/* Subscription Statistics */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              borderRadius: '12px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '4px',
+              border: '1px solid var(--tg-border)'
+            }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '13.5px', fontWeight: 600, color: 'var(--tg-text)' }}>
+                  {lang === 'ru' ? 'Тарифный план' : 'Subscription Plan'}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--tg-hint)' }}>
+                  {isCreatorPremium ? (
+                    <span>
+                      👑 {lang === 'ru' ? `Премиум активен до: ${formatPremiumDate(creator?.premium_until)}` : `Premium active until: ${formatPremiumDate(creator?.premium_until)}`}
+                    </span>
+                  ) : (
+                    <span>{lang === 'ru' ? 'Бесплатный тариф' : 'Free package'}</span>
+                  )}
+                </p>
+              </div>
+              {!isCreatorPremium && (
+                <button
+                  type="button"
+                  onClick={onOpenPremium}
+                  className="btn-primary"
+                  style={{
+                    width: 'auto',
+                    padding: '6px 14px',
+                    height: 'auto',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)',
+                    color: '#000',
+                    border: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {lang === 'ru' ? 'Улучшить ⚡' : 'Upgrade ⚡'}
+                </button>
+              )}
+            </div>
             
             <div className="bottom-sheet-form-group">
               <label className="bottom-sheet-label">{t.shopName}</label>
@@ -1793,7 +1851,7 @@ setIsGeneratingCover(false);
               fontWeight: 700
             }}
           >
-            🤝 {lang === 'ru' ? 'Пригласить авторов' : 'Invite Creators'}
+            🤝 {lang === 'ru' ? 'Пригласить и заработать 10%' : 'Invite & Earn 10%'}
           </button>
         </div>
         <div style={{
@@ -2442,6 +2500,11 @@ export default function Storefront() {
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isProductReviewsOpen, setIsProductReviewsOpen] = useState(false);
 
+  // Promo code states
+  const [promoCodeInput, setPromoCodeInput] = useState('');
+  const [promoCodeStatus, setPromoCodeStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({ type: null, message: '' });
+  const [isApplyingPromo, setIsApplyingPromo] = useState(false);
+
   // Checkout state
   const [paymentMethod, setPaymentMethod] = useState<'stars' | 'ton' | 'p2p' | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -2738,7 +2801,22 @@ export default function Storefront() {
     }
   }, [creator, lang]);
 
-  // Premium activation
+  const refreshCreatorData = async () => {
+    const activeTgId = creator?.telegram_id || creatorTgId;
+    if (!activeTgId) return;
+    try {
+      const res = await fetch(`/api/store/list?creator_tg_id=${activeTgId}`);
+      const data = await res.json();
+      if (data.success) {
+        if (data.creator) setCreator(data.creator);
+        if (data.products) setProductsList(data.products);
+      }
+    } catch (err) {
+      console.error('Error refreshing creator:', err);
+    }
+  };
+
+  // Premium activation (legacy toggle, kept for compatibility/manual triggers)
   const handleActivatePremium = async () => {
     if (!creator) return;
     setIsUpgrading(true);
@@ -2746,11 +2824,11 @@ export default function Storefront() {
       const res = await fetch('/api/store/premium', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: creator.id, is_premium: true })
+        body: JSON.stringify({ user_id: creator.id, action: 'activate', is_premium: true })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setCreator((prev) => prev ? { ...prev, is_premium: true } : null);
+        await refreshCreatorData();
         setIsPremiumOpen(false);
         showAlert(t.premiumUnlocked);
       } else {
@@ -2760,6 +2838,111 @@ export default function Storefront() {
       showAlert(err.message || 'Error processing upgrade.');
     } finally {
       setIsUpgrading(false);
+    }
+  };
+
+  const handleBuyPremiumWithStars = async (isSubscription = false) => {
+    if (!creator) return;
+    setIsUpgrading(true);
+    try {
+      const res = await fetch('/api/checkout/premium-stars', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: creator.id, is_subscription: isSubscription }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAlert(data.error || 'Failed to generate Premium invoice.');
+        return;
+      }
+
+      const WebApp = (await import('@twa-dev/sdk')).default;
+      WebApp.openInvoice(data.invoice_link, async (status) => {
+        if (status === 'paid') {
+          showAlert(lang === 'ru' ? '🎉 Премиум успешно активирован!' : '🎉 Premium activated successfully!');
+          await refreshCreatorData();
+          setIsPremiumOpen(false);
+        } else {
+          // Check if we are in local dev mode (running outside Telegram) to simulate payment
+          const isLocalMock = !(window as any).Telegram?.WebApp?.initData;
+          if (isLocalMock) {
+            const confirmSim = window.confirm(
+              lang === 'ru'
+                ? 'Вы находитесь в режиме локальной разработки. Симулировать успешную оплату Stars?'
+                : 'You are in local development mode. Simulate successful Stars payment?'
+            );
+            if (confirmSim) {
+              const starsRes = await fetch('/api/store/premium', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: creator.id, action: 'stars' }),
+              });
+              if (starsRes.ok) {
+                showAlert(lang === 'ru' ? '🎉 Премиум успешно активирован!' : '🎉 Premium activated successfully!');
+                await refreshCreatorData();
+                setIsPremiumOpen(false);
+              }
+            }
+          } else {
+            await refreshCreatorData();
+            showAlert(lang === 'ru' ? `Статус оплаты: ${status}` : `Payment status: ${status}`);
+          }
+        }
+      });
+    } catch (e: any) {
+      console.error(e);
+      showAlert(lang === 'ru' ? 'Ошибка запуска оплаты.' : 'Error initiating payment.');
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
+  const handleApplyPromoCode = async () => {
+    if (!creator || !promoCodeInput.trim()) return;
+    setIsApplyingPromo(true);
+    setPromoCodeStatus({ type: null, message: '' });
+    try {
+      const res = await fetch('/api/store/premium', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: creator.id,
+          action: 'promo',
+          code: promoCodeInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPromoCodeStatus({
+          type: 'success',
+          message: lang === 'ru'
+            ? `✓ Промокод применен! Активировано ${data.duration_days} дней Premium.`
+            : `✓ Promo code applied! Activated ${data.duration_days} days of Premium.`,
+        });
+        showAlert(
+          lang === 'ru'
+            ? `🎉 Промокод применен! Активировано ${data.duration_days} дней Premium.`
+            : `🎉 Promo code applied! Activated ${data.duration_days} days of Premium.`
+        );
+        setPromoCodeInput('');
+        await refreshCreatorData();
+        setTimeout(() => {
+          setIsPremiumOpen(false);
+          setPromoCodeStatus({ type: null, message: '' });
+        }, 2000);
+      } else {
+        setPromoCodeStatus({
+          type: 'error',
+          message: data.error || (lang === 'ru' ? 'Неверный промокод' : 'Invalid promo code'),
+        });
+      }
+    } catch (err: any) {
+      setPromoCodeStatus({
+        type: 'error',
+        message: err.message || (lang === 'ru' ? 'Ошибка запроса' : 'Request error'),
+      });
+    } finally {
+      setIsApplyingPromo(false);
     }
   };
 
@@ -3215,14 +3398,64 @@ export default function Storefront() {
               </div>
             </div>
 
-            <button 
-              className="btn-primary" 
-              style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000' }}
-              onClick={handleActivatePremium}
-              disabled={isUpgrading}
-            >
-              {isUpgrading ? t.activating : t.activatePremiumFor}
-            </button>
+            {/* Promo code block */}
+            <div style={{ marginBottom: '24px', borderTop: '1px solid var(--tg-border)', paddingTop: '20px' }}>
+              <label className="bottom-sheet-label" style={{ display: 'block', marginBottom: '8px', textAlign: 'left', fontWeight: 600 }}>
+                {lang === 'ru' ? 'Активация промокода' : 'Activate Promo Code'}
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="tg-input"
+                  placeholder={lang === 'ru' ? 'Введите промокод' : 'Enter promo code'}
+                  value={promoCodeInput}
+                  onChange={(e) => setPromoCodeInput(e.target.value)}
+                  style={{ flex: 1, textTransform: 'uppercase' }}
+                  disabled={isApplyingPromo}
+                />
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleApplyPromoCode}
+                  disabled={isApplyingPromo || !promoCodeInput.trim()}
+                  style={{ width: 'auto', padding: '0 16px', height: '38px', borderRadius: '12px' }}
+                >
+                  {isApplyingPromo ? (lang === 'ru' ? 'Применение…' : 'Applying…') : (lang === 'ru' ? 'Применить' : 'Apply')}
+                </button>
+              </div>
+              {promoCodeStatus.message && (
+                <p style={{
+                  fontSize: '12.5px',
+                  marginTop: '8px',
+                  color: promoCodeStatus.type === 'success' ? '#4dca5a' : '#e95c5c',
+                  textAlign: 'left',
+                  fontWeight: 500
+                }}>
+                  {promoCodeStatus.message}
+                </p>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <button 
+                type="button"
+                className="btn-primary" 
+                style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700 }}
+                onClick={() => handleBuyPremiumWithStars(false)}
+                disabled={isUpgrading}
+              >
+                {isUpgrading ? (lang === 'ru' ? 'Оформление…' : 'Processing…') : (lang === 'ru' ? 'Разово на 1 мес (500 Stars)' : 'One-time 1 Month (500 Stars)')}
+              </button>
+              <button 
+                type="button"
+                className="btn-primary" 
+                style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700 }}
+                onClick={() => handleBuyPremiumWithStars(true)}
+                disabled={isUpgrading}
+              >
+                {isUpgrading ? (lang === 'ru' ? 'Оформление…' : 'Processing…') : (lang === 'ru' ? 'Подписка на месяц (500 Stars/мес)' : 'Monthly Subscription (500 Stars/mo)')}
+              </button>
+            </div>
           </div>
         </div>
       </>

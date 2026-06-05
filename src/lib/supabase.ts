@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -21,23 +23,166 @@ export const supabaseAdmin = isRealSupabaseConfigured
   : null as any;
 
 // --- In-memory Mock DB (fallback for local dev without Supabase) ---
-interface DatabaseSchema {
-  users: any[];
-  products: any[];
-  orders: any[];
-  vouchers?: any[];
-  bookings?: any[];
-  reviews?: any[];
+export interface User {
+  id: string;
+  telegram_id: number;
+  username: string | null;
+  is_premium: boolean;
+  premium_until?: string | null;
+  payment_details?: any;
+  profile_customization?: any;
+  created_at: string;
 }
 
-let memoryDb: DatabaseSchema = { users: [], products: [], orders: [], vouchers: [], bookings: [], reviews: [] };
+export interface Product {
+  id: string;
+  creator_id: string;
+  title: string;
+  description: string | null;
+  price_fiat: number;
+  price_stars: number;
+  content_url: string;
+  cover_url: string | null;
+  product_type: string;
+  created_at: string;
+  creator?: User;
+}
+
+export interface Order {
+  id: string;
+  product_id: string | null;
+  buyer_tg_id: number;
+  status: string;
+  payment_method: string;
+  receipt_url: string | null;
+  fraud_score: number;
+  created_at: string;
+  product?: Product & { creator?: User };
+}
+
+export interface Voucher {
+  id: string;
+  order_id: string;
+  buyer_tg_id: string;
+  qr_data: string;
+  status: string;
+  created_at: string;
+  order?: Order;
+}
+
+export interface Booking {
+  id: string;
+  product_id: string;
+  order_id: string | null;
+  slot_start_time: string;
+  slot_end_time: string;
+  meeting_link: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface Review {
+  id: string;
+  creator_id: string;
+  product_id: string | null;
+  buyer_tg_id: number;
+  buyer_name: string;
+  rating: number;
+  text: string;
+  created_at: string;
+}
+
+export interface PromoCode {
+  id: string;
+  code: string;
+  duration_days: number;
+  max_uses: number;
+  used_count: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+interface DatabaseSchema {
+  users: User[];
+  products: Product[];
+  orders: Order[];
+  vouchers?: Voucher[];
+  bookings?: Booking[];
+  reviews?: Review[];
+  promo_codes?: PromoCode[];
+}
+
+const MOCK_DB_PATH = path.join(process.cwd(), 'mock_db.json');
 
 function readMockDb(): DatabaseSchema {
-  return memoryDb;
+  try {
+    if (fs.existsSync(MOCK_DB_PATH)) {
+      const fileContent = fs.readFileSync(MOCK_DB_PATH, 'utf-8');
+      const parsed = JSON.parse(fileContent);
+      
+      // Initialize lists if missing
+      if (!parsed.users) parsed.users = [];
+      if (!parsed.products) parsed.products = [];
+      if (!parsed.orders) parsed.orders = [];
+      if (!parsed.vouchers) parsed.vouchers = [];
+      if (!parsed.bookings) parsed.bookings = [];
+      if (!parsed.reviews) parsed.reviews = [];
+      if (!parsed.promo_codes) {
+        parsed.promo_codes = [
+          {
+            id: 'mock-promo-1',
+            code: 'PAYBIO_FREE_30',
+            duration_days: 30,
+            max_uses: 1000,
+            used_count: 0,
+            is_active: true,
+            created_at: new Date().toISOString()
+          }
+        ];
+        try {
+          fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(parsed, null, 2), 'utf-8');
+        } catch {}
+      }
+      return parsed;
+    }
+  } catch (err) {
+    console.error('Error reading mock_db.json:', err);
+  }
+  
+  const defaultDb: DatabaseSchema = { 
+    users: [], 
+    products: [], 
+    orders: [], 
+    vouchers: [], 
+    bookings: [], 
+    reviews: [],
+    promo_codes: [
+      {
+        id: 'mock-promo-1',
+        code: 'PAYBIO_FREE_30',
+        duration_days: 30,
+        max_uses: 1000,
+        used_count: 0,
+        is_active: true,
+        created_at: new Date().toISOString()
+      }
+    ]
+  };
+  
+  try {
+    fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(defaultDb, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing default mock_db.json:', err);
+  }
+  return defaultDb;
 }
 
 function writeMockDb(db: DatabaseSchema) {
-  memoryDb = db;
+  try {
+    fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(db, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing to mock_db.json:', err);
+  }
 }
 
 // Unified db interface helpers
@@ -46,6 +191,7 @@ export const db = {
 
   // --- Users Operations ---
   async getUserByTelegramId(tgId: number) {
+    let user;
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('users')
@@ -53,14 +199,25 @@ export const db = {
         .eq('telegram_id', tgId)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      user = data;
     } else {
       const mockDb = readMockDb();
-      return mockDb.users.find(u => Number(u.telegram_id) === Number(tgId)) || null;
+      user = mockDb.users.find(u => Number(u.telegram_id) === Number(tgId)) || null;
     }
+
+    if (user && user.is_premium && user.premium_until) {
+      const expired = new Date(user.premium_until).getTime() < Date.now();
+      if (expired) {
+        user.is_premium = false;
+        user.premium_until = null;
+        await this.updateUserPremium(user.id, false, null);
+      }
+    }
+    return user;
   },
 
   async getUserById(id: string) {
+    let user;
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('users')
@@ -68,11 +225,21 @@ export const db = {
         .eq('id', id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      user = data;
     } else {
       const mockDb = readMockDb();
-      return mockDb.users.find(u => u.id === id) || null;
+      user = mockDb.users.find(u => u.id === id) || null;
     }
+
+    if (user && user.is_premium && user.premium_until) {
+      const expired = new Date(user.premium_until).getTime() < Date.now();
+      if (expired) {
+        user.is_premium = false;
+        user.premium_until = null;
+        await this.updateUserPremium(user.id, false, null);
+      }
+    }
+    return user;
   },
 
   async upsertUser(tgId: number, username: string | null, paymentDetails?: any) {
@@ -118,11 +285,15 @@ export const db = {
     }
   },
 
-  async updateUserPremium(userId: string, isPremium: boolean) {
+  async updateUserPremium(userId: string, isPremium: boolean, premiumUntil?: string | null) {
+    const updatePayload: any = { is_premium: isPremium };
+    if (premiumUntil !== undefined) {
+      updatePayload.premium_until = premiumUntil;
+    }
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('users')
-        .update({ is_premium: isPremium })
+        .update(updatePayload)
         .eq('id', userId)
         .select()
         .single();
@@ -133,9 +304,101 @@ export const db = {
       const user = mockDb.users.find(u => u.id === userId);
       if (user) {
         user.is_premium = isPremium;
+        if (premiumUntil !== undefined) {
+          user.premium_until = premiumUntil;
+        }
         writeMockDb(mockDb);
       }
       return user;
+    }
+  },
+
+  async activatePremium(userId: string, durationDays: number) {
+    const user = await this.getUserById(userId);
+    if (!user) return null;
+
+    let currentPremiumUntil = user.premium_until ? new Date(user.premium_until) : new Date();
+    // If user is not currently premium or has expired premium, start from now
+    if (!user.is_premium || currentPremiumUntil.getTime() < Date.now()) {
+      currentPremiumUntil = new Date();
+    }
+    
+    // Add durationDays
+    currentPremiumUntil.setDate(currentPremiumUntil.getDate() + durationDays);
+    const newPremiumUntilStr = currentPremiumUntil.toISOString();
+    
+    return await this.updateUserPremium(userId, true, newPremiumUntilStr);
+  },
+
+  async verifyAndApplyPromoCode(userId: string, code: string) {
+    const codeUpper = code.trim().toUpperCase();
+    
+    if (isRealSupabaseConfigured) {
+      // 1. Fetch promo code
+      const { data: promo, error: fetchErr } = await supabaseAdmin
+        .from('promo_codes')
+        .select('*')
+        .eq('code', codeUpper)
+        .maybeSingle();
+        
+      if (fetchErr) throw fetchErr;
+      if (!promo) {
+        throw new Error('Промокод не найден');
+      }
+      if (!promo.is_active) {
+        throw new Error('Промокод не активен');
+      }
+      if (promo.used_count >= promo.max_uses) {
+        throw new Error('Промокод полностью использован');
+      }
+      
+      // 2. Increment used_count
+      const { data: updatedPromo, error: updateErr } = await supabaseAdmin
+        .from('promo_codes')
+        .update({ used_count: promo.used_count + 1 })
+        .eq('id', promo.id)
+        .select()
+        .single();
+        
+      if (updateErr) throw updateErr;
+      
+      // 3. Activate Premium
+      await this.activatePremium(userId, promo.duration_days);
+      return { success: true, duration_days: promo.duration_days };
+    } else {
+      // Local Mock fallback
+      const mockDb = readMockDb();
+      if (!mockDb.promo_codes) {
+        mockDb.promo_codes = [
+          {
+            id: 'mock-promo-1',
+            code: 'PAYBIO_FREE_30',
+            duration_days: 30,
+            max_uses: 1000,
+            used_count: 0,
+            is_active: true,
+            created_at: new Date().toISOString()
+          }
+        ];
+      }
+      
+      const promo = mockDb.promo_codes.find(p => p.code.toUpperCase() === codeUpper);
+      if (!promo) {
+        throw new Error('Промокод не найден');
+      }
+      if (!promo.is_active) {
+        throw new Error('Промокод не активен');
+      }
+      if (promo.used_count >= promo.max_uses) {
+        throw new Error('Промокод полностью использован');
+      }
+      
+      // Increment used_count
+      promo.used_count += 1;
+      writeMockDb(mockDb);
+      
+      await this.activatePremium(userId, promo.duration_days);
+      return { success: true, duration_days: promo.duration_days };
     }
   },
 
@@ -500,7 +763,7 @@ export const db = {
       const creatorProducts = mockDb.products.filter(p => p.creator_id === creatorId);
       const productIds = creatorProducts.map(p => p.id);
       return mockDb.orders
-        .filter(o => o.status === 'pending' && productIds.includes(o.product_id))
+        .filter(o => o.status === 'pending' && o.product_id && productIds.includes(o.product_id))
         .map(o => {
           const product = creatorProducts.find(p => p.id === o.product_id);
           return { ...o, product };
@@ -585,7 +848,7 @@ export const db = {
   },
 
   // --- Bookings Operations ---
-  async getBookingsByProductId(productId: string) {
+  async getBookingsByProductId(productId: string): Promise<Booking[]> {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('bookings')
@@ -593,7 +856,7 @@ export const db = {
         .eq('product_id', productId)
         .order('slot_start_time', { ascending: true });
       if (error) throw error;
-      return data;
+      return data || [];
     } else {
       const mockDb = readMockDb();
       if (!mockDb.bookings) mockDb.bookings = [];
@@ -601,33 +864,49 @@ export const db = {
     }
   },
 
-  async createBooking(productId: string, orderId: string | null, slotStartTime: string, slotEndTime: string, meetingLink?: string) {
+  async getBookingByOrderId(orderId: string): Promise<Booking | null> {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
-        .from('bookings')
+        .from("bookings")
+        .select("*")
+        .eq("order_id", orderId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as Booking | null;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.bookings) mockDb.bookings = [];
+      return mockDb.bookings.find(b => b.order_id === orderId) || null;
+    }
+  },
+
+  async createBooking(productId: string, orderId: string | null, slotStartTime: string, slotEndTime: string, meetingLink?: string): Promise<Booking> {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from("bookings")
         .insert({
           product_id: productId,
           order_id: orderId,
           slot_start_time: slotStartTime,
           slot_end_time: slotEndTime,
           meeting_link: meetingLink || null,
-          status: 'SCHEDULED'
+          status: "SCHEDULED"
         })
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as Booking;
     } else {
       const mockDb = readMockDb();
       if (!mockDb.bookings) mockDb.bookings = [];
-      const newBooking = {
+      const newBooking: Booking = {
         id: Math.random().toString(36).substring(2, 15),
         product_id: productId,
         order_id: orderId,
         slot_start_time: slotStartTime,
         slot_end_time: slotEndTime,
         meeting_link: meetingLink || null,
-        status: 'SCHEDULED',
+        status: "SCHEDULED",
         created_at: new Date().toISOString()
       };
       mockDb.bookings.push(newBooking);
@@ -636,16 +915,16 @@ export const db = {
     }
   },
 
-  async updateBookingStatus(bookingId: string, status: string) {
+  async updateBookingStatus(bookingId: string, status: string): Promise<Booking | null> {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
-        .from('bookings')
+        .from("bookings")
         .update({ status })
-        .eq('id', bookingId)
+        .eq("id", bookingId)
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as Booking | null;
     } else {
       const mockDb = readMockDb();
       if (!mockDb.bookings) mockDb.bookings = [];
@@ -654,16 +933,16 @@ export const db = {
         b.status = status;
         writeMockDb(mockDb);
       }
-      return b;
+      return b || null;
     }
   },
 
-  async deleteBooking(bookingId: string) {
+  async deleteBooking(bookingId: string): Promise<boolean> {
     if (isRealSupabaseConfigured) {
       const { error } = await supabaseAdmin
-        .from('bookings')
+        .from("bookings")
         .delete()
-        .eq('id', bookingId);
+        .eq("id", bookingId);
       if (error) throw error;
       return true;
     } else {
@@ -676,41 +955,41 @@ export const db = {
   },
 
   // --- Reviews Operations ---
-  async hasBoughtProduct(buyerTgId: number, productId: string) {
+  async hasBoughtProduct(buyerTgId: number, productId: string): Promise<boolean> {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
-        .from('orders')
-        .select('id')
-        .eq('buyer_tg_id', buyerTgId)
-        .eq('product_id', productId)
-        .eq('status', 'approved')
+        .from("orders")
+        .select("id")
+        .eq("buyer_tg_id", buyerTgId)
+        .eq("product_id", productId)
+        .eq("status", "approved")
         .limit(1);
       if (error) throw error;
-      return data && data.length > 0;
+      return !!(data && data.length > 0);
     } else {
       const mockDb = readMockDb();
-      return mockDb.orders.some(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.product_id === productId && o.status === 'approved');
+      return mockDb.orders.some(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.product_id === productId && o.status === "approved");
     }
   },
 
-  async getReviews(creatorId: string, productId?: string | null) {
+  async getReviews(creatorId: string, productId?: string | null): Promise<Review[]> {
     if (isRealSupabaseConfigured) {
       let query = supabaseAdmin
-        .from('reviews')
-        .select('*')
-        .eq('creator_id', creatorId);
+        .from("reviews")
+        .select("*")
+        .eq("creator_id", creatorId);
       
       if (productId !== undefined) {
         if (productId === null) {
-          query = query.is('product_id', null);
+          query = query.is("product_id", null);
         } else {
-          query = query.eq('product_id', productId);
+          query = query.eq("product_id", productId);
         }
       }
       
-      const { data, error } = await query.order('created_at', { ascending: false });
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      return (data || []) as Review[];
     } else {
       const mockDb = readMockDb();
       if (!mockDb.reviews) mockDb.reviews = [];
@@ -726,10 +1005,10 @@ export const db = {
     }
   },
 
-  async createReview(creatorId: string, productId: string | null, buyerTgId: number, buyerName: string, rating: number, text: string) {
+  async createReview(creatorId: string, productId: string | null, buyerTgId: number, buyerName: string, rating: number, text: string): Promise<Review> {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
-        .from('reviews')
+        .from("reviews")
         .insert({
           creator_id: creatorId,
           product_id: productId,
@@ -741,11 +1020,11 @@ export const db = {
         .select()
         .single();
       if (error) throw error;
-      return data;
+      return data as Review;
     } else {
       const mockDb = readMockDb();
       if (!mockDb.reviews) mockDb.reviews = [];
-      const newReview = {
+      const newReview: Review = {
         id: Math.random().toString(36).substring(2, 15),
         creator_id: creatorId,
         product_id: productId,
