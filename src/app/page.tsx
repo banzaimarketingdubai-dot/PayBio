@@ -26,6 +26,7 @@ const ReviewsDashboard = dynamic(() => import('@/components/ReviewsDashboard'), 
   loading: () => <div className="skeleton" style={{ height: 150, borderRadius: 14 }} />,
 });
 const PremiumFlow = dynamic(() => import('@/components/PremiumFlow'), { ssr: false });
+const OnboardingScreen = dynamic(() => import('@/components/OnboardingScreen'), { ssr: false });
 
 
 // Emojis for mock product cover styles (used as fallback)
@@ -72,6 +73,7 @@ interface ProductListScreenProps {
   dbBookings: any[];
   fetchBusySlotsForProduct: (prodId: string) => Promise<void>;
   buyerTgId: number;
+  onTriggerOnboarding?: () => void;
 }
 
 const ProductListScreen = memo(function ProductListScreen({
@@ -110,7 +112,8 @@ const ProductListScreen = memo(function ProductListScreen({
   busySlots,
   dbBookings,
   fetchBusySlotsForProduct,
-  buyerTgId
+  buyerTgId,
+  onTriggerOnboarding
 }: ProductListScreenProps) {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditSocialsOpen, setIsEditSocialsOpen] = useState(false);
@@ -212,9 +215,11 @@ const ProductListScreen = memo(function ProductListScreen({
   const [cropperCircular, setCropperCircular] = useState(false);
   const [onCropComplete, setOnCropComplete] = useState<((cropped: string) => void) | null>(null);
 
-  // 1. Promoted products list
+  // 1. Promoted products list (sorted chronologically by starring order)
   const promotedProducts = useMemo(() => {
-    return products.filter(p => starredIds.includes(p.id));
+    return starredIds
+      .map(id => products.find(p => p.id === id))
+      .filter((p): p is Product => !!p);
   }, [products, starredIds]);
 
   // 2. Grouped products by section
@@ -1007,6 +1012,7 @@ setIsGeneratingCover(false);
         buyerTgId={buyerTgId}
         onOpenPremium={onOpenPremium}
         isCreatorPremium={!!creator?.is_premium}
+        onTriggerOnboarding={onTriggerOnboarding}
       />
     );
   }
@@ -1361,31 +1367,30 @@ setIsGeneratingCover(false);
       <div style={{ padding: '0 16px 80px' }}>
         <p className="section-header" style={{ marginBottom: '14px' }}>{t.storeCatalog}</p>
         
-        {/* Promoted Carousel */}
+        {/* Promoted / Starred horizontal gallery */}
         {promotedProducts.length > 0 && (
-          <div style={{ marginBottom: '24px' }}>
+          <div style={{ marginBottom: '28px' }}>
             <p className="section-header" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#ffd700' }}>
-              <span>🔥</span> {lang === 'ru' ? 'РЕКОМЕНДУЕМЫЕ' : 'PROMOTED'}
+              <span>⭐</span> {lang === 'ru' ? 'ИЗБРАННОЕ' : 'FEATURED'}
             </p>
-            <div className="section-gallery" style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory' }}>
-              {promotedProducts.map((p, idx) => {
-                const styleIdx = idx % coverStyles.length;
-                const cover = coverStyles[styleIdx];
-                return (
-                  <div key={p.id} className="promoted-glow-card animate-fade-up" style={{ width: '80vw', minWidth: '80vw', maxWidth: '80vw', scrollSnapAlign: 'start', flexShrink: 0 }} onClick={() => onSelect(p.id)}>
-                    <div className="large-product-cover" style={p.cover_url ? { backgroundImage: `url("${p.cover_url}")`, height: '110px', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : { background: cover.bg, height: '110px' }}>
-                      {!p.cover_url && <div className="large-product-icon">{cover.icon}</div>}
-                    </div>
-                    <div style={{ padding: '10px' }}>
-                      <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--tg-text)' }}>{p.title}</h4>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '13px', fontWeight: 800, color: 'var(--tg-accent)' }}>${p.price_fiat}</span>
-                        <span style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>⭐️ {p.price_stars}</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="featured-gallery">
+              {promotedProducts.map((p, idx) => (
+                <ProductCard
+                  key={p.id}
+                  product={p}
+                  idx={idx}
+                  isOwner={isOwner}
+                  starredIds={starredIds}
+                  lang={lang}
+                  t={t}
+                  onSelect={onSelect}
+                  onToggleStar={handleToggleStar}
+                  onGeneratePromo={handleGeneratePromo}
+                  onOpenEditProduct={handleOpenEditProduct}
+                  onConfirmDelete={handleConfirmDelete}
+                  variant="featured"
+                />
+              ))}
             </div>
           </div>
         )}
@@ -1448,7 +1453,7 @@ setIsGeneratingCover(false);
                 </div>
 
                 {secProducts.length > 0 ? (
-                  <div className="product-grid">
+                  <div className="product-list">
                     {secProducts.map((p, idx) => (
                       <ProductCard
                         key={p.id}
@@ -1463,32 +1468,9 @@ setIsGeneratingCover(false);
                         onGeneratePromo={handleGeneratePromo}
                         onOpenEditProduct={handleOpenEditProduct}
                         onConfirmDelete={handleConfirmDelete}
+                        variant="standard"
                       />
                     ))}
-                    {/* Odd-count placeholder so grid stays even */}
-                    {secProducts.length % 2 !== 0 && (
-                      <div
-                        className="large-product-create-card"
-                        onClick={isOwner ? () => handleOpenCreateProduct(sectionName) : undefined}
-                        style={{ cursor: isOwner ? 'pointer' : 'default' }}
-                      >
-                        {isOwner ? (
-                          <>
-                            <div style={{ fontSize: '28px', color: 'var(--tg-hint)', fontWeight: 'bold' }}>＋</div>
-                            <div style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
-                              {lang === 'ru' ? 'Добавить' : 'Add'}
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div style={{ fontSize: '28px', color: 'var(--tg-hint)' }}>✨</div>
-                            <div style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
-                              {lang === 'ru' ? 'Скоро...' : 'Coming soon'}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <div style={{ padding: '20px', background: 'var(--tg-secondary-bg)', borderRadius: '10px', textAlign: 'center', border: '1px dashed var(--tg-border)' }}>
@@ -1974,6 +1956,7 @@ export default function Storefront() {
   const [sectionOrder, setSectionOrder] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [productSections, setProductSections] = useState<Record<string, string>>({});
   const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS'>('CATALOG');
+  const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
 
   // Premium modal state
   const [isPremiumOpen, setIsPremiumOpen] = useState(false);
@@ -2496,6 +2479,31 @@ export default function Storefront() {
     }
   }, [creator, promoCodeInput, lang, refreshCreatorData]);
 
+  const handleCompleteOnboarding = useCallback(async () => {
+    if (!creator) return;
+    const pc = creator.profile_customization || {};
+    const updatedCustom = {
+      ...pc,
+      onboarding_completed: true,
+    };
+
+    setCreator({
+      ...creator,
+      profile_customization: updatedCustom,
+    });
+    setForceShowOnboarding(false);
+
+    try {
+      await fetch('/api/store/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: creator.id, customization: updatedCustom }),
+      });
+    } catch (e) {
+      console.error('Failed to save onboarding status:', e);
+    }
+  }, [creator]);
+
   const handleSaveSettings = useCallback(async (
     name: string,
     description: string,
@@ -2764,6 +2772,9 @@ export default function Storefront() {
       
       setTimeout(() => {
         WebApp.openTelegramLink(contactUrl);
+        setTimeout(() => {
+          WebApp.close();
+        }, 150);
       }, 1200);
     } catch (e) {
       window.open(contactUrl, '_blank');
@@ -2832,9 +2843,13 @@ export default function Storefront() {
   }, [product, file, bookingDate, bookingTime, buyerTgId]);
 
   const isOwner = creator && Number(buyerTgId) === Number(creator.telegram_id);
+  const showOnboarding = isOwner && productsList.length === 0 && !creator?.profile_customization?.onboarding_completed;
 
   // ─── Render logic ────────────────────────────────────────────
   if (loading) return <LoadingScreen lang={lang} />;
+  if (showOnboarding) {
+    return <OnboardingScreen lang={lang} onComplete={handleCompleteOnboarding} />;
+  }
   if (!productId) {
     return (
       <>
@@ -2875,6 +2890,10 @@ export default function Storefront() {
           dbBookings={dbBookings}
           fetchBusySlotsForProduct={fetchBusySlotsForProduct}
           buyerTgId={buyerTgId}
+          onTriggerOnboarding={() => {
+            setForceShowOnboarding(true);
+            setCurrentScreen('CATALOG');
+          }}
         />
         
         <PremiumFlow

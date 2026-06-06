@@ -33,6 +33,7 @@ export interface Creator {
     custom_sections?: string[];
     section_order?: string[];
     product_sections?: Record<string, string>;
+    onboarding_completed?: boolean;
   };
 }
 

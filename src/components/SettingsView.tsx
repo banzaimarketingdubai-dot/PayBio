@@ -28,6 +28,7 @@ interface SettingsViewProps {
   buyerTgId: number;
   onOpenPremium: () => void;
   isCreatorPremium: boolean;
+  onTriggerOnboarding?: () => void;
 }
 
 export default function SettingsView({
@@ -53,6 +54,7 @@ export default function SettingsView({
   buyerTgId,
   onOpenPremium,
   isCreatorPremium,
+  onTriggerOnboarding,
 }: SettingsViewProps) {
   // Unified Settings Panel form states
   const [tempStoreName, setTempStoreName] = useState(storeName);
@@ -103,6 +105,13 @@ export default function SettingsView({
       setTempCalIcsUrl(pd.ics_url || '');
     }
   }, [creator, currentScreen, storeName, storeDescription, storeAvatar, storeBanner, socialLinks, lang]);
+
+  const isAdmin = useMemo(() => {
+    if (!creator) return false;
+    const username = creator.username?.toLowerCase() || '';
+    const tgId = Number(creator.telegram_id);
+    return username.includes('sher') || username === 'shertyonok' || tgId === 7999888 || tgId === 123456789 || tgId === 999999999;
+  }, [creator]);
 
   const [selectedSettingsBookingProdId, setSelectedSettingsBookingProdId] = useState(() => {
     return bookingProductsList[0]?.id || '';
@@ -594,6 +603,37 @@ export default function SettingsView({
               </p>
             )}
           </div>
+
+          {/* Administrator Settings (Developer Mode) */}
+          {isAdmin && (
+            <div style={{ borderTop: '2px dashed #ffd700', paddingTop: '14px', marginTop: '14px' }}>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: '13.5px', fontWeight: 800, color: '#ffd700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                👑 {lang === 'ru' ? 'АДМИНИСТРАТОР (Тестирование)' : 'ADMINISTRATOR (Testing)'}
+              </h4>
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', lineHeight: 1.45, margin: '0 0 12px 0' }}>
+                {lang === 'ru' 
+                  ? 'Кнопка ниже мгновенно откроет приветственный онбординг (Stories) прямо на экране без перезапуска приложения.'
+                  : 'The button below will instantly open the welcoming onboarding Stories directly on the screen without restarting.'}
+              </p>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={onTriggerOnboarding}
+                style={{ 
+                  background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)', 
+                  color: '#fff', 
+                  fontWeight: 700, 
+                  width: '100%', 
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                🚀 {lang === 'ru' ? 'Тест: Запустить онбординг' : 'Test: Run Onboarding'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Save & Cancel Buttons */}
