@@ -54,65 +54,65 @@ export default function PremiumFlow({
         
         {/* Header / Graphic icon */}
         <div style={{
-          width: '60px', height: '60px', borderRadius: '50%',
+          width: '50px', height: '50px', borderRadius: '50%',
           background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '32px', margin: '0 auto 16px',
+          fontSize: '26px', margin: '0 auto 10px',
           boxShadow: '0 4px 16px rgba(255, 215, 0, 0.3)'
         }}>
           👑
         </div>
         
-        <h2 className="bottom-sheet-title" style={{ marginBottom: '6px' }}>{t.premiumTitle}</h2>
-        <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--tg-hint)', marginBottom: '24px' }}>
+        <h2 className="bottom-sheet-title" style={{ marginBottom: '4px', fontSize: '18px' }}>{t.premiumTitle}</h2>
+        <p style={{ textAlign: 'center', fontSize: '12.5px', color: 'var(--tg-hint)', marginBottom: '16px', lineHeight: 1.4 }}>
           {t.premiumSub}
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '20px' }}>👑</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '18px' }}>👑</span>
             <div>
-              <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>{t.premiumStatusBadge}</p>
-              <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', marginTop: '2px' }}>{t.premiumStatusBadgeDesc}</p>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', margin: 0 }}>{t.premiumStatusBadge}</p>
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', marginTop: '2px', lineHeight: 1.3, margin: 0 }}>{t.premiumStatusBadgeDesc}</p>
             </div>
           </div>
           
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '20px' }}>🚫</span>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '18px' }}>🚫</span>
             <div>
-              <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>{t.removeBrandingLogo}</p>
-              <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', marginTop: '2px' }}>{t.removeBrandingLogoDesc}</p>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', margin: 0 }}>{t.removeBrandingLogo}</p>
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', marginTop: '2px', lineHeight: 1.3, margin: 0 }}>{t.removeBrandingLogoDesc}</p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '20px' }}>🔓</span>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '18px' }}>🔓</span>
             <div>
-              <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>{t.unlimitedTransactions}</p>
-              <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', marginTop: '2px' }}>{t.unlimitedTransactionsDesc}</p>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', margin: 0 }}>{t.unlimitedTransactions}</p>
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', marginTop: '2px', lineHeight: 1.3, margin: 0 }}>{t.unlimitedTransactionsDesc}</p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '20px' }}>🔓</span>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '18px' }}>🔓</span>
             <div>
-              <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>🤖 AI Cover Generator</p>
-              <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', marginTop: '2px' }}>{lang === 'ru' ? 'Создавайте обложки для товаров по описанию с помощью ИИ FLUX.' : 'Create product covers from description using FLUX AI.'}</p>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', margin: 0 }}>🤖 AI Cover Generator</p>
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', marginTop: '2px', lineHeight: 1.3, margin: 0 }}>{lang === 'ru' ? 'Создавайте обложки для товаров по описанию с помощью ИИ FLUX.' : 'Create product covers from description using FLUX AI.'}</p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '20px' }}>📈</span>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+            <span style={{ fontSize: '18px' }}>📈</span>
             <div>
-              <p style={{ fontWeight: 700, fontSize: '14px', color: 'var(--tg-text)' }}>{t.advancedInsights}</p>
-              <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', marginTop: '2px' }}>{t.advancedInsightsDesc}</p>
+              <p style={{ fontWeight: 700, fontSize: '13px', color: 'var(--tg-text)', margin: 0 }}>{t.advancedInsights}</p>
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', marginTop: '2px', lineHeight: 1.3, margin: 0 }}>{t.advancedInsightsDesc}</p>
             </div>
           </div>
         </div>
 
         {/* Promo code block */}
-        <div style={{ marginBottom: '24px', borderTop: '1px solid var(--tg-border)', paddingTop: '20px' }}>
-          <label className="bottom-sheet-label" style={{ display: 'block', marginBottom: '8px', textAlign: 'left', fontWeight: 600 }}>
+        <div style={{ marginBottom: '16px', borderTop: '1px solid var(--tg-border)', paddingTop: '12px' }}>
+          <label className="bottom-sheet-label" style={{ display: 'block', marginBottom: '6px', textAlign: 'left', fontWeight: 600 }}>
             {lang === 'ru' ? 'Активация промокода' : 'Activate Promo Code'}
           </label>
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -122,7 +122,7 @@ export default function PremiumFlow({
               placeholder={lang === 'ru' ? 'Введите промокод' : 'Enter promo code'}
               value={promoCodeInput}
               onChange={(e) => onPromoCodeInputChange(e.target.value)}
-              style={{ flex: 1, textTransform: 'uppercase' }}
+              style={{ flex: 1, textTransform: 'uppercase', padding: '8px 12px', fontSize: '14px' }}
               disabled={isApplyingPromo}
             />
             <button
@@ -130,29 +130,30 @@ export default function PremiumFlow({
               className="btn-primary"
               onClick={onApplyPromoCode}
               disabled={isApplyingPromo || !promoCodeInput.trim()}
-              style={{ width: 'auto', padding: '0 16px', height: '38px', borderRadius: '12px' }}
+              style={{ width: 'auto', padding: '0 16px', height: '34px', borderRadius: '10px', fontSize: '13px' }}
             >
               {isApplyingPromo ? (lang === 'ru' ? 'Применение…' : 'Applying…') : (lang === 'ru' ? 'Применить' : 'Apply')}
             </button>
           </div>
           {promoCodeStatus.message && (
             <p style={{
-              fontSize: '12.5px',
-              marginTop: '8px',
+              fontSize: '12px',
+              marginTop: '6px',
               color: promoCodeStatus.type === 'success' ? '#4dca5a' : '#e95c5c',
               textAlign: 'left',
-              fontWeight: 500
+              fontWeight: 500,
+              margin: '6px 0 0 0'
             }}>
               {promoCodeStatus.message}
             </p>
           )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <button 
             type="button"
             className="btn-primary" 
-            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700 }}
+            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700, padding: '10px 16px', fontSize: '13.5px', height: '38px', borderRadius: '10px' }}
             onClick={() => onBuyPremiumWithStars(false)}
             disabled={isUpgrading}
           >
@@ -161,7 +162,7 @@ export default function PremiumFlow({
           <button 
             type="button"
             className="btn-primary" 
-            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700 }}
+            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700, padding: '10px 16px', fontSize: '13.5px', height: '38px', borderRadius: '10px' }}
             onClick={() => onBuyPremiumWithStars(true)}
             disabled={isUpgrading}
           >
