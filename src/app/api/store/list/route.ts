@@ -29,12 +29,13 @@ export async function GET(request: Request) {
         const creatorTgId = Number(product.creator.telegram_id);
         
         // Notify only if the buyer is a real different user
+        // fire-and-forget: не блокируем ответ API ожиданием Telegram HTTP
         if (buyerTgId > 0 && buyerTgId !== creatorTgId) {
           const buyerInfo = buyerUsername
             ? `@${buyerUsername} (${buyerName || 'user'})`
             : `ID: ${buyerTgId}`;
           
-          await sendTelegramNotification(
+          sendTelegramNotification(
             creatorTgId,
             `👁️ *Product Viewed!* \n\nPotential buyer *${buyerInfo}* is currently looking at your product *"${product.title}"*.`
           );
@@ -70,7 +71,16 @@ export async function GET(request: Request) {
       }
 
       const products = await db.getProductsByCreatorId(creator.id);
-      return NextResponse.json({ success: true, creator, products: products || [] });
+      return NextResponse.json(
+        { success: true, creator, products: products || [] },
+        {
+          headers: {
+            // Cache catalog on Vercel CDN for 30s; stale-while-revalidate for 60s
+            // Product detail is NOT cached (has_bought is buyer-specific)
+            'Cache-Control': 's-maxage=30, stale-while-revalidate=60',
+          },
+        }
+      );
     }
 
     // List all products

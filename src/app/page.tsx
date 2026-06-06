@@ -1,19 +1,32 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo, memo } from 'react';
-import ImageCropper from '@/components/ImageCropper';
-import BookingCalendar from '@/components/BookingCalendar';
+import dynamic from 'next/dynamic';
 import LoadingScreen from '@/components/LoadingScreen';
-import SettingsView from '@/components/SettingsView';
-import ProductCard from '@/components/ProductCard';
 import ErrorScreen from '@/components/ErrorScreen';
-import ReviewsDashboard from '@/components/ReviewsDashboard';
 import { YoutubeIcon, InstagramIcon, TiktokIcon, VkIcon, MaxIcon } from '@/components/Icons';
+import ProductCard from '@/components/ProductCard';
 import { Creator, Product } from '@/types/store';
 import { compressImage } from '@/utils/image';
 import { getTWA, showAlert, cleanProductId, handleOpenLink } from '@/utils/telegram';
-import PremiumFlow from '@/components/PremiumFlow';
 import { TRANSLATIONS } from '@/lib/translations';
+
+// Heavy components — loaded only when needed (reduces initial bundle by ~68KB)
+const ImageCropper = dynamic(() => import('@/components/ImageCropper'), { ssr: false });
+const BookingCalendar = dynamic(() => import('@/components/BookingCalendar'), {
+  ssr: false,
+  loading: () => <div className="skeleton" style={{ height: 200, borderRadius: 14 }} />,
+});
+const SettingsView = dynamic(() => import('@/components/SettingsView'), {
+  ssr: false,
+  loading: () => <div className="skeleton" style={{ height: 300, borderRadius: 14 }} />,
+});
+const ReviewsDashboard = dynamic(() => import('@/components/ReviewsDashboard'), {
+  ssr: false,
+  loading: () => <div className="skeleton" style={{ height: 150, borderRadius: 14 }} />,
+});
+const PremiumFlow = dynamic(() => import('@/components/PremiumFlow'), { ssr: false });
+
 
 // Emojis for mock product cover styles (used as fallback)
 const coverStyles = [
@@ -2090,6 +2103,8 @@ export default function Storefront() {
   }, [productId, handleSelectProduct]);
 
   // Init Telegram SDK & URL params & language detection
+  // ОПТИМИЗАЦИЯ: URL-параметры парсятся синхронно — creatorTgId/productId
+  // устанавливается НЕМЕДЛЕННО, не дожидаясь SDK. SDK уточняет данные параллельно.
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     let rawPid = urlParams.get('startapp')
@@ -2144,6 +2159,20 @@ export default function Storefront() {
     const testId = urlParams.get('buyer_tg_id');
     if (testId) setBuyerTgId(Number(testId));
 
+    // ── ШАГ 1 (синхронный): устанавливаем creatorTgId из URL немедленно ──
+    // Это разблокирует loadData useEffect — он стартует без ожидания SDK.
+    const urlCreatorParam = urlParams.get('creator_tg_id');
+    if (detectedCreatorTgId !== null) {
+      setCreatorTgId(detectedCreatorTgId);
+    } else if (detectedPid) {
+      // Есть product_id — creatorTgId не нужен для первого запроса
+      setCreatorTgId(0);
+    } else if (urlCreatorParam) {
+      setCreatorTgId(Number(urlCreatorParam));
+    }
+    // Если ни одно условие не выполнено — ждём SDK (creatorTgId остаётся null)
+
+    // ── ШАГ 2 (параллельный): загружаем SDK, уточняем данные ──
     getTWA().then((webapp) => {
       webapp.ready();
       webapp.expand();

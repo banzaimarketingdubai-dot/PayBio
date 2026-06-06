@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
     '39f026e686b03a.lhr.life',
     '*.lhr.life',
   ],
+  // Tree-shake large packages — reduces client bundle size
+  experimental: {
+    optimizePackageImports: ['@supabase/supabase-js'],
+  },
 };
 
 export default nextConfig;
