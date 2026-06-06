@@ -212,7 +212,7 @@ export default function PremiumFlow({
                 <li>
                   <button 
                     type="button"
-                    onClick={() => onOpenLink('tg://settings')}
+                    onClick={() => onOpenLink('tg://settings/stars')}
                     style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
                   >
                     {lang === 'ru' ? 'Настройки Telegram' : 'Telegram Settings'}

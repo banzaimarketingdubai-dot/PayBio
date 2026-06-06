@@ -64,3 +64,18 @@ export async function sendTelegramDocument(chatId: number | string, document: st
     return null;
   }
 }
+
+export async function getTelegramUser(chatId: number | string) {
+  if (!TELEGRAM_BOT_TOKEN) return null;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getChat?chat_id=${chatId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.ok && data.result) {
+      return data.result;
+    }
+  } catch (err) {
+    console.error(`Error fetching Telegram user ${chatId}:`, err);
+  }
+  return null;
+}

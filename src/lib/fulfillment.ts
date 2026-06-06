@@ -26,6 +26,40 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
     const buyerTgId = order.buyer_tg_id;
     const creator = product.creator;
 
+    // Resolve buyer username/handle or fallback
+    let buyerName = `ID: ${buyerTgId}`;
+    try {
+      const buyerUser = await db.getUserByTelegramId(Number(buyerTgId));
+      if (buyerUser && buyerUser.username) {
+        buyerName = `@${buyerUser.username}`;
+      } else {
+        const { getTelegramUser } = await import('./telegram');
+        const tgUser = await getTelegramUser(buyerTgId);
+        if (tgUser) {
+          if (tgUser.username) {
+            buyerName = `@${tgUser.username}`;
+          } else {
+            const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
+            buyerName = fullName || `ID: ${buyerTgId}`;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error resolving buyer name:', e);
+    }
+
+    // Format current date and time in Moscow timezone
+    const now = new Date();
+    const formattedDateTime = now.toLocaleString('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }) + ' MSK';
+
     const productType = product.product_type || 'DIGITAL';
     const isRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
     const promoMarkup = {
@@ -64,7 +98,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       if (creator) {
         await sendTelegramNotification(
           creator.telegram_id,
-          `💰 *Продажа товара!* \n\nПользователь \`${buyerTgId}\` купил ваш цифровой товар *"${product.title}"* за $${product.price_fiat}.`
+          `💰 *Продажа цифрового товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}`
         );
       }
     } else if (productType === 'VOUCHER') {
@@ -86,7 +120,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       if (creator) {
         await sendTelegramNotification(
           creator.telegram_id,
-          `🎟️ *Продажа билета!* \n\nПользователь \`${buyerTgId}\` купил билет *"${product.title}"* ($${product.price_fiat}). Ваучер успешно сгенерирован и отправлен покупателю.`
+          `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nВаучер успешно сгенерирован и отправлен покупателю.`
         );
       }
     } else if (productType === 'BOOKING') {
@@ -128,7 +162,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
         if (creator) {
           await sendTelegramNotification(
             creator.telegram_id,
-            `📅 *Новая запись на консультацию!* \n\nПокупатель \`${buyerTgId}\` забронировал слот для *"${product.title}"*.\n\n⏰ *Время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`
+            `📅 *Новая запись на консультацию!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Услуга:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n⏰ *Забронированное время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`
           );
         }
       }

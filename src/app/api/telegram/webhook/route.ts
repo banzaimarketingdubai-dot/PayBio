@@ -266,6 +266,19 @@ export async function POST(request: Request) {
       if (payload.startsWith('premium_user_id:') || payload.startsWith('premium_subscription_user_id:')) {
         const premiumUserId = payload.split(':')[1];
         await db.activatePremium(premiumUserId, 30);
+        
+        const isSubscription = payload.startsWith('premium_subscription_user_id:');
+        const user = await db.getUserById(premiumUserId);
+        if (user) {
+          const currentDetails = user.payment_details || {};
+          const updatedDetails = {
+            ...currentDetails,
+            premium_type: isSubscription ? 'subscription' : 'one-time',
+            subscription_status: isSubscription ? 'active' : 'none'
+          };
+          await db.updateUserPaymentDetails(premiumUserId, updatedDetails);
+        }
+
         await tgApi('sendMessage', {
           chat_id: chatId,
           text: lang === 'ru' 

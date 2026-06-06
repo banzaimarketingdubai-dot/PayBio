@@ -1448,7 +1448,7 @@ setIsGeneratingCover(false);
                 </div>
 
                 {secProducts.length > 0 ? (
-                  <div className="section-gallery" style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '10px', scrollSnapType: 'x mandatory' }}>
+                  <div className="product-grid">
                     {secProducts.map((p, idx) => (
                       <ProductCard
                         key={p.id}
@@ -1465,40 +1465,25 @@ setIsGeneratingCover(false);
                         onConfirmDelete={handleConfirmDelete}
                       />
                     ))}
-                    {secProducts.length === 1 && (
+                    {/* Odd-count placeholder so grid stays even */}
+                    {secProducts.length % 2 !== 0 && (
                       <div
+                        className="large-product-create-card"
                         onClick={isOwner ? () => handleOpenCreateProduct(sectionName) : undefined}
-                        className="large-product-card animate-fade-up"
-                        style={{
-                          width: '80vw',
-                          minWidth: '80vw',
-                          maxWidth: '80vw',
-                          height: '215px',
-                          scrollSnapAlign: 'start',
-                          flexShrink: 0,
-                          margin: 0,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '2px dashed var(--tg-border)',
-                          background: 'rgba(255, 255, 255, 0.02)',
-                          borderRadius: 'var(--radius-xl)',
-                          cursor: isOwner ? 'pointer' : 'default'
-                        }}
+                        style={{ cursor: isOwner ? 'pointer' : 'default' }}
                       >
                         {isOwner ? (
                           <>
-                            <div style={{ fontSize: '36px', color: 'var(--tg-hint)', fontWeight: 'bold' }}>＋</div>
-                            <div style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', fontWeight: 600 }}>
-                              {lang === 'ru' ? 'Добавить товар' : 'Add Product'}
+                            <div style={{ fontSize: '28px', color: 'var(--tg-hint)', fontWeight: 'bold' }}>＋</div>
+                            <div style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
+                              {lang === 'ru' ? 'Добавить' : 'Add'}
                             </div>
                           </>
                         ) : (
                           <>
-                            <div style={{ fontSize: '36px', color: 'var(--tg-hint)', fontWeight: 'bold' }}>✨</div>
-                            <div style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', fontWeight: 600 }}>
-                              {lang === 'ru' ? 'Скоро новые товары!' : 'More products coming soon!'}
+                            <div style={{ fontSize: '28px', color: 'var(--tg-hint)' }}>✨</div>
+                            <div style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
+                              {lang === 'ru' ? 'Скоро...' : 'Coming soon'}
                             </div>
                           </>
                         )}
