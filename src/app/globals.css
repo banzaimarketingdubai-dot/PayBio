@@ -411,7 +411,7 @@ body {
 /* Edit banner button */
 .store-banner-edit {
   position: absolute;
-  top: 12px;
+  bottom: 12px;
   right: 12px;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(10px);
@@ -425,10 +425,11 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
   z-index: 5;
 }
 .store-banner-edit:active {
+  transform: scale(0.95);
   background: rgba(0, 0, 0, 0.65);
 }
 

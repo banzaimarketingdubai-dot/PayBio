@@ -1013,7 +1013,7 @@ setIsGeneratingCover(false);
 
   // Normal Storefront View
   return (
-    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)' }} className="animate-fade-in">
+    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px))' }} className="animate-fade-in">
       
       {/* ─── BANNER ─── */}
       <div 
@@ -1023,7 +1023,7 @@ setIsGeneratingCover(false);
         <div className="store-banner-glow" />
         {isOwner && (
           <label className="store-banner-edit">
-            📸 Change Cover
+            {lang === 'ru' ? '📸 Изменить обложку' : '📸 Change Cover'}
             <input type="file" accept="image/*" onChange={handleBannerUpload} style={{ display: 'none' }} />
           </label>
         )}
@@ -2987,7 +2987,7 @@ export default function Storefront() {
         zIndex: 100,
         background: 'var(--tg-secondary-bg)',
         borderBottom: '1px solid var(--tg-border)',
-        padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px 16px',
+        padding: 'calc(var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px)) + 12px) 16px 12px 16px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

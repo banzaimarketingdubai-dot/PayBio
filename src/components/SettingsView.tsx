@@ -204,7 +204,7 @@ export default function SettingsView({
   };
 
   return (
-    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 16px 80px', color: 'var(--tg-text)' }} className="animate-fade-in">
+    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', padding: 'calc(var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px)) + 20px) 16px 80px', color: 'var(--tg-text)' }} className="animate-fade-in">
       {/* Settings Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <button 
