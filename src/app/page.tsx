@@ -67,7 +67,7 @@ interface ProductListScreenProps {
   setSectionOrder: (order: string[]) => void;
   productSections: Record<string, string>;
   setProductSections: (sections: Record<string, string>) => void;
-  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string) => Promise<void>;
+  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string, usdtTrc20?: string, usdtBep20?: string) => Promise<void>;
   busySlots: { start: string; end: string }[];
   dbBookings: any[];
   fetchBusySlotsForProduct: (prodId: string) => Promise<void>;
@@ -2521,7 +2521,9 @@ export default function Storefront() {
     p2p: string,
     p2pList: any[],
     calendarProvider: string,
-    icsUrl: string
+    icsUrl: string,
+    usdtTrc20?: string,
+    usdtBep20?: string
   ) => {
     if (!creator) return;
     try {
@@ -2543,7 +2545,9 @@ export default function Storefront() {
         p2p: p2p,
         p2p_list: p2pList,
         calendar_provider: calendarProvider,
-        ics_url: icsUrl
+        ics_url: icsUrl,
+        usdt_trc20: usdtTrc20 || '',
+        usdt_bep20: usdtBep20 || ''
       };
       
       const res = await fetch('/api/store/profile', {
@@ -2949,7 +2953,7 @@ export default function Storefront() {
   }));
 
   const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
-  const p2pList = isStorePremium && product.creator?.payment_details?.p2p_list || [];
+  const p2pList = product.creator?.payment_details?.p2p_list || [];
 
   const tonDetails = tonList.length > 0 && selectedTonIdx < tonList.length
     ? tonList[selectedTonIdx].address 

@@ -20,7 +20,7 @@ interface SettingsViewProps {
   socialLinks: { youtube?: string; instagram?: string; tiktok?: string; vk?: string; max?: string; };
   onAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onBannerUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string) => Promise<void>;
+  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string, usdtTrc20?: string, usdtBep20?: string) => Promise<void>;
   bookingProductsList: Product[];
   busySlots: { start: string; end: string }[];
   dbBookings: any[];
@@ -67,12 +67,11 @@ export default function SettingsView({
   const [tempMax, setTempMax] = useState(socialLinks.max || '');
   
   const [tempTonVal, setTempTonVal] = useState('');
-  const [tempP2pVal, setTempP2pVal] = useState('');
-  const [tempCardsList, setTempCardsList] = useState<any[]>([]);
+  const [tempCards, setTempCards] = useState<{ id: string; label: string; card: string }[]>([]);
+  const [tempUsdtTrc20, setTempUsdtTrc20] = useState('');
+  const [tempUsdtBep20, setTempUsdtBep20] = useState('');
   const [tempCalProvider, setTempCalProvider] = useState('none');
   const [tempCalIcsUrl, setTempCalIcsUrl] = useState('');
-  const [newP2pLabel, setNewP2pLabel] = useState('');
-  const [newP2pCard, setNewP2pCard] = useState('');
 
   // Sync state values when settings screen opens or creator changes
   useEffect(() => {
@@ -90,12 +89,20 @@ export default function SettingsView({
       
       const pd = creator.payment_details || {};
       setTempTonVal(pd.ton || '');
-      setTempP2pVal(pd.p2p || '');
-      setTempCardsList(pd.p2p_list || []);
+      
+      // Initialize cards from p2p_list, or fall back to p2p if list is empty
+      let cards = pd.p2p_list || [];
+      if (cards.length === 0 && pd.p2p) {
+        cards = [{ id: 'card_default', label: lang === 'ru' ? 'Основная' : 'Primary', card: pd.p2p }];
+      }
+      setTempCards(cards);
+
+      setTempUsdtTrc20(pd.usdt_trc20 || '');
+      setTempUsdtBep20(pd.usdt_bep20 || '');
       setTempCalProvider(pd.calendar_provider || 'none');
       setTempCalIcsUrl(pd.ics_url || '');
     }
-  }, [creator, currentScreen, storeName, storeDescription, storeAvatar, storeBanner, socialLinks]);
+  }, [creator, currentScreen, storeName, storeDescription, storeAvatar, storeBanner, socialLinks, lang]);
 
   const [selectedSettingsBookingProdId, setSelectedSettingsBookingProdId] = useState(() => {
     return bookingProductsList[0]?.id || '';
@@ -174,6 +181,8 @@ export default function SettingsView({
 
   const handleSettingsSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const filteredCards = tempCards.filter(c => c.card.trim() !== '');
+    const defaultP2p = filteredCards[0]?.card || '';
     await onSaveSettings(
       tempStoreName,
       tempStoreDesc,
@@ -187,10 +196,12 @@ export default function SettingsView({
         max: tempMax
       },
       tempTonVal,
-      tempP2pVal,
-      tempCardsList,
+      defaultP2p,
+      filteredCards,
       tempCalProvider,
-      tempCalIcsUrl
+      tempCalIcsUrl,
+      tempUsdtTrc20,
+      tempUsdtBep20
     );
   };
 
@@ -359,57 +370,146 @@ export default function SettingsView({
             <span>💳</span> {lang === 'ru' ? 'Реквизиты оплаты' : 'Payment Details'}
           </h3>
           
+          {/* Bank Cards Section (Top) */}
           <div className="bottom-sheet-form-group">
-            <label className="bottom-sheet-label">{lang === 'ru' ? 'Основной TON кошелек' : 'Default TON Wallet'}</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input type="text" className="tg-input" placeholder="UQ..." value={tempTonVal} onChange={(e) => setTempTonVal(e.target.value)} style={{ flex: 1 }} />
-              <button type="button" className="btn-primary" style={{ width: 'auto', padding: '0 12px', whiteSpace: 'nowrap', fontSize: '12px', background: 'var(--tg-accent)' }} onClick={handleConnectWallet}>
-                💎 {lang === 'ru' ? 'Wallet' : 'Connect Wallet'}
-              </button>
+            <label className="bottom-sheet-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>💳 {lang === 'ru' ? 'Банковские карты (до 5)' : 'Bank Cards (up to 5)'}</span>
+              <span style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>{tempCards.length}/5</span>
+            </label>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+              {tempCards.map((item, idx) => (
+                <div key={item.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input 
+                    type="text" 
+                    placeholder={lang === 'ru' ? 'Банк (например, Сбер)' : 'Bank (e.g. Sber)'} 
+                    className="tg-input" 
+                    style={{ flex: 1, fontSize: '13px', padding: '10px' }} 
+                    value={item.label} 
+                    onChange={(e) => {
+                      const updated = [...tempCards];
+                      updated[idx].label = e.target.value;
+                      setTempCards(updated);
+                    }} 
+                  />
+                  <input 
+                    type="text" 
+                    placeholder={lang === 'ru' ? 'Номер карты' : 'Card number'} 
+                    className="tg-input" 
+                    style={{ flex: 2, fontSize: '13px', padding: '10px' }} 
+                    value={item.card} 
+                    onChange={(e) => {
+                      const updated = [...tempCards];
+                      updated[idx].card = e.target.value;
+                      setTempCards(updated);
+                    }} 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setTempCards(tempCards.filter(c => c.id !== item.id));
+                    }}
+                    style={{ 
+                      background: 'rgba(233,92,92,0.12)', border: 'none', borderRadius: '8px', 
+                      width: '36px', height: '36px', display: 'flex', alignItems: 'center', 
+                      justifyContent: 'center', color: '#ff4d4d', cursor: 'pointer', fontSize: '16px' 
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              
+              {tempCards.length < 5 && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ 
+                    padding: '8px 12px', fontSize: '12.5px', fontWeight: 600, 
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    marginTop: '4px', borderStyle: 'dashed'
+                  }}
+                  onClick={() => {
+                    setTempCards([...tempCards, { id: 'card_' + Date.now(), label: '', card: '' }]);
+                  }}
+                >
+                  ＋ {lang === 'ru' ? 'Добавить банковскую карту' : 'Add Bank Card'}
+                </button>
+              )}
             </div>
+          </div>
+
+          {/* TON Wallet Connection (Middle) */}
+          <div className="bottom-sheet-form-group" style={{ borderTop: '1px solid var(--tg-border)', paddingTop: '14px', marginTop: '6px' }}>
+            <label className="bottom-sheet-label">💎 {lang === 'ru' ? 'TON кошелек' : 'TON Wallet'}</label>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <input 
+                type="text" 
+                className="tg-input" 
+                placeholder="UQ..." 
+                value={tempTonVal} 
+                onChange={(e) => setTempTonVal(e.target.value)} 
+                style={{ flex: 1 }} 
+              />
+              {tempTonVal ? (
+                <button 
+                  type="button" 
+                  className="btn-secondary" 
+                  style={{ 
+                    width: 'auto', padding: '0 16px', whiteSpace: 'nowrap', 
+                    fontSize: '12.5px', fontWeight: 600, color: 'var(--tg-hint)',
+                    background: 'rgba(255,255,255,0.03)'
+                  }} 
+                  onClick={async () => {
+                    setTempTonVal('');
+                    if (tonConnectUI && tonConnectUI.connected) {
+                      await tonConnectUI.disconnect();
+                    }
+                    showAlert(lang === 'ru' ? '✓ TON кошелек отключен' : '✓ TON Wallet disconnected');
+                  }}
+                >
+                  Disconnect wallet
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  className="btn-primary" 
+                  style={{ 
+                    width: 'auto', padding: '0 16px', whiteSpace: 'nowrap', 
+                    fontSize: '12.5px', background: 'var(--tg-accent)' 
+                  }} 
+                  onClick={handleConnectWallet}
+                >
+                  Connect Wallet
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* USDT Wallets (Bottom) */}
+          <div className="bottom-sheet-form-group" style={{ borderTop: '1px solid var(--tg-border)', paddingTop: '14px', marginTop: '6px' }}>
+            <label className="bottom-sheet-label">USDT TRC20</label>
+            <input 
+              type="text" 
+              className="tg-input" 
+              placeholder={lang === 'ru' ? 'Адрес кошелька USDT TRC20' : 'USDT TRC20 Wallet Address'} 
+              value={tempUsdtTrc20} 
+              onChange={(e) => setTempUsdtTrc20(e.target.value)} 
+              style={{ marginTop: '4px' }}
+            />
           </div>
           
           <div className="bottom-sheet-form-group">
-            <label className="bottom-sheet-label">{lang === 'ru' ? 'Основная карта P2P' : 'Default P2P Card'}</label>
-            <input type="text" className="tg-input" placeholder="Visa 4321-..." value={tempP2pVal} onChange={(e) => setTempP2pVal(e.target.value)} />
+            <label className="bottom-sheet-label">USDT BEP20</label>
+            <input 
+              type="text" 
+              className="tg-input" 
+              placeholder={lang === 'ru' ? 'Адрес кошелька USDT BEP20' : 'USDT BEP20 Wallet Address'} 
+              value={tempUsdtBep20} 
+              onChange={(e) => setTempUsdtBep20(e.target.value)} 
+              style={{ marginTop: '4px' }}
+            />
           </div>
-
-          {isCreatorPremium ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', borderTop: '1px solid var(--tg-border)', paddingTop: '14px' }}>
-              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 800, color: 'var(--tg-text)' }}>
-                👑 {lang === 'ru' ? 'Дополнительные карты P2P' : 'Additional P2P Cards'} ({tempCardsList.length})
-              </h4>
-              
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {tempCardsList.map((item) => (
-                  <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--tg-secondary-bg)', padding: '8px 12px', borderRadius: '8px', fontSize: '12px' }}>
-                    <span><strong>{item.label}:</strong> {item.card}</span>
-                    <button type="button" onClick={() => setTempCardsList(tempCardsList.filter(c => c.id !== item.id))} style={{ background: 'none', border: 'none', color: '#ff4d4d', cursor: 'pointer', fontSize: '14px' }}>
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <input type="text" placeholder={lang === 'ru' ? 'Банк' : 'Bank'} className="tg-input" style={{ flex: 1, fontSize: '12px', padding: '6px' }} value={newP2pLabel} onChange={(e) => setNewP2pLabel(e.target.value)} />
-                <input type="text" placeholder={lang === 'ru' ? 'Карта' : 'Card'} className="tg-input" style={{ flex: 2, fontSize: '12px', padding: '6px' }} value={newP2pCard} onChange={(e) => setNewP2pCard(e.target.value)} />
-                <button type="button" className="btn-primary" style={{ width: 'auto', padding: '0 12px', fontSize: '12px' }} onClick={() => {
-                  if (newP2pLabel && newP2pCard) {
-                    setTempCardsList([...tempCardsList, { id: 'card_' + Date.now(), label: newP2pLabel, card: newP2pCard }]);
-                    setNewP2pLabel('');
-                    setNewP2pCard('');
-                  }
-                }}>
-                  ＋
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: '10px', background: 'rgba(255,215,0,0.08)', border: '1px dashed rgba(255,215,0,0.3)', borderRadius: '8px', textAlign: 'center' }}>
-              <p style={{ fontSize: '11px', fontWeight: 700, color: '#ffd700', margin: 0 }}>👑 Premium: Добавление нескольких карт P2P</p>
-            </div>
-          )}
         </div>
 
         {/* Section 4: Calendar Sync & Schedule */}

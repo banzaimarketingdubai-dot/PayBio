@@ -14,6 +14,8 @@ export interface Creator {
     pending_cover_id?: string;
     calendar_provider?: string;
     ics_url?: string;
+    usdt_trc20?: string;
+    usdt_bep20?: string;
   };
   profile_customization?: {
     store_name?: string;
