@@ -2843,7 +2843,7 @@ export default function Storefront() {
   }, [product, file, bookingDate, bookingTime, buyerTgId]);
 
   const isOwner = creator && Number(buyerTgId) === Number(creator.telegram_id);
-  const showOnboarding = isOwner && productsList.length === 0 && !creator?.profile_customization?.onboarding_completed;
+  const showOnboarding = forceShowOnboarding || (isOwner && productsList.length === 0 && !creator?.profile_customization?.onboarding_completed);
 
   // ─── Render logic ────────────────────────────────────────────
   if (loading) return <LoadingScreen lang={lang} />;
