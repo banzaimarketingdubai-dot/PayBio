@@ -238,6 +238,255 @@ export async function POST(request: Request) {
             text: `❌ Error: ${err.message}`,
           });
         }
+      } else if (data.startsWith('approve_pay_')) {
+        const orderId = data.split('_')[2];
+        try {
+          const order = await db.getOrderById(orderId);
+          if (!order) {
+            await tgApi('sendMessage', { chat_id: chatId, text: '❌ Order not found.' });
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+            return NextResponse.json({ ok: true });
+          }
+
+          // Update order status to PAID
+          await db.updateOrderStatus(orderId, 'PAID');
+
+          // Execute legacy delivery logic
+          const { fulfillOrder } = await import('@/lib/fulfillment');
+          const success = await fulfillOrder(orderId);
+
+          if (success) {
+            // Edit the creator's bot message
+            const oldText = cb.message?.text || cb.message?.caption || '';
+            const newText = oldText + (lang === 'ru' ? '\n\n[ ✅ Оплата подтверждена, товар успешно выдан ]' : '\n\n[ ✅ Approved and Delivered successfully ]');
+            
+            if (cb.message?.document || cb.message?.photo) {
+              await tgApi('editMessageCaption', {
+                chat_id: chatId,
+                message_id: cb.message.message_id,
+                caption: newText,
+                reply_markup: { inline_keyboard: [] }
+              });
+            } else {
+              await tgApi('editMessageText', {
+                chat_id: chatId,
+                message_id: cb.message.message_id,
+                text: newText,
+                reply_markup: { inline_keyboard: [] }
+              });
+            }
+          } else {
+            await tgApi('sendMessage', {
+              chat_id: chatId,
+              text: lang === 'ru' ? '❌ Ошибка при выдаче товара.' : '❌ Failed to deliver product.',
+            });
+          }
+        } catch (err: any) {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: `❌ Error: ${err.message}`,
+          });
+        }
+      } else if (data.startsWith('reject_pay_')) {
+        const orderId = data.split('_')[2];
+        try {
+          const order = await db.getOrderById(orderId);
+          if (!order) {
+            await tgApi('sendMessage', { chat_id: chatId, text: '❌ Order not found.' });
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+            return NextResponse.json({ ok: true });
+          }
+
+          // Update order status to DISPUTE
+          await db.updateOrderStatus(orderId, 'DISPUTE');
+
+          // Resolve buyer username or handle
+          let buyerUsername = '';
+          const buyerTgId = order.buyer_tg_id;
+          try {
+            const buyerUser = await db.getUserByTelegramId(Number(buyerTgId));
+            if (buyerUser && buyerUser.username) {
+              buyerUsername = buyerUser.username;
+            } else {
+              const { getTelegramUser } = await import('@/lib/telegram');
+              const tgUser = await getTelegramUser(buyerTgId);
+              if (tgUser && tgUser.username) {
+                buyerUsername = tgUser.username;
+              }
+            }
+          } catch (e) {
+            console.error('Error resolving buyer username for dispute:', e);
+          }
+
+          const buyerContactStr = buyerUsername ? `@${buyerUsername}` : `ID: ${buyerTgId}`;
+
+          // Reply to Creator with manual resolution instructions
+          const creatorMsg = lang === 'ru'
+            ? `⚠️ *Спор запущен.* Мы не имеем доступа к вашему личному банковскому счету. Пожалуйста, напишите покупателю напрямую, чтобы запросить чек или скриншот: ${buyerContactStr}.`
+            : `⚠️ *Dispute started.* We cannot access your personal bank account. Please message the buyer directly to request a screenshot or payment receipt: ${buyerContactStr}.`;
+
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: creatorMsg,
+            parse_mode: 'Markdown'
+          });
+
+          // Send a polite update to the Buyer via the bot
+          const buyerMsg = lang === 'ru'
+            ? `Автор проверяет ваш платеж вручную. Если возникнут вопросы или потребуется уточнить детали, автор свяжется с вами напрямую.`
+            : `The creator is checking your payment manually. If there are any updates or missing details, they will contact you directly.`;
+
+          await tgApi('sendMessage', {
+            chat_id: buyerTgId,
+            text: buyerMsg
+          });
+
+          // Remove buttons and update creator's message
+          const oldText = cb.message?.text || cb.message?.caption || '';
+          const newText = oldText + (lang === 'ru' ? '\n\n[ ❌ Возникла проблема с оплатой ]' : '\n\n[ ❌ Payment Problem Marked ]');
+          
+          if (cb.message?.document || cb.message?.photo) {
+            await tgApi('editMessageCaption', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              caption: newText,
+              reply_markup: { inline_keyboard: [] }
+            });
+          } else {
+            await tgApi('editMessageText', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              text: newText,
+              reply_markup: { inline_keyboard: [] }
+            });
+          }
+        } catch (err: any) {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: `❌ Error: ${err.message}`,
+          });
+        }
+      } else if (data.startsWith('approve_premium_')) {
+        const orderId = data.split('_')[2];
+        try {
+          const order = await db.getOrderById(orderId);
+          if (!order) {
+            await tgApi('sendMessage', { chat_id: chatId, text: '❌ Order not found.' });
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+            return NextResponse.json({ ok: true });
+          }
+
+          // Update order status to PAID
+          await db.updateOrderStatus(orderId, 'PAID');
+
+          // Activate Premium for the buyer
+          const buyer = await db.getUserByTelegramId(order.buyer_tg_id);
+          if (buyer) {
+            await db.activatePremium(buyer.id, 30);
+            
+            // Notify buyer
+            const buyerMsg = lang === 'ru'
+              ? '👑 *Поздравляем! Ваша подписка PayBio Premium успешно активирована на 30 дней.* Все ограничения сняты!'
+              : '👑 *Congratulations! Your PayBio Premium subscription has been successfully activated for 30 days.* All limits are removed!';
+            await tgApi('sendMessage', {
+              chat_id: order.buyer_tg_id,
+              text: buyerMsg,
+              parse_mode: 'Markdown'
+            });
+
+            // Process referral commission
+            try {
+              const res = await db.processPremiumCommission(order.buyer_tg_id, 10.00, orderId);
+              if (res && res.partnerTelegramId) {
+                if (res.upgradedToTier2) {
+                  const partnerMsg = lang === 'ru'
+                    ? `🎉 *Поздравляем!* Вы привлекли 50 активных рефералов и навсегда переведены на *Тариф 2 (30% пожизненная комиссия)*!`
+                    : `🎉 *Congratulations!* You have reached 50 active referrals and are permanently upgraded to *Tier 2 (30% Lifetime Commission)*!`;
+                  await tgApi('sendMessage', {
+                    chat_id: res.partnerTelegramId,
+                    text: partnerMsg,
+                    parse_mode: 'Markdown'
+                  });
+                }
+              }
+            } catch (errCommission) {
+              console.error('Error processing premium commission:', errCommission);
+            }
+          }
+
+          // Edit admin's message
+          const oldText = cb.message?.text || cb.message?.caption || '';
+          const newText = oldText + (lang === 'ru' ? '\n\n[ ✅ Одобрено. Premium подписка активирована ]' : '\n\n[ ✅ Approved. Premium granted ]');
+          
+          if (cb.message?.document || cb.message?.photo) {
+            await tgApi('editMessageCaption', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              caption: newText,
+              reply_markup: { inline_keyboard: [] }
+            });
+          } else {
+            await tgApi('editMessageText', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              text: newText,
+              reply_markup: { inline_keyboard: [] }
+            });
+          }
+        } catch (err: any) {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: `❌ Error: ${err.message}`,
+          });
+        }
+      } else if (data.startsWith('reject_premium_')) {
+        const orderId = data.split('_')[2];
+        try {
+          const order = await db.getOrderById(orderId);
+          if (!order) {
+            await tgApi('sendMessage', { chat_id: chatId, text: '❌ Order not found.' });
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+            return NextResponse.json({ ok: true });
+          }
+
+          // Update order status to DISPUTE
+          await db.updateOrderStatus(orderId, 'DISPUTE');
+
+          // Notify buyer
+          const buyerMsg = lang === 'ru'
+            ? '❌ *Оплата подписки Premium не подтверждена.* Если произошла ошибка, пожалуйста, обратитесь в поддержку.'
+            : '❌ *Premium payment confirmation was rejected.* If this is an error, please contact support.';
+          await tgApi('sendMessage', {
+            chat_id: order.buyer_tg_id,
+            text: buyerMsg,
+            parse_mode: 'Markdown'
+          });
+
+          // Edit admin's message
+          const oldText = cb.message?.text || cb.message?.caption || '';
+          const newText = oldText + (lang === 'ru' ? '\n\n[ ❌ Отклонено. Оплата не подтверждена ]' : '\n\n[ ❌ Rejected. Payment unconfirmed ]');
+          
+          if (cb.message?.document || cb.message?.photo) {
+            await tgApi('editMessageCaption', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              caption: newText,
+              reply_markup: { inline_keyboard: [] }
+            });
+          } else {
+            await tgApi('editMessageText', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              text: newText,
+              reply_markup: { inline_keyboard: [] }
+            });
+          }
+        } catch (err: any) {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: `❌ Error: ${err.message}`,
+          });
+        }
       }
 
       await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
@@ -277,6 +526,25 @@ export async function POST(request: Request) {
             subscription_status: isSubscription ? 'active' : 'none'
           };
           await db.updateUserPaymentDetails(premiumUserId, updatedDetails);
+
+          // Process referral commission
+          try {
+            const res = await db.processPremiumCommission(user.telegram_id, 10.00, `stars_${Date.now()}`);
+            if (res && res.partnerTelegramId) {
+              if (res.upgradedToTier2) {
+                const partnerMsg = lang === 'ru'
+                  ? `🎉 *Поздравляем!* Вы привлекли 50 активных рефералов и навсегда переведены на *Тариф 2 (30% пожизненная комиссия)*!`
+                  : `🎉 *Congratulations!* You have reached 50 active referrals and are permanently upgraded to *Tier 2 (30% Lifetime Commission)*!`;
+                await tgApi('sendMessage', {
+                  chat_id: res.partnerTelegramId,
+                  text: partnerMsg,
+                  parse_mode: 'Markdown'
+                });
+              }
+            }
+          } catch (errCommission) {
+            console.error('Error processing premium Stars commission:', errCommission);
+          }
         }
 
         await tgApi('sendMessage', {
@@ -526,6 +794,12 @@ export async function POST(request: Request) {
 
     // 2. Handle commands
     if (text?.startsWith('/start')) {
+      const parts = text.split(' ');
+      if (parts.length > 1 && parts[1].startsWith('ref_')) {
+        const partnerRef = parts[1].substring(4);
+        await db.attributeReferral(userId, partnerRef);
+      }
+
       const getMe = await tgApi('getMe', {});
       const botUser = getMe?.result?.username || 'PaybioBot';
 

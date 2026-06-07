@@ -8,7 +8,7 @@ export interface Creator {
     ton?: string;
     p2p?: string;
     ton_list?: { id: string; label: string; address: string }[];
-    p2p_list?: { id: string; label: string; card: string }[];
+    p2p_list?: { id: string; label: string; card: string; qr?: string }[];
     pending_file_id?: string;
     pending_file_name?: string;
     pending_cover_id?: string;
@@ -16,6 +16,7 @@ export interface Creator {
     ics_url?: string;
     usdt_trc20?: string;
     usdt_bep20?: string;
+    other?: string;
   };
   profile_customization?: {
     store_name?: string;
@@ -48,6 +49,7 @@ export interface Product {
   cover_url?: string;
   creator?: Creator;
   product_type?: string;
+  sub_type?: string | null;
   sold_count?: number;
   has_bought?: boolean;
 }

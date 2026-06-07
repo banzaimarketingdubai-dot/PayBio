@@ -27,6 +27,7 @@ const ReviewsDashboard = dynamic(() => import('@/components/ReviewsDashboard'), 
 });
 const PremiumFlow = dynamic(() => import('@/components/PremiumFlow'), { ssr: false });
 const OnboardingScreen = dynamic(() => import('@/components/OnboardingScreen'), { ssr: false });
+const PartnerDashboard = dynamic(() => import('@/components/PartnerDashboard'), { ssr: false });
 
 
 // Emojis for mock product cover styles (used as fallback)
@@ -50,16 +51,16 @@ interface ProductListScreenProps {
   setStoreBanner: (banner: string) => void;
   socialLinks: { youtube?: string; instagram?: string; tiktok?: string; vk?: string; max?: string; };
   setSocialLinks: (links: any) => void;
-  onAddProduct: (title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string) => Promise<boolean>;
+  onAddProduct: (title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<boolean>;
   onOpenPremium: () => void;
   lang: 'en' | 'ru';
   setLang: (lang: 'en' | 'ru') => void;
   isOwner: boolean;
   onDeleteProduct: (id: string) => Promise<boolean>;
-  onUpdateProduct: (id: string, title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string) => Promise<boolean>;
+  onUpdateProduct: (id: string, title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<boolean>;
   
-  currentScreen: 'CATALOG' | 'SETTINGS';
-  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS') => void;
+  currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER';
+  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER') => void;
   starredIds: string[];
   setStarredIds: (ids: string[]) => void;
   sectionsList: string[];
@@ -68,18 +69,20 @@ interface ProductListScreenProps {
   setSectionOrder: (order: string[]) => void;
   productSections: Record<string, string>;
   setProductSections: (sections: Record<string, string>) => void;
-  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string, usdtTrc20?: string, usdtBep20?: string) => Promise<void>;
+  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string, usdtTrc20?: string, usdtBep20?: string, other?: string) => Promise<void>;
   busySlots: { start: string; end: string }[];
   dbBookings: any[];
   fetchBusySlotsForProduct: (prodId: string) => Promise<void>;
   buyerTgId: number;
   onTriggerOnboarding?: () => void;
+  setCreator: (creator: Creator | null | ((prev: Creator | null) => Creator | null)) => void;
 }
 
 const ProductListScreen = memo(function ProductListScreen({
   products,
   onSelect,
   creator,
+  setCreator,
   storeName,
   setStoreName,
   storeDescription,
@@ -141,6 +144,7 @@ const ProductListScreen = memo(function ProductListScreen({
     setProdPriceStars(p.price_stars ? String(p.price_stars) : '');
     setProdCoverUrl(p.cover_url || '');
     setProdType(p.product_type || 'DIGITAL');
+    setProdSubType(p.sub_type || '');
     setSelectedProductSection(productSections[p.id] || p.product_type || 'DIGITAL');
 
     let urlVal = p.content_url || '';
@@ -181,6 +185,7 @@ const ProductListScreen = memo(function ProductListScreen({
     setProdCoverUrl('');
     setAiPrompt('');
     setProdType(defaultSection === 'BOOKING' ? 'BOOKING' : defaultSection === 'VOUCHER' ? 'VOUCHER' : 'DIGITAL');
+    setProdSubType('');
     setSelectedProductSection(defaultSection);
     setCreationStep('TYPE_SELECT');
     setIsAddProductOpen(true);
@@ -201,6 +206,7 @@ const ProductListScreen = memo(function ProductListScreen({
   const [prodUrl, setProdUrl] = useState('');
   const [prodCalendarIcsUrl, setProdCalendarIcsUrl] = useState('');
   const [prodMaxQuantity, setProdMaxQuantity] = useState('');
+  const [prodSubType, setProdSubType] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   // Product cover visual state
@@ -777,7 +783,8 @@ const ProductListScreen = memo(function ProductListScreen({
           finalContentUrl,
           prodCoverUrl || undefined,
           prodType,
-          selectedProductSection
+          selectedProductSection,
+          prodSubType || undefined
         );
       } else {
         success = await onAddProduct(
@@ -788,7 +795,8 @@ const ProductListScreen = memo(function ProductListScreen({
           finalContentUrl || undefined, 
           prodCoverUrl || undefined,
           prodType,
-          selectedProductSection
+          selectedProductSection,
+          prodSubType || undefined
         );
       }
 
@@ -800,6 +808,7 @@ const ProductListScreen = memo(function ProductListScreen({
         setProdUrl('');
         setProdCalendarIcsUrl('');
         setProdMaxQuantity('');
+        setProdSubType('');
         setProdCoverUrl('');
         setAiPrompt('');
         setProdType('DIGITAL');
@@ -831,6 +840,7 @@ const ProductListScreen = memo(function ProductListScreen({
                 ...pc,
                 avatar_url: cropped
               };
+              setCreator((prev) => prev ? { ...prev, profile_customization: updatedCustom } : null);
               await fetch('/api/store/profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -866,6 +876,7 @@ const ProductListScreen = memo(function ProductListScreen({
                 ...pc,
                 banner_url: cropped
               };
+              setCreator((prev) => prev ? { ...prev, profile_customization: updatedCustom } : null);
               await fetch('/api/store/profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1017,10 +1028,60 @@ setIsGeneratingCover(false);
     );
   }
 
+  if (currentScreen === 'PARTNER') {
+    return (
+      <PartnerDashboard
+        creator={creator}
+        setCreator={setCreator}
+        setCurrentScreen={setCurrentScreen}
+        lang={lang}
+        t={t}
+      />
+    );
+  }
+
   // Normal Storefront View
   return (
     <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px))' }} className="animate-fade-in">
       
+      {isOwner && !isCreatorPremium && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)',
+          color: '#fff',
+          padding: '14px 16px',
+          textAlign: 'center',
+          fontSize: '13px',
+          fontWeight: 600,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }}>
+          <div>
+            ⚠️ {lang === 'ru' 
+              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
+              : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+          </div>
+          <button 
+            onClick={onOpenPremium}
+            style={{
+              background: '#fff',
+              color: '#FF5E62',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+            }}
+          >
+            👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
+          </button>
+        </div>
+      )}
+
       {/* ─── BANNER ─── */}
       <div 
         className="store-banner animate-fade-in" 
@@ -1061,6 +1122,18 @@ setIsGeneratingCover(false);
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             {isOwner && (
               <>
+                <button 
+                  onClick={() => setCurrentScreen('PARTNER')}
+                  style={{
+                    background: 'rgba(255,255,255,0.07)', border: 'none', borderRadius: '50%',
+                    width: '28px', height: '28px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', cursor: 'pointer', fontSize: '13px',
+                    marginRight: '4px'
+                  }}
+                  title={lang === 'ru' ? 'Кабинет партнера' : 'Partner Dashboard'}
+                >
+                  🤝
+                </button>
                 <button 
                   onClick={() => setCurrentScreen('SETTINGS')}
                   style={{
@@ -1709,6 +1782,38 @@ setIsGeneratingCover(false);
                 </div>
               </div>
 
+              {prodType === 'VOUCHER' && (
+                <>
+                  <div className="bottom-sheet-form-group animate-fade-in">
+                    <label className="bottom-sheet-label">
+                      {lang === 'ru' ? 'Тип билета/товара' : 'Ticket/Product Type'}
+                    </label>
+                    <select
+                      className="tg-input"
+                      value={prodSubType}
+                      onChange={(e) => setProdSubType(e.target.value)}
+                      style={{ background: 'var(--tg-bg)', color: 'var(--tg-text)' }}
+                    >
+                      <option value="">{lang === 'ru' ? '🎟️ Электронный билет / Ваучер' : '🎟️ Digital Ticket / Voucher'}</option>
+                      <option value="PHYSICAL">{lang === 'ru' ? '📦 Физический товар (доставка)' : '📦 Physical Good (requires shipping)'}</option>
+                    </select>
+                  </div>
+
+                  <div className="bottom-sheet-form-group animate-fade-in">
+                    <label className="bottom-sheet-label">
+                      {lang === 'ru' ? 'Лимит количества' : 'Max Quantity Limit'}
+                    </label>
+                    <input 
+                      type="number" 
+                      className="tg-input" 
+                      placeholder="e.g. 50"
+                      value={prodMaxQuantity} 
+                      onChange={(e) => setProdMaxQuantity(e.target.value)} 
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">
                   {prodType === 'BOOKING' 
@@ -1740,20 +1845,7 @@ setIsGeneratingCover(false);
                 </div>
               )}
 
-              {prodType === 'VOUCHER' && (
-                <div className="bottom-sheet-form-group animate-fade-in">
-                  <label className="bottom-sheet-label">
-                    {lang === 'ru' ? 'Лимит билетов' : 'Max Ticket Limit'}
-                  </label>
-                  <input 
-                    type="number" 
-                    className="tg-input" 
-                    placeholder="e.g. 50"
-                    value={prodMaxQuantity} 
-                    onChange={(e) => setProdMaxQuantity(e.target.value)} 
-                  />
-                </div>
-              )}
+
 
               <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">{t.productCover}</label>
@@ -1824,11 +1916,27 @@ setIsGeneratingCover(false);
                 )}
               </div>
 
-              <button type="submit" className="btn-primary" style={{ marginTop: '14px' }} disabled={isAdding}>
-                {isAdding 
-                  ? (editingProduct ? 'Saving...' : t.addingProduct) 
-                  : (editingProduct ? 'Save Changes ✓' : t.addProductBtn)
-                }
+              <button 
+                type="submit" 
+                className="btn-primary" 
+                style={{ 
+                  marginTop: '14px',
+                  background: isAdding ? 'var(--tg-hint)' : 'var(--tg-accent)',
+                  cursor: isAdding ? 'not-allowed' : 'pointer'
+                }} 
+                disabled={isAdding}
+              >
+                {isAdding ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <span className="spinner-mini" style={{
+                      width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite'
+                    }} />
+                    {editingProduct ? (lang === 'ru' ? 'Сохранение...' : 'Saving...') : (lang === 'ru' ? 'Добавление...' : 'Adding...')}
+                  </span>
+                ) : (
+                  editingProduct ? (lang === 'ru' ? 'Сохранить изменения ✓' : 'Save Changes ✓') : t.addProductBtn
+                )}
               </button>
             </form>
           )}
@@ -1955,13 +2063,14 @@ export default function Storefront() {
   const [sectionsList, setSectionsList] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [sectionOrder, setSectionOrder] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [productSections, setProductSections] = useState<Record<string, string>>({});
-  const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS'>('CATALOG');
+  const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS' | 'PARTNER'>('CATALOG');
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
 
   // Premium modal state
   const [isPremiumOpen, setIsPremiumOpen] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isProductReviewsOpen, setIsProductReviewsOpen] = useState(false);
+  const [adminWallets, setAdminWallets] = useState<any>(null);
 
   // Stars purchase assistant states
   const [isStarsHelpOpen, setIsStarsHelpOpen] = useState(false);
@@ -1974,12 +2083,27 @@ export default function Storefront() {
 
   // Checkout state
   const [paymentMethod, setPaymentMethod] = useState<'stars' | 'ton' | 'p2p' | null>(null);
+  const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
+  const [checkoutMethod, setCheckoutMethod] = useState<'card' | 'stars' | 'crypto' | 'other' | null>(null);
+  const [cryptoSubMethod, setCryptoSubMethod] = useState<'ton' | 'usdt_trc20' | 'usdt_bep20'>('ton');
+  const [checkoutP2pIdx, setCheckoutP2pIdx] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [verifyStep, setVerifyStep] = useState(0);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [extractedData, setExtractedData] = useState<any>(null);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+
+  // Buyer shipping form states
+  const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
+  const [showDeliveryForm, setShowDeliveryForm] = useState(false);
+  const [shippingSubmitted, setShippingSubmitted] = useState(false);
+  const [isSubmittingShipping, setIsSubmittingShipping] = useState(false);
+  const [shipFullName, setShipFullName] = useState('');
+  const [shipPhone, setShipPhone] = useState('');
+  const [shipMethod, setShipMethod] = useState('SDEK');
+  const [shipAddress, setShipAddress] = useState('');
 
   // Booking states
   const [bookingDate, setBookingDate] = useState('');
@@ -1997,6 +2121,14 @@ export default function Storefront() {
 
   const handleSelectProduct = useCallback((id: string | null) => {
     setProductId(id);
+    setIsPaymentSheetOpen(false);
+    setCheckoutMethod(null);
+    setFile(null);
+    setVerifyError(null);
+    setVerifySuccess(false);
+    setExtractedData(null);
+    setVerifying(false);
+    setActiveOrderId(null);
     if (typeof window !== 'undefined') {
       if (id) {
         localStorage.setItem('paybio_current_product_id', id);
@@ -2213,6 +2345,54 @@ export default function Storefront() {
       }
     });
   }, []);
+
+  // Fetch administrator's payment wallets on mount for Premium checkout
+  useEffect(() => {
+    fetch('/api/admin/wallets')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.wallets) {
+          setAdminWallets(data.wallets);
+        }
+      })
+      .catch(err => console.error('Failed to pre-fetch admin wallets:', err));
+  }, []);
+
+  const handleBuyPremium = useCallback(() => {
+    setIsPremiumOpen(false);
+    
+    // Construct virtual premium product configuration
+    const premiumProd: Product = {
+      id: 'premium_virtual',
+      creator_id: 'admin_system',
+      title: lang === 'ru' ? 'Подписка PayBio Premium' : 'PayBio Premium Subscription',
+      description: lang === 'ru' ? 'Разблокировка всех функций витрины на 30 дней.' : 'Unlock all storefront tools for 30 days.',
+      price_fiat: 10.00,
+      price_stars: 500,
+      content_url: 'PREMIUM_SUBSCRIPTION',
+      cover_url: '',
+      product_type: 'DIGITAL',
+      creator: {
+        id: 'admin_system',
+        telegram_id: 999999999,
+        username: 'PayBioAdmin',
+        is_premium: true,
+        payment_details: adminWallets || { ton: '', p2p: '', p2p_list: [], usdt_trc20: '', usdt_bep20: '', other: '' }
+      }
+    };
+    
+    setProduct(premiumProd);
+    setBookingDate('');
+    setBookingTime('');
+    setIsPaymentSheetOpen(true);
+    setCheckoutMethod(null);
+    setFile(null);
+    setVerifyError(null);
+    setVerifySuccess(false);
+    setExtractedData(null);
+    setVerifying(false);
+    setActiveOrderId(null);
+  }, [adminWallets, lang]);
 
   const fetchBusySlotsForProduct = useCallback(async (prodId: string) => {
     setIsLoadingBusySlots(true);
@@ -2446,16 +2626,21 @@ export default function Storefront() {
       });
       const data = await res.json();
       if (res.ok && data.success) {
+        const isDeactivated = !!data.deactivated;
         setPromoCodeStatus({
           type: 'success',
-          message: lang === 'ru'
-            ? `✓ Промокод применен! Активировано ${data.duration_days} дней Premium.`
-            : `✓ Promo code applied! Activated ${data.duration_days} days of Premium.`,
+          message: isDeactivated
+            ? (lang === 'ru' ? '✓ Премиум-подписка деактивирована.' : '✓ Premium subscription deactivated.')
+            : (lang === 'ru'
+                ? `✓ Промокод применен! Активировано ${data.duration_days} дней Premium.`
+                : `✓ Promo code applied! Activated ${data.duration_days} days of Premium.`),
         });
         showAlert(
-          lang === 'ru'
-            ? `🎉 Промокод применен! Активировано ${data.duration_days} дней Premium.`
-            : `🎉 Promo code applied! Activated ${data.duration_days} days of Premium.`
+          isDeactivated
+            ? (lang === 'ru' ? '🎉 Премиум-подписка отключена.' : '🎉 Premium subscription deactivated.')
+            : (lang === 'ru'
+                ? `🎉 Промокод применен! Активировано ${data.duration_days} дней Premium.`
+                : `🎉 Promo code applied! Activated ${data.duration_days} days of Premium.`)
         );
         setPromoCodeInput('');
         await refreshCreatorData();
@@ -2516,7 +2701,9 @@ export default function Storefront() {
     calendarProvider: string,
     icsUrl: string,
     usdtTrc20?: string,
-    usdtBep20?: string
+    usdtBep20?: string,
+    other?: string,
+    adminPaymentDetails?: any
   ) => {
     if (!creator) return;
     try {
@@ -2540,7 +2727,8 @@ export default function Storefront() {
         calendar_provider: calendarProvider,
         ics_url: icsUrl,
         usdt_trc20: usdtTrc20 || '',
-        usdt_bep20: usdtBep20 || ''
+        usdt_bep20: usdtBep20 || '',
+        other: other || ''
       };
       
       const res = await fetch('/api/store/profile', {
@@ -2549,7 +2737,8 @@ export default function Storefront() {
         body: JSON.stringify({
           user_id: creator.id,
           customization: newCustomization,
-          payment_details: newPaymentDetails
+          payment_details: newPaymentDetails,
+          admin_payment_details: adminPaymentDetails
         })
       });
       const data = await res.json();
@@ -2579,7 +2768,8 @@ export default function Storefront() {
     contentUrl?: string,
     coverUrl?: string,
     productType = 'DIGITAL',
-    section = 'DIGITAL'
+    section = 'DIGITAL',
+    subType: string | null = null
   ): Promise<boolean> => {
     // If creator not loaded yet — try to fetch it now using resolved TG ID
     let activeCreator = creator;
@@ -2609,7 +2799,8 @@ export default function Storefront() {
           price_stars: priceStars,
           content_url: contentUrl,
           cover_url: coverUrl,
-          product_type: productType
+          product_type: productType,
+          sub_type: subType
         }),
       });
       const data = await res.json();
@@ -2673,21 +2864,23 @@ export default function Storefront() {
     contentUrl?: string,
     coverUrl?: string,
     productType?: string,
-    section = 'DIGITAL'
+    section = 'DIGITAL',
+    subType: string | null = null
   ): Promise<boolean> => {
     try {
       const res = await fetch('/api/store/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          product_id: prodId,
-          title,
+          id: prodId,
+          title: title,
           description,
           price_fiat: priceFiat,
           price_stars: priceStars,
           content_url: contentUrl,
           cover_url: coverUrl,
-          product_type: productType
+          product_type: productType,
+          sub_type: subType
         })
       });
       const data = await res.json();
@@ -2721,6 +2914,11 @@ export default function Storefront() {
   // Stars payment
   const handleStarsPayment = useCallback(async () => {
     if (!product) return;
+    if (product.id === 'premium_virtual') {
+      setIsPaymentSheetOpen(false);
+      handleBuyPremiumWithStars(false);
+      return;
+    }
     if (product.product_type === 'BOOKING') {
       if (!bookingDate || !bookingTime) {
         showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
@@ -2740,11 +2938,19 @@ export default function Storefront() {
       });
       const data = await res.json();
       if (!res.ok) { showAlert(data.error || 'Failed to create invoice.'); return; }
-
+      const orderId = data.order_id;
       const WebApp = await getTWA();
       WebApp.openInvoice(data.invoice_link, (status: string) => {
-        if (status === 'paid') showAlert(t.fileDelivered);
-        else showAlert(`Payment status: ${status}`);
+        if (status === 'paid') {
+          if (product.sub_type === 'PHYSICAL') {
+            setPaidOrderId(orderId);
+            setShowDeliveryForm(true);
+          } else {
+            showAlert(t.fileDelivered);
+          }
+        } else {
+          showAlert(`Payment status: ${status}`);
+        }
       });
     } catch (e: any) {
       showAlert('Error initiating payment.');
@@ -2758,16 +2964,17 @@ export default function Storefront() {
       ? `https://t.me/${creatorUsername}`
       : `tg://user?id=${product.creator?.telegram_id}`;
     
+    const productLink = `https://t.me/PaybioBot/app?startapp=${product.id}`;
     const text = lang === 'ru'
-      ? `Привет! Я хочу купить твой товар: "${product.title}"`
-      : `Hi! I want to buy your product: "${product.title}"`;
+      ? `Привет! Я хочу купить твой товар: "${product.title}"\nСсылка на товар: ${productLink}`
+      : `Hi! I want to buy your product: "${product.title}"\nProduct link: ${productLink}`;
       
     try {
       const WebApp = await getTWA();
       navigator.clipboard.writeText(text).then(() => {
         showAlert(lang === 'ru' 
-          ? 'Сообщение скопировано! Открываем диалог с автором.' 
-          : 'Message copied! Opening chat with the creator.');
+          ? 'Ссылка и сообщение скопированы! Откроется чат с автором — просто вставьте скопированный текст (зажмите поле ввода -> "Вставить" или Ctrl+V) и отправьте.' 
+          : 'Link and message copied! Once the chat opens, paste the copied text (long press the input field -> "Paste" or press Ctrl+V) and send it.');
       }).catch(() => {});
       
       setTimeout(() => {
@@ -2781,10 +2988,52 @@ export default function Storefront() {
     }
   }, [product, lang]);
 
-  // P2P verification
-  const handleVerifyReceipt = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!product || !file) return;
+  // P2P Payment Selection and Claim Handlers
+  const handleSelectPaymentMethod = useCallback(async (method: 'card' | 'crypto') => {
+    if (!product) return;
+    setCheckoutMethod(method);
+    setVerifyError(null);
+    setVerifySuccess(false);
+    setVerifying(false);
+    setActiveOrderId(null);
+
+    if (method === 'card') {
+      setCheckoutP2pIdx(0);
+    } else if (method === 'crypto') {
+      if (product.creator?.payment_details?.ton) setCryptoSubMethod('ton');
+      else if (product.creator?.payment_details?.usdt_trc20) setCryptoSubMethod('usdt_trc20');
+      else if (product.creator?.payment_details?.usdt_bep20) setCryptoSubMethod('usdt_bep20');
+    }
+
+    try {
+      const bookingSlot = product.product_type === 'BOOKING' ? {
+        start: `${bookingDate}T${bookingTime}:00`,
+        end: `${bookingDate}T${bookingTime}:00`
+      } : undefined;
+
+      const res = await fetch('/api/checkout/p2p', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          buyer_tg_id: buyerTgId,
+          booking_slot: bookingSlot,
+          payment_method: method === 'crypto' ? 'crypto' : 'p2p'
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActiveOrderId(data.order_id);
+      } else {
+        setVerifyError(data.error || 'Failed to initialize order.');
+      }
+    } catch (err: any) {
+      setVerifyError(err.message || 'Error initializing order.');
+    }
+  }, [product, bookingDate, bookingTime, buyerTgId]);
+
+  const handleClaimPayment = useCallback(async () => {
+    if (!product) return;
     if (product.product_type === 'BOOKING') {
       if (!bookingDate || !bookingTime) {
         showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
@@ -2795,68 +3044,452 @@ export default function Storefront() {
     setVerifying(true);
     setVerifyError(null);
     setVerifySuccess(false);
-    setExtractedData(null);
-    setVerifyStep(1);
 
-    let orderId = '';
+    let currentOrderId = activeOrderId;
     try {
-      const bookingSlot = product.product_type === 'BOOKING' ? {
-        start: `${bookingDate}T${bookingTime}:00`,
-        end: `${bookingDate}T${bookingTime}:00`
-      } : undefined;
+      if (!currentOrderId) {
+        const bookingSlot = product.product_type === 'BOOKING' ? {
+          start: `${bookingDate}T${bookingTime}:00`,
+          end: `${bookingDate}T${bookingTime}:00`
+        } : undefined;
 
-      const orderRes = await fetch('/api/checkout/stars', {
+        const orderRes = await fetch('/api/checkout/p2p', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product_id: product.id,
+            buyer_tg_id: buyerTgId,
+            booking_slot: bookingSlot,
+            payment_method: checkoutMethod === 'crypto' ? 'crypto' : 'p2p'
+          }),
+        });
+        const orderData = await orderRes.json();
+        if (!orderRes.ok) {
+          throw new Error(orderData.error || 'Failed to initialize order.');
+        }
+        currentOrderId = orderData.order_id;
+        setActiveOrderId(currentOrderId);
+      }
+
+      const res = await fetch('/api/checkout/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot }),
+        body: JSON.stringify({ order_id: currentOrderId }),
       });
-      const orderData = await orderRes.json();
-      orderId = orderData.order_id;
-    } catch {
-      setVerifyError('Failed to initialize order.');
+      const result = await res.json();
+      if (res.ok && result.success) {
+        setVerifySuccess(true);
+        if (product.sub_type === 'PHYSICAL') {
+          setPaidOrderId(currentOrderId);
+          setShowDeliveryForm(true);
+        }
+      } else {
+        throw new Error(result.reason || 'Failed to register payment notification.');
+      }
+    } catch (err: any) {
+      setVerifyError(err.message || 'Processing error.');
+    } finally {
       setVerifying(false);
+    }
+  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang]);
+
+  const handleShippingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!paidOrderId || !shipFullName || !shipPhone || !shipAddress) {
+      showAlert(lang === 'ru' ? 'Пожалуйста, заполните все обязательные поля.' : 'Please fill in all required fields.');
       return;
     }
-
-    setTimeout(() => setVerifyStep(2), 1500);
-    setTimeout(() => setVerifyStep(3), 3000);
-    setTimeout(async () => {
-      setVerifyStep(4);
-      try {
-        const form = new FormData();
-        form.append('order_id', orderId);
-        form.append('file', file);
-        const res = await fetch('/api/checkout/verify', { method: 'POST', body: form });
-        const result = await res.json();
-        if (res.ok && result.success) {
-          setVerifySuccess(true);
-          setExtractedData(result.extracted_data);
-        } else {
-          setVerifyError(result.reason || 'Verification failed. Mismatched amount or edited receipt.');
-        }
-      } catch (err: any) {
-        setVerifyError(err.message || 'Processing error.');
-      } finally {
-        setVerifying(false);
+    setIsSubmittingShipping(true);
+    try {
+      const res = await fetch('/api/vouchers/shipping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: paidOrderId,
+          delivery_data: {
+            fullName: shipFullName,
+            phone: shipPhone,
+            shippingMethod: shipMethod,
+            addressOrBranch: shipAddress
+          }
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setShippingSubmitted(true);
+        setShowDeliveryForm(false);
+        // Clear fields
+        setShipFullName('');
+        setShipPhone('');
+        setShipMethod('SDEK');
+        setShipAddress('');
+      } else {
+        showAlert(data.error || 'Failed to submit shipping details.');
       }
-    }, 4500);
-  }, [product, file, bookingDate, bookingTime, buyerTgId]);
+    } catch (err: any) {
+      showAlert(err.message || 'Error saving shipping details.');
+    } finally {
+      setIsSubmittingShipping(false);
+    }
+  };
 
   const isOwner = creator && Number(buyerTgId) === Number(creator.telegram_id);
   const showOnboarding = forceShowOnboarding || (isOwner && productsList.length === 0 && !creator?.profile_customization?.onboarding_completed);
+
+  const renderReceiptUploadZone = () => {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
+        {!verifying && !verifySuccess && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <button
+              onClick={handleClaimPayment}
+              className="btn-primary"
+              disabled={hasBookingConflict}
+              style={{
+                background: !hasBookingConflict ? 'var(--tg-accent)' : undefined,
+                height: '44px',
+                fontSize: '14px',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>⚡️</span>
+              <span>
+                {lang === 'ru'
+                  ? 'Я оплатил, уведомить автора'
+                  : 'I have paid, notify the creator'}
+              </span>
+            </button>
+
+            {verifyError && (
+              <div style={{
+                padding: '10px 12px',
+                background: 'rgba(233,92,92,0.1)',
+                border: '1px solid rgba(233,92,92,0.2)',
+                borderRadius: '10px',
+                fontSize: '12.5px',
+                color: 'var(--tg-red)',
+              }} className="animate-scale-in">
+                ❌ {verifyError}
+                <button
+                  type="button"
+                  onClick={handleClaimPayment}
+                  style={{ marginLeft: '8px', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '12px' }}
+                >
+                  {lang === 'ru' ? 'Повторить' : 'Retry'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Loading state */}
+        {verifying && (
+          <div style={{
+            padding: '20px 14px',
+            background: 'var(--tg-surface)',
+            borderRadius: '12px',
+            border: '1px solid var(--tg-border)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px'
+          }} className="animate-fade-in">
+            <span className="spinner-mini" style={{
+              width: '24px',
+              height: '24px',
+              border: '2px solid rgba(255,255,255,0.1)',
+              borderTopColor: 'var(--tg-accent)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }} />
+            <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', margin: 0 }}>
+              {lang === 'ru' ? 'Уведомляем автора об оплате...' : 'Notifying the creator...'}
+            </p>
+          </div>
+        )}
+
+        {/* Success / Waiting state */}
+        {verifySuccess && (
+          <div style={{
+            padding: '20px 16px',
+            background: 'rgba(77,202,90,0.08)',
+            border: '1px solid rgba(77,202,90,0.2)',
+            borderRadius: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            alignItems: 'center',
+            textAlign: 'center'
+          }} className="animate-scale-in">
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: 'var(--tg-green)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '18px',
+              color: '#fff'
+            }}>✓</div>
+            <div>
+              <p style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--tg-green)', margin: '0 0 4px 0' }}>
+                {lang === 'ru' ? 'Запрос отправлен автору' : 'Request sent to creator'}
+              </p>
+              <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0, lineHeight: 1.4 }}>
+                {lang === 'ru'
+                  ? 'Как только он проверит баланс, бот пришлет вам товар.'
+                  : 'As soon as they check their balance, the bot will deliver your product.'}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setIsPaymentSheetOpen(false);
+                setCheckoutMethod(null);
+                setFile(null);
+                setVerifySuccess(false);
+                setActiveOrderId(null);
+              }}
+              className="btn-primary"
+              style={{ background: 'var(--tg-green)', height: '38px', fontSize: '13px', borderRadius: '8px', marginTop: '4px', width: '100%' }}
+            >
+              {lang === 'ru' ? 'Закрыть ✓' : 'Close ✓'}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
 
   // ─── Render logic ────────────────────────────────────────────
   if (loading) return <LoadingScreen lang={lang} />;
   if (showOnboarding) {
     return <OnboardingScreen lang={lang} onComplete={handleCompleteOnboarding} />;
   }
+
+  if (showDeliveryForm && product) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'var(--tg-bg)',
+        color: 'var(--tg-text)',
+        padding: '24px 20px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+        justifyContent: 'flex-start',
+        overflowY: 'auto'
+      }} className="animate-fade-in">
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '8px' }}>🚚</div>
+          <h2 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 6px 0' }}>
+            {lang === 'ru' ? 'Детали доставки' : 'Shipping Details'}
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--tg-hint)', margin: 0, lineHeight: 1.4 }}>
+            {lang === 'ru' 
+              ? 'Пожалуйста, заполните форму ниже для доставки вашего товара.' 
+              : 'Please fill in the form below to deliver your item.'}
+          </p>
+        </div>
+
+        <form onSubmit={handleShippingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="bottom-sheet-form-group">
+            <label className="bottom-sheet-label">
+              {lang === 'ru' ? 'ФИО получателя' : 'Recipient Full Name'} *
+            </label>
+            <input
+              type="text"
+              className="tg-input"
+              value={shipFullName}
+              onChange={(e) => setShipFullName(e.target.value)}
+              placeholder={lang === 'ru' ? 'Иванов Иван Иванович' : 'John Doe'}
+              required
+            />
+          </div>
+
+          <div className="bottom-sheet-form-group">
+            <label className="bottom-sheet-label">
+              {lang === 'ru' ? 'Номер телефона' : 'Phone Number'} *
+            </label>
+            <input
+              type="tel"
+              className="tg-input"
+              value={shipPhone}
+              onChange={(e) => setShipPhone(e.target.value)}
+              placeholder="+7 (999) 999-99-99"
+              required
+            />
+          </div>
+
+          <div className="bottom-sheet-form-group">
+            <label className="bottom-sheet-label">
+              {lang === 'ru' ? 'Способ доставки' : 'Shipping Method'} *
+            </label>
+            <select
+              className="tg-input"
+              value={shipMethod}
+              onChange={(e) => setShipMethod(e.target.value)}
+              style={{ background: 'var(--tg-bg)', color: 'var(--tg-text)' }}
+            >
+              <option value="SDEK">{lang === 'ru' ? 'СДЭК (Пункт выдачи / Курьер)' : 'SDEK (Branch / Courier)'}</option>
+              <option value="Russian Post">{lang === 'ru' ? 'Почта России' : 'Russian Post'}</option>
+              <option value="International">{lang === 'ru' ? 'Международная доставка' : 'International Shipping'}</option>
+            </select>
+          </div>
+
+          <div className="bottom-sheet-form-group">
+            <label className="bottom-sheet-label">
+              {lang === 'ru' ? 'Адрес доставки / Пункт выдачи' : 'Shipping Address / Pickup Branch'} *
+            </label>
+            <textarea
+              className="tg-input"
+              value={shipAddress}
+              onChange={(e) => setShipAddress(e.target.value)}
+              placeholder={
+                shipMethod === 'SDEK'
+                  ? (lang === 'ru' ? 'Адрес пункта выдачи СДЭК или домашний адрес' : 'SDEK pickup branch address or home address')
+                  : (lang === 'ru' ? 'Индекс, область, город, улица, дом, квартира' : 'ZIP, region, city, street, house, apt')
+              }
+              rows={3}
+              style={{ resize: 'none' }}
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={isSubmittingShipping}
+            style={{
+              marginTop: '10px',
+              background: isSubmittingShipping ? 'var(--tg-hint)' : 'var(--tg-green)',
+              cursor: isSubmittingShipping ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {isSubmittingShipping ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <span className="spinner-mini" style={{
+                  width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite'
+                }} />
+                {lang === 'ru' ? 'Сохранение...' : 'Saving...'}
+              </span>
+            ) : (
+              lang === 'ru' ? 'Подтвердить детали доставки ✓' : 'Confirm Shipping Details ✓'
+            )}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
+  if (shippingSubmitted) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'var(--tg-bg)',
+        color: 'var(--tg-text)',
+        padding: '40px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center'
+      }} className="animate-scale-in">
+        <div style={{
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(77,202,90,0.1)', border: '2px solid var(--tg-green)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '40px', marginBottom: '24px', color: 'var(--tg-green)'
+        }}>
+          ✓
+        </div>
+        <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
+          {lang === 'ru' ? 'Доставка оформлена!' : 'Delivery Scheduled!'}
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
+          {lang === 'ru' 
+            ? 'Данные доставки успешно отправлены продавцу. Вы получите уведомление с трек-номером после отправки.'
+            : 'Your delivery coordinates have been sent. You will be notified with a tracking number once shipped.'}
+        </p>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            setShippingSubmitted(false);
+            setPaidOrderId(null);
+            handleSelectProduct(null);
+          }}
+          style={{ width: '100%', maxWidth: '240px' }}
+        >
+          {lang === 'ru' ? 'Вернуться в магазин' : 'Back to Shop'}
+        </button>
+      </div>
+    );
+  }
   if (!productId) {
+    const isCreatorPremium = !!creator?.is_premium;
+    if (!isCreatorPremium && !isOwner) {
+      return (
+        <div style={{
+          minHeight: '100svh',
+          background: 'var(--tg-bg)',
+          color: 'var(--tg-text)',
+          padding: '40px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center'
+        }} className="animate-scale-in">
+          <div style={{
+            width: '80px', height: '80px', borderRadius: '50%',
+            background: 'rgba(239,92,92,0.1)', border: '2px solid var(--tg-red, #e95c5c)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '40px', marginBottom: '24px', color: 'var(--tg-red, #e95c5c)'
+          }}>
+            🔒
+          </div>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
+            {lang === 'ru' ? 'Магазин временно приостановлен' : 'Store Temporarily Inactive'}
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
+            {lang === 'ru' 
+              ? 'Этот магазин временно недоступен, так как срок действия подписки владельца истек.'
+              : 'This store is temporarily unavailable because the owner\'s subscription has expired.'}
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                const WebApp = (window as any).Telegram?.WebApp;
+                if (WebApp?.openTelegramLink) {
+                  WebApp.openTelegramLink('https://t.me/PaybioBot');
+                } else {
+                  window.open('https://t.me/PaybioBot', '_blank');
+                }
+              }
+            }}
+            style={{ width: '100%', maxWidth: '240px', background: 'var(--tg-accent)' }}
+          >
+            {lang === 'ru' ? 'Создать свой ИИ-магазин ⚡️' : 'Create Your AI Store ⚡️'}
+          </button>
+        </div>
+      );
+    }
+
     return (
       <>
         <ProductListScreen 
           products={productsList} 
           onSelect={handleSelectProduct} 
           creator={creator}
+          setCreator={setCreator}
           storeName={storeName}
           setStoreName={setStoreName}
           storeDescription={storeDescription}
@@ -2911,6 +3544,7 @@ export default function Storefront() {
           onApplyPromoCode={handleApplyPromoCode}
           promoCodeStatus={promoCodeStatus}
           isApplyingPromo={isApplyingPromo}
+          onBuyPremium={handleBuyPremium}
         />
       </>
     );
@@ -2921,6 +3555,55 @@ export default function Storefront() {
   );
 
   const isStorePremium = product.creator?.is_premium;
+
+  if (!isStorePremium && !isOwner) {
+    return (
+      <div style={{
+        minHeight: '100svh',
+        background: 'var(--tg-bg)',
+        color: 'var(--tg-text)',
+        padding: '40px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center'
+      }} className="animate-scale-in">
+        <div style={{
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(239,92,92,0.1)', border: '2px solid var(--tg-red, #e95c5c)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '40px', marginBottom: '24px', color: 'var(--tg-red, #e95c5c)'
+        }}>
+          🔒
+        </div>
+        <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
+          {lang === 'ru' ? 'Магазин временно приостановлен' : 'Store Temporarily Inactive'}
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
+          {lang === 'ru' 
+            ? 'Этот магазин временно недоступен, так как срок действия подписки владельца истек.'
+            : 'This store is temporarily unavailable because the owner\'s subscription has expired.'}
+        </p>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              const WebApp = (window as any).Telegram?.WebApp;
+              if (WebApp?.openTelegramLink) {
+                WebApp.openTelegramLink('https://t.me/PaybioBot');
+              } else {
+                window.open('https://t.me/PaybioBot', '_blank');
+              }
+            }
+          }}
+          style={{ width: '100%', maxWidth: '240px', background: 'var(--tg-accent)' }}
+        >
+          {lang === 'ru' ? 'Создать свой ИИ-магазин ⚡️' : 'Create Your AI Store ⚡️'}
+        </button>
+      </div>
+    );
+  }
 
   let slotsText = product.content_url || '';
   let maxQuantity: number | null = null;
@@ -2987,6 +3670,44 @@ export default function Storefront() {
       background: 'var(--tg-bg)',
       display: 'flex', flexDirection: 'column',
     }} className="animate-fade-in">
+
+      {isOwner && !isStorePremium && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)',
+          color: '#fff',
+          padding: '14px 16px',
+          textAlign: 'center',
+          fontSize: '13px',
+          fontWeight: 600,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }}>
+          <div>
+            ⚠️ {lang === 'ru' 
+              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
+              : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+          </div>
+          <button 
+            onClick={() => setIsPremiumOpen(true)}
+            style={{
+              background: '#fff',
+              color: '#FF5E62',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+            }}
+          >
+            👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
+          </button>
+        </div>
+      )}
 
       {/* Top sticky navigation bar for buyer page */}
       <div style={{
@@ -3444,7 +4165,6 @@ export default function Storefront() {
 
       {/* ── PAYMENT SECTION ── */}
       <div style={{ flex: 1, padding: '20px 16px 40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-
         {isSoldOut ? (
           <div style={{ textAlign: 'center', padding: '24px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)' }} className="animate-scale-in">
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎟️</div>
@@ -3455,430 +4175,46 @@ export default function Storefront() {
               {lang === 'ru' ? 'Следите за новыми предложениями автора.' : 'Stay tuned for new offers from the creator.'}
             </p>
           </div>
-        ) : isStorePremium ? (
-          <>
-            {/* Payment method selector */}
-            <div>
-              <p className="section-header">{t.choosePayment}</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-
-                {/* Stars */}
-                <button
-                  className={`pay-btn ${paymentMethod === 'stars' ? 'active-stars' : ''}`}
-                  onClick={() => setPaymentMethod('stars')}
-                >
-                  <div className="pay-btn-icon">⭐️</div>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: paymentMethod === 'stars' ? 'var(--tg-link)' : 'var(--tg-hint)' }}>
-                    {lang === 'ru' ? 'Звёзды' : 'Stars'}
-                  </span>
-                </button>
-
-                {/* TON */}
-                <button
-                  className={`pay-btn ${paymentMethod === 'ton' ? 'active-ton' : ''}`}
-                  onClick={() => setPaymentMethod('ton')}
-                >
-                  <div className="pay-btn-icon">💎</div>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: paymentMethod === 'ton' ? 'var(--tg-green)' : 'var(--tg-hint)' }}>
-                    TON
-                  </span>
-                </button>
-
-                {/* P2P */}
-                <button
-                  className={`pay-btn ${paymentMethod === 'p2p' ? 'active-p2p' : ''}`}
-                  onClick={() => setPaymentMethod('p2p')}
-                >
-                  <div className="pay-btn-icon">💳</div>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: paymentMethod === 'p2p' ? 'var(--tg-orange)' : 'var(--tg-hint)' }}>
-                    {lang === 'ru' ? 'Карта' : 'Card'}
-                  </span>
-                </button>
-              </div>
-            </div>
-
-        {/* ── STARS PANEL ── */}
-        {paymentMethod === 'stars' && (
-          <div className="tg-card animate-fade-up" style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-              <div className="pay-btn-icon">⭐️</div>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: '15px' }}>{t.starsTitle}</p>
-                <p style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{t.starsSub}</p>
-              </div>
-            </div>
-            <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6, marginBottom: '16px' }}>
-              {t.starsDesc}
-            </p>
-            <button 
-              className="btn-primary" 
-              onClick={handleStarsPayment} 
-              disabled={hasBookingConflict}
-              style={{ background: hasBookingConflict ? 'var(--tg-hint)' : 'var(--tg-accent)' }}
-            >
-              {t.payStars.replace('{stars}', String(product.price_stars))}
-            </button>
-
-            {/* Stars Purchase Assistant for Product Checkout */}
-            <div style={{ marginTop: '12px', borderTop: '1px solid var(--tg-border)', paddingTop: '10px' }}>
-              <button 
-                type="button"
-                onClick={() => setIsStarsHelpOpen(!isStarsHelpOpen)}
-                style={{
-                  background: 'none', border: 'none', color: 'var(--tg-link)',
-                  fontSize: '12px', cursor: 'pointer', padding: '4px 0',
-                  display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto',
-                  fontWeight: 500
-                }}
-              >
-                {isStarsHelpOpen ? '▲' : '▼'} {lang === 'ru' ? 'Как получить Telegram Stars?' : 'How to get Telegram Stars?'}
-              </button>
-              
-              {isStarsHelpOpen && (
-                <div style={{
-                  marginTop: '8px', padding: '10px', background: 'rgba(255,255,255,0.01)',
-                  border: '1px solid var(--tg-border)', borderRadius: '8px',
-                  fontSize: '12px', lineHeight: 1.5, textAlign: 'left'
-                }}>
-                  <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>
-                    {lang === 'ru' ? 'Купить Звёзды можно двумя способами:' : 'You can buy Stars in two ways:'}
-                  </p>
-                  <ol style={{ margin: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <li>
-                      <button 
-                        type="button"
-                        onClick={() => handleOpenLink('https://fragment.com/stars')}
-                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
-                      >
-                        Fragment.com/stars
-                      </button>
-                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--tg-hint)', marginTop: '2px' }}>
-                        {lang === 'ru' 
-                          ? '💡 Дешевле! Оплата криптовалютой TON / кошельком TON.' 
-                          : '💡 Cheaper! Pay with TON cryptocurrency / TON wallet.'}
-                      </span>
-                    </li>
-                    <li>
-                      <button 
-                        type="button"
-                        onClick={() => handleOpenLink('tg://settings')}
-                        style={{ background: 'none', border: 'none', padding: 0, color: 'var(--tg-link)', fontWeight: 600, fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
-                      >
-                        {lang === 'ru' ? 'Настройки Telegram' : 'Telegram Settings'}
-                      </button>
-                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--tg-hint)', marginTop: '2px' }}>
-                        {lang === 'ru'
-                          ? '📱 Быстрая покупка через App Store / Google Play на мобильном.'
-                          : '📱 Fast top-up via App Store / Google Play on mobile.'}
-                      </span>
-                    </li>
-                  </ol>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ── TON PANEL ── */}
-        {paymentMethod === 'ton' && (
-          <div className="tg-card animate-fade-up" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div className="pay-btn-icon">💎</div>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: '15px' }}>{t.tonTitle}</p>
-                <p style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{t.tonSub}</p>
-              </div>
-            </div>
-
-            {tonList.length > 1 && (
-              <div style={{ marginTop: '10px' }}>
-                <p className="section-header" style={{ marginBottom: '8px' }}>{lang === 'ru' ? 'Выберите кошелек' : 'Select Wallet'}</p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {tonList.map((item: any, idx: number) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedTonIdx(idx)}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        borderRadius: '20px',
-                        border: selectedTonIdx === idx ? '1.5px solid var(--tg-green)' : '1px solid var(--tg-border)',
-                        background: selectedTonIdx === idx ? 'rgba(56,239,125,0.1)' : 'transparent',
-                        color: 'var(--tg-text)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="tg-divider" />
-
-            <div>
-              <p className="section-header" style={{ marginBottom: '8px' }}>{t.walletAddress}</p>
-              <div className="copy-block">
-                <span className="copy-value">{tonDetails}</span>
-                <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(tonDetails)}>
-                  {copied ? (lang === 'ru' ? '✓ Скопировано' : '✓ Copied') : (lang === 'ru' ? 'Копировать' : 'Copy')}
-                </button>
-              </div>
-            </div>
-
-            <div style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '12px 14px', background: 'var(--tg-bg)', borderRadius: 'var(--radius-md)',
-            }}>
-              <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{t.amountToSend}</span>
-              <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tg-text)' }}>
-                {tonAmount} TON
-              </span>
-            </div>
-
-            <a
-              href={`ton://transfer/${tonDetails}?amount=${Math.round(Number(tonAmount) * 1e9)}`}
-              className="btn-primary"
-              style={{ background: 'var(--tg-green)', textDecoration: 'none' }}
-            >
-              {t.openInTon}
-            </a>
-          </div>
-        )}
-
-        {/* ── P2P PANEL ── */}
-        {paymentMethod === 'p2p' && (
-          <div className="tg-card animate-fade-up" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div className="pay-btn-icon">💳</div>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: '15px' }}>{t.cardTitle}</p>
-                <p style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{t.cardSub}</p>
-              </div>
-              <span className="chip chip-green" style={{ marginLeft: 'auto' }}>AI</span>
-            </div>
-
-            {p2pList.length > 1 && (
-              <div style={{ marginTop: '10px' }}>
-                <p className="section-header" style={{ marginBottom: '8px' }}>{lang === 'ru' ? 'Выберите карту/источник' : 'Select Card/Source'}</p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {p2pList.map((item: any, idx: number) => (
-                    <button
-                      key={item.id}
-                      onClick={() => setSelectedP2pIdx(idx)}
-                      style={{
-                        padding: '6px 12px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        borderRadius: '20px',
-                        border: selectedP2pIdx === idx ? '1.5px solid var(--tg-orange)' : '1px solid var(--tg-border)',
-                        background: selectedP2pIdx === idx ? 'rgba(255,165,0,0.1)' : 'transparent',
-                        color: 'var(--tg-text)',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="tg-divider" />
-
-            {/* Card details */}
-            <div>
-              <p className="section-header" style={{ marginBottom: '8px' }}>{t.sellerCard}</p>
-              <div className="copy-block">
-                <span className="copy-value">{p2pDetails}</span>
-                <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(p2pDetails)}>
-                  {copied ? '✓' : (lang === 'ru' ? 'Коп.' : 'Copy')}
-                </button>
-              </div>
-            </div>
-
-            {/* Instructions */}
-            <div style={{
-              padding: '12px 14px',
-              background: 'var(--tg-bg)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6,
-            }}>
-              {t.transferInstruct.replace('${price}', String(product.price_fiat))}
-            </div>
-
-            {/* Receipt upload / verifying / done */}
-            {!verifying && !verifySuccess && (
-              <form onSubmit={handleVerifyReceipt} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <label
-                  className={`upload-zone ${file ? 'has-file' : ''}`}
-                  htmlFor="receipt-upload"
-                >
-                  <input
-                    id="receipt-upload"
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    style={{ display: 'none' }}
-                    required
-                  />
-                  {file ? (
-                    <>
-                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>📎</div>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tg-text)' }}>{file.name}</p>
-                      <p style={{ fontSize: '11px', color: 'var(--tg-hint)', marginTop: '4px' }}>
-                        {lang === 'ru' ? 'Нажмите, чтобы изменить' : 'Tap to change file'}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontSize: '28px', marginBottom: '8px' }}>📸</div>
-                      <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tg-hint)' }}>
-                        {t.uploadReceipt}
-                      </p>
-                      <p style={{ fontSize: '11px', color: 'var(--tg-hint)', marginTop: '4px', opacity: 0.6 }}>
-                        {t.jpegPng}
-                      </p>
-                    </>
-                  )}
-                </label>
-
-                <button type="submit" className="btn-primary" disabled={!file || hasBookingConflict}
-                  style={{ background: (file && !hasBookingConflict) ? 'var(--tg-accent)' : undefined }}
-                >
-                  {t.verifyGetFile}
-                </button>
-
-                {verifyError && (
-                  <div style={{
-                    padding: '12px 14px',
-                    background: 'rgba(233,92,92,0.1)',
-                    border: '1px solid rgba(233,92,92,0.2)',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '13px', color: 'var(--tg-red)',
-                  }} className="animate-scale-in">
-                    ❌ {verifyError}
-                    <button
-                      type="button"
-                      onClick={() => setVerifyError(null)}
-                      style={{ marginLeft: '8px', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '12px' }}
-                    >
-                      {lang === 'ru' ? 'Повторить' : 'Retry'}
-                    </button>
-                  </div>
-                )}
-              </form>
-            )}
-
-            {/* AI pipeline progress */}
-            {verifying && (
-              <div style={{
-                padding: '16px',
-                background: 'var(--tg-bg)',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex', flexDirection: 'column', gap: '12px',
-              }} className="animate-fade-in">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--tg-accent)' }} className="animate-pulse-soft">
-                    {t.aiPipeline}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>
-                    {verifyStep} / 4
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div style={{ height: '3px', background: 'var(--tg-secondary-bg)', borderRadius: '999px', overflow: 'hidden' }}>
-                  <div style={{
-                    height: '100%',
-                    width: `${(verifyStep / 4) * 100}%`,
-                    background: 'var(--tg-accent)',
-                    borderRadius: '999px',
-                    transition: 'width 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-                  }} />
-                </div>
-
-                {/* Steps */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {STEPS.map((label, i) => {
-                    const step = i + 1;
-                    const isDone = verifyStep > step;
-                    const isActive = verifyStep === step;
-                    return (
-                      <div
-                        key={i}
-                        className={`step-item ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}`}
-                      >
-                        <div className="step-dot">
-                          {isDone ? '✓' : step}
-                        </div>
-                        <span>{label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Success */}
-            {verifySuccess && (
-              <div style={{
-                padding: '20px',
-                background: 'rgba(77,202,90,0.08)',
-                border: '1px solid rgba(77,202,90,0.2)',
-                borderRadius: 'var(--radius-lg)',
-                display: 'flex', flexDirection: 'column', gap: '10px',
-              }} className="animate-scale-in">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{
-                    width: '36px', height: '36px', borderRadius: '50%',
-                    background: 'var(--tg-green)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '18px',
-                  }}>✓</div>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--tg-green)' }}>
-                      {t.paymentApproved}
-                    </p>
-                    <p style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>
-                      {t.fileDelivered}
-                    </p>
-                  </div>
-                </div>
-                {extractedData && (
-                  <div style={{
-                    padding: '12px', background: 'var(--tg-bg)',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '12px', fontFamily: 'monospace',
-                    color: 'var(--tg-hint)',
-                    display: 'flex', flexDirection: 'column', gap: '4px',
-                  }}>
-                    <p><span style={{ color: 'var(--tg-text)' }}>{lang === 'ru' ? 'Сумма:' : 'Amount:'}</span> ${extractedData.amount}</p>
-                    <p><span style={{ color: 'var(--tg-text)' }}>{lang === 'ru' ? 'Получатель:' : 'Receiver:'}</span> {extractedData.receiver_name || '—'}</p>
-                    <p><span style={{ color: 'var(--tg-text)' }}>{lang === 'ru' ? 'Дата:' : 'Date:'}</span> {extractedData.transaction_date || '—'}</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </>
-    ) : (
+        ) : !isStorePremium ? (
           <div className="tg-card animate-fade-up" style={{ padding: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <p style={{ fontWeight: 700, fontSize: '16px', color: 'var(--tg-text)', margin: 0 }}>
-              {lang === 'ru' ? 'Прямая покупка' : 'Direct Purchase'}
+              ⚠️ {lang === 'ru' ? 'Подписка истекла' : 'Subscription Expired'}
             </p>
             <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6, margin: 0 }}>
               {lang === 'ru' 
-                ? 'Этот автор использует бесплатную версию магазина. Нажмите кнопку ниже, чтобы открыть чат с автором напрямую и договориться об оплате.'
-                : 'This creator is using the free version of PayBio. Click below to contact the creator directly and arrange payment.'}
+                ? 'Для активации возможности оплаты этого товара покупателями, пожалуйста, продлите Premium подписку.'
+                : 'To enable customers to pay for this product, please renew your Premium subscription.'}
             </p>
-            <button className="btn-primary" onClick={handleBuyDirect} style={{ background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)', color: '#fff', fontWeight: 700 }}>
-              💬 {lang === 'ru' ? 'Связаться и Купить' : 'Contact & Buy'}
+            <button className="btn-primary" onClick={() => setIsPremiumOpen(true)} style={{ background: 'var(--tg-accent)', color: '#fff', fontWeight: 700 }}>
+              👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
             </button>
           </div>
+        ) : (
+          <button 
+            onClick={() => {
+              if (product.product_type === 'BOOKING' && (!bookingDate || !bookingTime)) {
+                showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
+                return;
+              }
+              setIsPaymentSheetOpen(true);
+            }}
+            className="btn-primary"
+            style={{ 
+              background: 'var(--tg-accent)', 
+              fontSize: '16px', 
+              fontWeight: 700, 
+              height: '54px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '10px',
+              borderRadius: '16px',
+              boxShadow: '0 4px 15px rgba(43, 140, 243, 0.3)'
+            }}
+          >
+            <span>💳</span>
+            <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
+          </button>
         )}
       </div>
 
@@ -3898,6 +4234,652 @@ export default function Storefront() {
           {t.poweredBy}
         </div>
       )}
+
+      {/* ─── BOTTOM SHEET: UNIVERSAL PAYMENT ─── */}
+      <div className={`bottom-sheet-overlay ${isPaymentSheetOpen ? 'active' : ''}`} onClick={() => {
+        if (!verifying) {
+          setIsPaymentSheetOpen(false);
+          setCheckoutMethod(null);
+          setFile(null);
+          setVerifyError(null);
+          setActiveOrderId(null);
+        }
+      }}>
+        <div className="bottom-sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90svh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="bottom-sheet-handle" />
+          <button 
+            type="button" 
+            onClick={() => {
+              if (!verifying) {
+                setIsPaymentSheetOpen(false);
+                setCheckoutMethod(null);
+                setFile(null);
+                setVerifyError(null);
+                setActiveOrderId(null);
+              }
+            }}
+            style={{
+              position: 'absolute', top: '16px', right: '16px',
+              background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+              width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--tg-text)', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold', zIndex: 10
+            }}
+          >
+            ✕
+          </button>
+          
+          <h2 className="bottom-sheet-title" style={{ marginBottom: '8px' }}>
+            {lang === 'ru' ? 'Оплата товара' : 'Checkout'}
+          </h2>
+
+          {/* Product Summary Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px',
+            background: 'var(--tg-secondary-bg)',
+            borderRadius: '12px',
+            border: '1px solid var(--tg-border)'
+          }}>
+            {product.cover_url ? (
+              <img src={product.cover_url} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Product Cover" />
+            ) : (
+              <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
+                {product.product_type === 'VOUCHER' ? '🎟️' : product.product_type === 'BOOKING' ? '📅' : '💾'}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--tg-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {product.title}
+              </p>
+              <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--tg-hint)' }}>
+                {product.product_type === 'BOOKING' && bookingDate && bookingTime ? (
+                  <span>🕒 {bookingDate} {bookingTime}</span>
+                ) : (
+                  <span>{product.product_type === 'VOUCHER' ? (lang === 'ru' ? 'Билет / Ваучер' : 'Ticket / Voucher') : (lang === 'ru' ? 'Цифровой файл' : 'Digital file')}</span>
+                )}
+              </p>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <p style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--tg-text)' }}>
+                ${product.price_fiat}
+              </p>
+              <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--tg-hint)' }}>
+                {product.price_stars} ⭐ / ~{tonAmount} TON
+              </p>
+            </div>
+          </div>
+
+          {/* Payment Method Selector Grid */}
+          {!checkoutMethod && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} className="animate-fade-in">
+              <p className="section-header" style={{ margin: 0 }}>{lang === 'ru' ? 'Выберите способ оплаты' : 'Select payment method'}</p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                {/* 1. Card */}
+                {(() => {
+                  const hasCards = p2pList.length > 0 || !!product.creator?.payment_details?.p2p;
+                  return (
+                    <button
+                      onClick={() => {
+                        if (hasCards) {
+                          handleSelectPaymentMethod('card');
+                        }
+                      }}
+                      className={`pay-btn ${hasCards ? '' : 'disabled'}`}
+                      style={{
+                        opacity: hasCards ? 1 : 0.45,
+                        cursor: hasCards ? 'pointer' : 'not-allowed',
+                        borderColor: 'var(--tg-border)',
+                        background: 'var(--tg-secondary-bg)',
+                        position: 'relative'
+                      }}
+                    >
+                      <div className="pay-btn-icon" style={{ color: 'var(--tg-orange)' }}>💳</div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                        {lang === 'ru' ? 'Банковская карта' : 'Bank Card'}
+                      </span>
+                      {!hasCards && (
+                        <span style={{ position: 'absolute', top: '4px', right: '4px', fontSize: '8px', background: 'rgba(255,255,255,0.08)', padding: '2px 4px', borderRadius: '4px', color: 'var(--tg-hint)' }}>
+                          {lang === 'ru' ? 'Выкл.' : 'Inactive'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
+
+                {/* 2. Telegram Stars */}
+                <button
+                  onClick={() => setCheckoutMethod('stars')}
+                  className="pay-btn"
+                  style={{
+                    borderColor: 'var(--tg-border)',
+                    background: 'var(--tg-secondary-bg)'
+                  }}
+                >
+                  <div className="pay-btn-icon" style={{ color: 'var(--tg-accent)' }}>⭐️</div>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                    Telegram Stars
+                  </span>
+                </button>
+
+                {/* 3. Crypto */}
+                {(() => {
+                  const hasCrypto = !!(product.creator?.payment_details?.ton || product.creator?.payment_details?.usdt_trc20 || product.creator?.payment_details?.usdt_bep20);
+                  return (
+                    <button
+                      onClick={() => {
+                        if (hasCrypto) {
+                          handleSelectPaymentMethod('crypto');
+                        }
+                      }}
+                      className={`pay-btn ${hasCrypto ? '' : 'disabled'}`}
+                      style={{
+                        opacity: hasCrypto ? 1 : 0.45,
+                        cursor: hasCrypto ? 'pointer' : 'not-allowed',
+                        borderColor: 'var(--tg-border)',
+                        background: 'var(--tg-secondary-bg)',
+                        position: 'relative'
+                      }}
+                    >
+                      <div className="pay-btn-icon" style={{ color: 'var(--tg-green)' }}>💎</div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                        {lang === 'ru' ? 'Криптовалюта' : 'Cryptocurrency'}
+                      </span>
+                      {!hasCrypto && (
+                        <span style={{ position: 'absolute', top: '4px', right: '4px', fontSize: '8px', background: 'rgba(255,255,255,0.08)', padding: '2px 4px', borderRadius: '4px', color: 'var(--tg-hint)' }}>
+                          {lang === 'ru' ? 'Выкл.' : 'Inactive'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
+
+                {/* 4. Other Options */}
+                {(() => {
+                  const hasOther = !!(product.creator?.payment_details?.other || product.creator?.username);
+                  return (
+                    <button
+                      onClick={() => {
+                        if (hasOther) {
+                          setCheckoutMethod('other');
+                        }
+                      }}
+                      className={`pay-btn ${hasOther ? '' : 'disabled'}`}
+                      style={{
+                        opacity: hasOther ? 1 : 0.45,
+                        cursor: hasOther ? 'pointer' : 'not-allowed',
+                        borderColor: 'var(--tg-border)',
+                        background: 'var(--tg-secondary-bg)',
+                        position: 'relative'
+                      }}
+                    >
+                      <div className="pay-btn-icon" style={{ color: 'var(--tg-link)' }}>💬</div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                        {lang === 'ru' ? 'Другие способы' : 'Other options'}
+                      </span>
+                      {!hasOther && (
+                        <span style={{ position: 'absolute', top: '4px', right: '4px', fontSize: '8px', background: 'rgba(255,255,255,0.08)', padding: '2px 4px', borderRadius: '4px', color: 'var(--tg-hint)' }}>
+                          {lang === 'ru' ? 'Выкл.' : 'Inactive'}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* Detailed Sub-Panels */}
+          {checkoutMethod && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }} className="animate-fade-in">
+              {/* Back to method selection */}
+              {!verifying && !verifySuccess && (
+                <button
+                  onClick={() => {
+                    setCheckoutMethod(null);
+                    setFile(null);
+                    setVerifyError(null);
+                    setActiveOrderId(null);
+                  }}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--tg-link)',
+                    fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: '4px', padding: 0, alignSelf: 'flex-start'
+                  }}
+                >
+                  ← {lang === 'ru' ? 'Другие способы оплаты' : 'Other payment methods'}
+                </button>
+              )}
+
+              {/* ── CARD PANEL ── */}
+              {checkoutMethod === 'card' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>💳</span>
+                    <span style={{ fontWeight: 800, fontSize: '15.5px' }}>{lang === 'ru' ? 'Оплата картой (P2P)' : 'Card Transfer (P2P)'}</span>
+                  </div>
+
+                  {/* Multi-card selector if more than 1 card */}
+                  {p2pList.length > 1 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <p style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600, textTransform: 'uppercase', margin: 0 }}>
+                        {lang === 'ru' ? 'Выберите карту банка:' : 'Select bank card:'}
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
+                        {p2pList.map((item: any, idx: number) => (
+                          <button
+                            key={item.id}
+                            onClick={() => setCheckoutP2pIdx(idx)}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              borderRadius: '20px',
+                              border: checkoutP2pIdx === idx ? '1.5px solid var(--tg-orange)' : '1px solid var(--tg-border)',
+                              background: checkoutP2pIdx === idx ? 'rgba(244,128,32,0.1)' : 'transparent',
+                              color: 'var(--tg-text)',
+                              whiteSpace: 'nowrap',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {item.label || `Card #${idx+1}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Display Card details */}
+                  {(() => {
+                    const cardObj = p2pList.length > 0 && checkoutP2pIdx < p2pList.length ? p2pList[checkoutP2pIdx] : null;
+                    const cardNum = cardObj ? cardObj.card : (product.creator?.payment_details?.p2p || '');
+                    const cardBank = cardObj ? cardObj.label : (lang === 'ru' ? 'Основная карта' : 'Primary Card');
+                    const cardQr = cardObj ? cardObj.qr : null;
+
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ background: 'var(--tg-secondary-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--tg-border)' }}>
+                          <p style={{ fontSize: '11px', color: 'var(--tg-hint)', textTransform: 'uppercase', fontWeight: 600, margin: '0 0 6px 0' }}>
+                            {lang === 'ru' ? `Карта получателя (${cardBank}):` : `Receiver Card (${cardBank}):`}
+                          </p>
+                          <div className="copy-block" style={{ background: 'var(--tg-bg)' }}>
+                            <span className="copy-value" style={{ fontSize: '13px', fontWeight: 700 }}>{cardNum}</span>
+                            <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(cardNum)}>
+                              {copied ? '✓' : (lang === 'ru' ? 'Коп.' : 'Copy')}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* QR Code SBP display if available */}
+                        {cardQr && (
+                          <div style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '8px',
+                            background: 'var(--tg-surface)',
+                            padding: '16px',
+                            borderRadius: '16px',
+                            border: '1px dashed var(--tg-border)',
+                            textAlign: 'center'
+                          }}>
+                            <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', margin: 0 }}>
+                              {lang === 'ru' ? 'Сканируйте QR-код в приложении банка:' : 'Scan QR code in your banking app:'}
+                            </p>
+                            <div style={{
+                              padding: '10px',
+                              background: '#fff',
+                              borderRadius: '12px',
+                              display: 'inline-block',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                            }}>
+                              <img src={cardQr} style={{ width: '160px', height: '160px', objectFit: 'contain' }} alt="SBP QR code" />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = cardQr;
+                                  link.download = `qr_${cardBank || 'card'}.png`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                  showAlert(lang === 'ru' ? '✓ QR-код сохранен' : '✓ QR Code saved');
+                                }}
+                                style={{
+                                  background: 'rgba(255,255,255,0.06)',
+                                  border: '1px solid var(--tg-border)',
+                                  color: 'var(--tg-link)',
+                                  fontSize: '11.5px',
+                                  fontWeight: 600,
+                                  padding: '5px 12px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  alignSelf: 'center'
+                                }}
+                              >
+                                💾 {lang === 'ru' ? 'Скачать QR-код' : 'Download QR'}
+                              </button>
+                              <span style={{ fontSize: '9.5px', color: 'var(--tg-hint)', opacity: 0.7 }}>
+                                {lang === 'ru' ? '💡 Также можно нажать и удерживать для сохранения' : '💡 Or press and hold image to save'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Transfer amount display */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '12px 14px', background: 'var(--tg-surface)', borderRadius: '12px',
+                    border: '1px solid var(--tg-border)'
+                  }}>
+                    <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
+                    <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--tg-text)' }}>
+                      ${product.price_fiat}
+                    </span>
+                  </div>
+
+                  {/* Unified Instructions */}
+                  <div style={{
+                    padding: '12px',
+                    background: 'rgba(244,128,32,0.06)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(244,128,32,0.15)',
+                    fontSize: '12px',
+                    color: 'var(--tg-hint)',
+                    lineHeight: 1.5
+                  }}>
+                    📝 <b>{lang === 'ru' ? 'Инструкция:' : 'Instructions:'}</b> {lang === 'ru' 
+                      ? 'Сделайте перевод на указанные реквизиты, сделайте скриншот чека, загрузите его ниже и нажмите проверку. ИИ автоматически проверит чек и выдаст товар.'
+                      : 'Transfer the amount to the details above, take a screenshot of the receipt, upload it below, and click verify. AI will automatically verify and deliver your product.'}
+                  </div>
+
+                  {/* Upload and Verify Receipt Component */}
+                  {renderReceiptUploadZone()}
+                </div>
+              )}
+
+              {/* ── STARS PANEL ── */}
+              {checkoutMethod === 'stars' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>⭐️</span>
+                    <span style={{ fontWeight: 800, fontSize: '15.5px' }}>Telegram Stars</span>
+                  </div>
+
+                  <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.5, margin: 0 }}>
+                    {lang === 'ru'
+                      ? 'Моментальная оплата через официальный счет Telegram. Товар будет доставлен сразу.'
+                      : 'Pay instantly via official Telegram Stars invoice. The product will be delivered immediately.'}
+                  </p>
+
+                  <button 
+                    className="btn-primary" 
+                    onClick={() => {
+                      setIsPaymentSheetOpen(false);
+                      handleStarsPayment();
+                    }} 
+                    disabled={hasBookingConflict}
+                    style={{ background: 'var(--tg-accent)', height: '48px', fontSize: '14.5px' }}
+                  >
+                    {lang === 'ru' ? `Оплатить ${product.price_stars} ⭐` : `Pay ${product.price_stars} ⭐`}
+                  </button>
+
+                  {/* Stars top-up instructions */}
+                  <div style={{ borderTop: '1px solid var(--tg-border)', paddingTop: '12px', marginTop: '4px' }}>
+                    <p style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px', textAlign: 'center' }}>
+                      {lang === 'ru' ? 'Как купить Telegram Stars?' : 'How to buy Telegram Stars?'}
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenLink('https://fragment.com/stars')}
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'var(--tg-secondary-bg)', border: '1px solid var(--tg-border)', color: 'var(--tg-link)', fontWeight: 700, cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <span>💎 Fragment.com/stars</span>
+                        <span style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 500 }}>{lang === 'ru' ? 'Дешевле через TON' : 'Cheaper via TON'}</span>
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenLink('tg://settings')}
+                        style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'var(--tg-secondary-bg)', border: '1px solid var(--tg-border)', color: 'var(--tg-link)', fontWeight: 700, cursor: 'pointer', textAlign: 'left', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                      >
+                        <span>📱 Настройки Telegram</span>
+                        <span style={{ fontSize: '10px', color: 'var(--tg-hint)', fontWeight: 500 }}>{lang === 'ru' ? 'Картой на мобильном' : 'Card in-app topup'}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── CRYPTO PANEL ── */}
+              {checkoutMethod === 'crypto' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>💎</span>
+                    <span style={{ fontWeight: 800, fontSize: '15.5px' }}>{lang === 'ru' ? 'Оплата криптовалютой' : 'Crypto Transfer'}</span>
+                  </div>
+
+                  {/* Sub-method tabs */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                    {/* TON tab */}
+                    {product.creator?.payment_details?.ton && (
+                      <button
+                        type="button"
+                        onClick={() => setCryptoSubMethod('ton')}
+                        style={{
+                          padding: '8px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          borderRadius: '8px',
+                          border: cryptoSubMethod === 'ton' ? '2px solid var(--tg-green)' : '1px solid var(--tg-border)',
+                          background: cryptoSubMethod === 'ton' ? 'rgba(77,202,90,0.08)' : 'transparent',
+                          color: 'var(--tg-text)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        TON
+                      </button>
+                    )}
+                    {/* USDT TRC20 tab */}
+                    {product.creator?.payment_details?.usdt_trc20 && (
+                      <button
+                        type="button"
+                        onClick={() => setCryptoSubMethod('usdt_trc20')}
+                        style={{
+                          padding: '8px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          borderRadius: '8px',
+                          border: cryptoSubMethod === 'usdt_trc20' ? '2px solid var(--tg-green)' : '1px solid var(--tg-border)',
+                          background: cryptoSubMethod === 'usdt_trc20' ? 'rgba(77,202,90,0.08)' : 'transparent',
+                          color: 'var(--tg-text)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        USDT TRC20
+                      </button>
+                    )}
+                    {/* USDT BEP20 tab */}
+                    {product.creator?.payment_details?.usdt_bep20 && (
+                      <button
+                        type="button"
+                        onClick={() => setCryptoSubMethod('usdt_bep20')}
+                        style={{
+                          padding: '8px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          borderRadius: '8px',
+                          border: cryptoSubMethod === 'usdt_bep20' ? '2px solid var(--tg-green)' : '1px solid var(--tg-border)',
+                          background: cryptoSubMethod === 'usdt_bep20' ? 'rgba(77,202,90,0.08)' : 'transparent',
+                          color: 'var(--tg-text)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        USDT BEP20
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Render active sub-method details */}
+                  {cryptoSubMethod === 'ton' && product.creator?.payment_details?.ton && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} className="animate-fade-in">
+                      <div style={{ background: 'var(--tg-secondary-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--tg-border)' }}>
+                        <p style={{ fontSize: '11px', color: 'var(--tg-hint)', textTransform: 'uppercase', fontWeight: 600, margin: '0 0 6px 0' }}>
+                          TON {lang === 'ru' ? 'Адрес кошелька:' : 'Wallet Address:'}
+                        </p>
+                        <div className="copy-block" style={{ background: 'var(--tg-bg)' }}>
+                          <span className="copy-value" style={{ fontSize: '11px' }}>{product.creator?.payment_details?.ton || ''}</span>
+                          <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(product.creator?.payment_details?.ton || '')}>
+                            {copied ? '✓' : (lang === 'ru' ? 'Коп.' : 'Copy')}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '12px 14px', background: 'var(--tg-surface)', borderRadius: '12px',
+                        border: '1px solid var(--tg-border)'
+                      }}>
+                        <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
+                        <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tg-text)' }}>
+                          {tonAmount} TON
+                        </span>
+                      </div>
+
+                      <a
+                        href={`ton://transfer/${product.creator?.payment_details?.ton || ''}?amount=${Math.round(Number(tonAmount) * 1e9)}`}
+                        className="btn-primary"
+                        style={{ background: 'var(--tg-green)', textDecoration: 'none', height: '42px', fontSize: '13.5px', borderRadius: '10px' }}
+                      >
+                        🚀 {lang === 'ru' ? 'Открыть в TON-кошельке' : 'Open in TON Wallet'}
+                      </a>
+                    </div>
+                  )}
+
+                  {cryptoSubMethod === 'usdt_trc20' && product.creator?.payment_details?.usdt_trc20 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} className="animate-fade-in">
+                      <div style={{ background: 'var(--tg-secondary-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--tg-border)' }}>
+                        <p style={{ fontSize: '11px', color: 'var(--tg-hint)', textTransform: 'uppercase', fontWeight: 600, margin: '0 0 6px 0' }}>
+                          USDT TRC20 (Tron) {lang === 'ru' ? 'Адрес:' : 'Address:'}
+                        </p>
+                        <div className="copy-block" style={{ background: 'var(--tg-bg)' }}>
+                          <span className="copy-value" style={{ fontSize: '11.5px' }}>{product.creator?.payment_details?.usdt_trc20 || ''}</span>
+                          <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(product.creator?.payment_details?.usdt_trc20 || '')}>
+                            {copied ? '✓' : (lang === 'ru' ? 'Коп.' : 'Copy')}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '12px 14px', background: 'var(--tg-surface)', borderRadius: '12px',
+                        border: '1px solid var(--tg-border)'
+                      }}>
+                        <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
+                        <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tg-text)' }}>
+                          {product.price_fiat} USDT
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {cryptoSubMethod === 'usdt_bep20' && product.creator?.payment_details?.usdt_bep20 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} className="animate-fade-in">
+                      <div style={{ background: 'var(--tg-secondary-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--tg-border)' }}>
+                        <p style={{ fontSize: '11px', color: 'var(--tg-hint)', textTransform: 'uppercase', fontWeight: 600, margin: '0 0 6px 0' }}>
+                          USDT BEP20 (BSC) {lang === 'ru' ? 'Адрес:' : 'Address:'}
+                        </p>
+                        <div className="copy-block" style={{ background: 'var(--tg-bg)' }}>
+                          <span className="copy-value" style={{ fontSize: '11.5px' }}>{product.creator?.payment_details?.usdt_bep20 || ''}</span>
+                          <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(product.creator?.payment_details?.usdt_bep20 || '')}>
+                            {copied ? '✓' : (lang === 'ru' ? 'Коп.' : 'Copy')}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '12px 14px', background: 'var(--tg-surface)', borderRadius: '12px',
+                        border: '1px solid var(--tg-border)'
+                      }}>
+                        <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
+                        <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tg-text)' }}>
+                          {product.price_fiat} USDT
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Unified Instructions */}
+                  <div style={{
+                    padding: '12px',
+                    background: 'rgba(77,202,90,0.06)',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(77,202,90,0.15)',
+                    fontSize: '12px',
+                    color: 'var(--tg-hint)',
+                    lineHeight: 1.5
+                  }}>
+                    📝 <b>{lang === 'ru' ? 'Инструкция:' : 'Instructions:'}</b> {lang === 'ru' 
+                      ? 'Сделайте перевод на указанные реквизиты, сделайте скриншот транзакции/чека, загрузите его ниже и нажмите проверку. ИИ автоматически проверит перевод и выдаст товар.'
+                      : 'Transfer the amount to the details above, take a screenshot of the transaction, upload it below, and click verify. AI will automatically verify and deliver your product.'}
+                  </div>
+
+                  {/* Upload and Verify Receipt Component */}
+                  {renderReceiptUploadZone()}
+                </div>
+              )}
+
+              {/* ── OTHER PANEL ── */}
+              {checkoutMethod === 'other' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>💬</span>
+                    <span style={{ fontWeight: 800, fontSize: '15.5px' }}>{lang === 'ru' ? 'Другие способы оплаты' : 'Other Payment Options'}</span>
+                  </div>
+
+                  {product.creator?.payment_details?.other ? (
+                    <div style={{
+                      padding: '14px',
+                      background: 'var(--tg-secondary-bg)',
+                      border: '1px solid var(--tg-border)',
+                      borderRadius: '12px',
+                      fontSize: '13.5px',
+                      lineHeight: 1.5,
+                      color: 'var(--tg-text)',
+                      whiteSpace: 'pre-wrap'
+                    }}>
+                      {product.creator?.payment_details?.other}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '13px', color: 'var(--tg-hint)', margin: 0 }}>
+                      {lang === 'ru'
+                        ? 'Вы можете связаться с автором напрямую для уточнения альтернативных вариантов оплаты.'
+                        : 'You can contact the creator directly to discuss alternate checkout options.'}
+                    </p>
+                  )}
+
+                  <button
+                    onClick={handleBuyDirect}
+                    className="btn-primary"
+                    style={{ background: 'var(--tg-accent)', height: '48px', fontSize: '14.5px', marginTop: '6px' }}
+                  >
+                    💬 {lang === 'ru' ? 'Написать автору' : 'Contact Creator'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
 
       {/* ─── BOTTOM SHEET: PRODUCT REVIEWS ─── */}
       <div className={`bottom-sheet-overlay ${isProductReviewsOpen ? 'active' : ''}`} onClick={() => setIsProductReviewsOpen(false)}>
@@ -3925,6 +4907,24 @@ export default function Storefront() {
           />
         </div>
       </div>
+
+      <PremiumFlow
+        isOpen={isPremiumOpen}
+        onClose={() => setIsPremiumOpen(false)}
+        lang={lang}
+        t={t}
+        isUpgrading={isUpgrading}
+        onBuyPremiumWithStars={handleBuyPremiumWithStars}
+        isPremiumStarsHelpOpen={isPremiumStarsHelpOpen}
+        onTogglePremiumStarsHelp={() => setIsPremiumStarsHelpOpen(!isPremiumStarsHelpOpen)}
+        onOpenLink={handleOpenLink}
+        promoCodeInput={promoCodeInput}
+        onPromoCodeInputChange={setPromoCodeInput}
+        onApplyPromoCode={handleApplyPromoCode}
+        promoCodeStatus={promoCodeStatus}
+        isApplyingPromo={isApplyingPromo}
+        onBuyPremium={handleBuyPremium}
+      />
     </div>
   );
 }

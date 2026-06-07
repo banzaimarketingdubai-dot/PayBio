@@ -6,7 +6,7 @@ import { fetchBusySlots } from '@/lib/calendar';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { product_id, buyer_tg_id, booking_slot } = body;
+    const { product_id, buyer_tg_id, booking_slot, payment_method } = body;
 
     if (!product_id || !buyer_tg_id) {
       return NextResponse.json(
@@ -15,13 +15,29 @@ export async function POST(request: Request) {
       );
     }
 
+    const isPremiumVirtual = product_id === 'premium_virtual';
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(product_id)) {
+    if (!isPremiumVirtual && !uuidRegex.test(product_id)) {
       return NextResponse.json({ error: 'Invalid product ID format.' }, { status: 400 });
     }
 
     // 1. Get product details
-    const product = await db.getProductById(product_id);
+    let product = null;
+    if (isPremiumVirtual) {
+      const adminUser = await db.getAdminUser();
+      product = {
+        id: 'premium_virtual',
+        title: 'PayBio Premium',
+        price_fiat: 10.00,
+        price_stars: 500,
+        product_type: 'DIGITAL',
+        creator: adminUser,
+        creator_id: adminUser?.id || ''
+      };
+    } else {
+      product = await db.getProductById(product_id);
+    }
+
     if (!product) {
       return NextResponse.json({ error: 'Product not found.' }, { status: 404 });
     }
@@ -107,7 +123,12 @@ export async function POST(request: Request) {
     }
 
     // 2. Create a pending order
-    const order = await db.createOrder(product_id, buyer_tg_id, 'p2p');
+    const method = payment_method === 'crypto' ? 'crypto' : 'p2p';
+    const order = await db.createOrder(
+      isPremiumVirtual ? null : product_id,
+      buyer_tg_id,
+      isPremiumVirtual ? `${method}_premium` : method
+    );
 
     // 2b. Handle Booking product type slot reservation
     if (product.product_type === 'BOOKING' && booking_slot) {
@@ -115,7 +136,7 @@ export async function POST(request: Request) {
     }
 
     // Notify creator about checkout initiation
-    if (product.creator) {
+    if (product.creator && !isPremiumVirtual) {
       const creatorTgId = Number(product.creator.telegram_id);
       const bTgId = Number(buyer_tg_id);
       if (bTgId > 0 && bTgId !== creatorTgId) {
@@ -124,9 +145,10 @@ export async function POST(request: Request) {
           ? `@${buyer.username || 'user'}` 
           : `ID: ${bTgId}`;
         
+        const methodName = method === 'crypto' ? 'Crypto' : 'Card/P2P';
         await sendTelegramNotification(
           creatorTgId,
-          `🛒 *Checkout Initiated (Card/P2P)!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"* ($${product.price_fiat}).`
+          `🛒 *Checkout Initiated (${methodName})!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"* ($${product.price_fiat}).`
         );
       }
     }

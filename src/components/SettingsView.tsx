@@ -20,7 +20,7 @@ interface SettingsViewProps {
   socialLinks: { youtube?: string; instagram?: string; tiktok?: string; vk?: string; max?: string; };
   onAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onBannerUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string, usdtTrc20?: string, usdtBep20?: string) => Promise<void>;
+  onSaveSettings: (name: string, description: string, avatar: string, banner: string, socials: any, ton: string, p2p: string, p2pList: any[], calendarProvider: string, icsUrl: string, usdtTrc20?: string, usdtBep20?: string, other?: string, adminPaymentDetails?: any) => Promise<void>;
   bookingProductsList: Product[];
   busySlots: { start: string; end: string }[];
   dbBookings: any[];
@@ -69,11 +69,49 @@ export default function SettingsView({
   const [tempMax, setTempMax] = useState(socialLinks.max || '');
   
   const [tempTonVal, setTempTonVal] = useState('');
-  const [tempCards, setTempCards] = useState<{ id: string; label: string; card: string }[]>([]);
+  const [tempCards, setTempCards] = useState<{ id: string; label: string; card: string; qr?: string }[]>([]);
   const [tempUsdtTrc20, setTempUsdtTrc20] = useState('');
   const [tempUsdtBep20, setTempUsdtBep20] = useState('');
   const [tempCalProvider, setTempCalProvider] = useState('none');
   const [tempCalIcsUrl, setTempCalIcsUrl] = useState('');
+  const [tempOther, setTempOther] = useState('');
+  const [paymentSettingsTab, setPaymentSettingsTab] = useState<'card' | 'crypto' | 'other'>('card');
+
+  // Admin Payment States
+  const [adminTonVal, setAdminTonVal] = useState('');
+  const [adminCards, setAdminCards] = useState<{ id: string; label: string; card: string; qr?: string }[]>([]);
+  const [adminUsdtTrc20, setAdminUsdtTrc20] = useState('');
+  const [adminUsdtBep20, setAdminUsdtBep20] = useState('');
+  const [adminOther, setAdminOther] = useState('');
+  const [adminPaymentTab, setAdminPaymentTab] = useState<'card' | 'crypto' | 'other'>('card');
+
+  // Shipping Orders states
+  const [ordersList, setOrdersList] = useState<any[]>([]);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [isShippingActionLoading, setIsShippingActionLoading] = useState<Record<string, boolean>>({});
+  const [isSaving, setIsSaving] = useState(false);
+
+  const fetchOrders = async () => {
+    if (!creator?.id) return;
+    setIsLoadingOrders(true);
+    try {
+      const res = await fetch(`/api/store/orders?creator_id=${creator.id}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setOrdersList(data.orders);
+      }
+    } catch (e) {
+      console.error('Error fetching orders:', e);
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentScreen === 'SETTINGS') {
+      fetchOrders();
+    }
+  }, [currentScreen, creator?.id]);
 
   // Sync state values when settings screen opens or creator changes
   useEffect(() => {
@@ -103,6 +141,7 @@ export default function SettingsView({
       setTempUsdtBep20(pd.usdt_bep20 || '');
       setTempCalProvider(pd.calendar_provider || 'none');
       setTempCalIcsUrl(pd.ics_url || '');
+      setTempOther(pd.other || '');
     }
   }, [creator, currentScreen, storeName, storeDescription, storeAvatar, storeBanner, socialLinks, lang]);
 
@@ -110,8 +149,32 @@ export default function SettingsView({
     if (!creator) return false;
     const username = creator.username?.toLowerCase() || '';
     const tgId = Number(creator.telegram_id);
-    return username.includes('sher') || username === 'shertyonok' || tgId === 7999888 || tgId === 123456789 || tgId === 999999999;
+    return username.includes('sher') || username === 'shertyonok' || tgId === 7999888 || tgId === 123456789 || tgId === 999999999 || tgId === 1780771122;
   }, [creator]);
+
+  // Load admin wallets if user is admin
+  useEffect(() => {
+    if (currentScreen === 'SETTINGS' && isAdmin) {
+      fetch('/api/admin/wallets')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.wallets) {
+            const w = data.wallets;
+            setAdminTonVal(w.ton || '');
+            setAdminUsdtTrc20(w.usdt_trc20 || '');
+            setAdminUsdtBep20(w.usdt_bep20 || '');
+            setAdminOther(w.other || '');
+            
+            let cards = w.p2p_list || [];
+            if (cards.length === 0 && w.p2p) {
+              cards = [{ id: 'admin_card_default', label: lang === 'ru' ? 'Основная' : 'Primary', card: w.p2p }];
+            }
+            setAdminCards(cards);
+          }
+        })
+        .catch(err => console.error('Failed to load admin wallets:', err));
+    }
+  }, [currentScreen, isAdmin, lang]);
 
   const [selectedSettingsBookingProdId, setSelectedSettingsBookingProdId] = useState(() => {
     return bookingProductsList[0]?.id || '';
@@ -190,28 +253,52 @@ export default function SettingsView({
 
   const handleSettingsSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const filteredCards = tempCards.filter(c => c.card.trim() !== '');
-    const defaultP2p = filteredCards[0]?.card || '';
-    await onSaveSettings(
-      tempStoreName,
-      tempStoreDesc,
-      tempStoreAvatar,
-      tempStoreBanner,
-      {
-        youtube: tempYoutube,
-        instagram: tempInsta,
-        tiktok: tempTiktok,
-        vk: tempVk,
-        max: tempMax
-      },
-      tempTonVal,
-      defaultP2p,
-      filteredCards,
-      tempCalProvider,
-      tempCalIcsUrl,
-      tempUsdtTrc20,
-      tempUsdtBep20
-    );
+    setIsSaving(true);
+    try {
+      const filteredCards = tempCards.filter(c => c.card.trim() !== '');
+      const defaultP2p = filteredCards[0]?.card || '';
+
+      let adminPaymentDetails = undefined;
+      if (isAdmin) {
+        const filteredAdminCards = adminCards.filter(c => c.card.trim() !== '');
+        const defaultAdminP2p = filteredAdminCards[0]?.card || '';
+        adminPaymentDetails = {
+          ton: adminTonVal,
+          p2p: defaultAdminP2p,
+          p2p_list: filteredAdminCards,
+          usdt_trc20: adminUsdtTrc20,
+          usdt_bep20: adminUsdtBep20,
+          other: adminOther
+        };
+      }
+
+      await onSaveSettings(
+        tempStoreName,
+        tempStoreDesc,
+        tempStoreAvatar,
+        tempStoreBanner,
+        {
+          youtube: tempYoutube,
+          instagram: tempInsta,
+          tiktok: tempTiktok,
+          vk: tempVk,
+          max: tempMax
+        },
+        tempTonVal,
+        defaultP2p,
+        filteredCards,
+        tempCalProvider,
+        tempCalIcsUrl,
+        tempUsdtTrc20,
+        tempUsdtBep20,
+        tempOther,
+        adminPaymentDetails
+      );
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatPremiumDate = (dateStr?: string | null) => {
@@ -267,7 +354,7 @@ export default function SettingsView({
                     👑 {lang === 'ru' ? `Премиум активен до: ${formatPremiumDate(creator?.premium_until)}` : `Premium active until: ${formatPremiumDate(creator?.premium_until)}`}
                   </span>
                 ) : (
-                  <span>{lang === 'ru' ? 'Бесплатный тариф' : 'Free package'}</span>
+                  <span>{lang === 'ru' ? 'Подписка неактивна ❌' : 'Subscription inactive ❌'}</span>
                 )}
               </p>
             </div>
@@ -378,146 +465,297 @@ export default function SettingsView({
           <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>💳</span> {lang === 'ru' ? 'Реквизиты оплаты' : 'Payment Details'}
           </h3>
-          
-          {/* Bank Cards Section (Top) */}
-          <div className="bottom-sheet-form-group">
-            <label className="bottom-sheet-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>💳 {lang === 'ru' ? 'Банковские карты (до 5)' : 'Bank Cards (up to 5)'}</span>
-              <span style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>{tempCards.length}/5</span>
-            </label>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-              {tempCards.map((item, idx) => (
-                <div key={item.id} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <input 
-                    type="text" 
-                    placeholder={lang === 'ru' ? 'Банк (например, Сбер)' : 'Bank (e.g. Sber)'} 
-                    className="tg-input" 
-                    style={{ flex: 1, fontSize: '13px', padding: '10px' }} 
-                    value={item.label} 
-                    onChange={(e) => {
-                      const updated = [...tempCards];
-                      updated[idx].label = e.target.value;
-                      setTempCards(updated);
-                    }} 
-                  />
-                  <input 
-                    type="text" 
-                    placeholder={lang === 'ru' ? 'Номер карты' : 'Card number'} 
-                    className="tg-input" 
-                    style={{ flex: 2, fontSize: '13px', padding: '10px' }} 
-                    value={item.card} 
-                    onChange={(e) => {
-                      const updated = [...tempCards];
-                      updated[idx].card = e.target.value;
-                      setTempCards(updated);
-                    }} 
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      setTempCards(tempCards.filter(c => c.id !== item.id));
-                    }}
-                    style={{ 
-                      background: 'rgba(233,92,92,0.12)', border: 'none', borderRadius: '8px', 
-                      width: '36px', height: '36px', display: 'flex', alignItems: 'center', 
-                      justifyContent: 'center', color: '#ff4d4d', cursor: 'pointer', fontSize: '16px' 
-                    }}
-                  >
-                    ✕
-                  </button>
+
+          {/* Premium Method Selector Tabs */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setPaymentSettingsTab('card')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '12px 8px',
+                borderRadius: '12px',
+                border: paymentSettingsTab === 'card' ? '2px solid var(--tg-orange)' : '1px solid var(--tg-border)',
+                background: paymentSettingsTab === 'card' ? 'rgba(244,128,32,0.08)' : 'transparent',
+                color: 'var(--tg-text)',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>💳</span>
+              <span style={{ fontSize: '11px', fontWeight: 700 }}>
+                {lang === 'ru' ? 'Карты' : 'Cards'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPaymentSettingsTab('crypto')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '12px 8px',
+                borderRadius: '12px',
+                border: paymentSettingsTab === 'crypto' ? '2px solid var(--tg-green)' : '1px solid var(--tg-border)',
+                background: paymentSettingsTab === 'crypto' ? 'rgba(77,202,90,0.08)' : 'transparent',
+                color: 'var(--tg-text)',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>💎</span>
+              <span style={{ fontSize: '11px', fontWeight: 700 }}>
+                {lang === 'ru' ? 'Крипта' : 'Crypto'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setPaymentSettingsTab('other')}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '12px 8px',
+                borderRadius: '12px',
+                border: paymentSettingsTab === 'other' ? '2px solid var(--tg-accent)' : '1px solid var(--tg-border)',
+                background: paymentSettingsTab === 'other' ? 'rgba(43,140,243,0.08)' : 'transparent',
+                color: 'var(--tg-text)',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <span style={{ fontSize: '18px' }}>💬</span>
+              <span style={{ fontSize: '11px', fontWeight: 700 }}>
+                {lang === 'ru' ? 'Другое' : 'Other'}
+              </span>
+            </button>
+          </div>
+
+          <div style={{ background: 'rgba(255,255,255,0.01)', borderRadius: '10px', border: '1px solid var(--tg-border)', padding: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* ── CARD TAB ── */}
+            {paymentSettingsTab === 'card' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} className="animate-fade-in">
+                <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0 }}>
+                  {lang === 'ru'
+                    ? 'Укажите до 5 карт для перевода (СБП/РФ/мир). Покупатели смогут загрузить чек.'
+                    : 'Configure up to 5 cards for receiving bank transfers. Buyers can upload a receipt.'}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {tempCards.map((item, idx) => (
+                    <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'rgba(0,0,0,0.15)', borderRadius: '8px', border: '1px solid var(--tg-border)' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <input 
+                          type="text" 
+                          placeholder={lang === 'ru' ? 'Банк (Сбер, Альфа...)' : 'Bank (e.g. Sber)'} 
+                          className="tg-input" 
+                          style={{ flex: 1, fontSize: '12.5px', padding: '8px' }} 
+                          value={item.label} 
+                          onChange={(e) => {
+                            const updated = [...tempCards];
+                            updated[idx].label = e.target.value;
+                            setTempCards(updated);
+                          }} 
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setTempCards(tempCards.filter(c => c.id !== item.id));
+                          }}
+                          style={{ 
+                            background: 'rgba(233,92,92,0.12)', border: 'none', borderRadius: '6px', 
+                            width: '32px', height: '32px', display: 'flex', alignItems: 'center', 
+                            justifyContent: 'center', color: '#ff4d4d', cursor: 'pointer', fontSize: '14px' 
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      
+                      <input 
+                        type="text" 
+                        placeholder={lang === 'ru' ? 'Номер карты / получатель' : 'Card number / receiver info'} 
+                        className="tg-input" 
+                        style={{ fontSize: '12.5px', padding: '8px' }} 
+                        value={item.card} 
+                        onChange={(e) => {
+                          const updated = [...tempCards];
+                          updated[idx].card = e.target.value;
+                          setTempCards(updated);
+                        }} 
+                      />
+
+                      {/* QR Code Upload block */}
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '4px' }}>
+                        {item.qr ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                            <img src={item.qr} style={{ width: '42px', height: '42px', borderRadius: '4px', objectFit: 'contain', background: '#fff', border: '1px solid var(--tg-border)' }} alt="Card QR" />
+                            <span style={{ fontSize: '11px', color: 'var(--tg-green)', fontWeight: 600 }}>✓ QR Загружен</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = [...tempCards];
+                                delete updated[idx].qr;
+                                setTempCards(updated);
+                              }}
+                              style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ff4d4d', fontSize: '11px', cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              {lang === 'ru' ? 'Удалить QR' : 'Remove QR'}
+                            </button>
+                          </div>
+                        ) : (
+                          <label className="btn-secondary" style={{ width: '100%', padding: '6px 10px', fontSize: '11px', textAlign: 'center', display: 'block', cursor: 'pointer', borderStyle: 'dashed' }}>
+                            📸 {lang === 'ru' ? 'Загрузить QR-код (СБП)' : 'Upload QR Code'}
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ display: 'none' }} 
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    const updated = [...tempCards];
+                                    updated[idx].qr = reader.result as string;
+                                    setTempCards(updated);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }} 
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {tempCards.length < 5 && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      style={{ 
+                        padding: '8px 12px', fontSize: '12px', fontWeight: 600, 
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        borderStyle: 'dashed'
+                      }}
+                      onClick={() => {
+                        setTempCards([...tempCards, { id: 'card_' + Date.now(), label: '', card: '' }]);
+                      }}
+                    >
+                      ＋ {lang === 'ru' ? 'Добавить карту' : 'Add Card'}
+                    </button>
+                  )}
                 </div>
-              ))}
-              
-              {tempCards.length < 5 && (
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  style={{ 
-                    padding: '8px 12px', fontSize: '12.5px', fontWeight: 600, 
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                    marginTop: '4px', borderStyle: 'dashed'
-                  }}
-                  onClick={() => {
-                    setTempCards([...tempCards, { id: 'card_' + Date.now(), label: '', card: '' }]);
-                  }}
-                >
-                  ＋ {lang === 'ru' ? 'Добавить банковскую карту' : 'Add Bank Card'}
-                </button>
-              )}
-            </div>
-          </div>
+              </div>
+            )}
 
-          {/* TON Wallet Connection (Middle) */}
-          <div className="bottom-sheet-form-group" style={{ borderTop: '1px solid var(--tg-border)', paddingTop: '14px', marginTop: '6px' }}>
-            <label className="bottom-sheet-label">💎 {lang === 'ru' ? 'TON кошелек' : 'TON Wallet'}</label>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-              <input 
-                type="text" 
-                className="tg-input" 
-                placeholder="UQ..." 
-                value={tempTonVal} 
-                onChange={(e) => setTempTonVal(e.target.value)} 
-                style={{ flex: 1 }} 
-              />
-              {tempTonVal ? (
-                <button 
-                  type="button" 
-                  className="btn-secondary" 
-                  style={{ 
-                    width: 'auto', padding: '0 16px', whiteSpace: 'nowrap', 
-                    fontSize: '12.5px', fontWeight: 600, color: 'var(--tg-hint)',
-                    background: 'rgba(255,255,255,0.03)'
-                  }} 
-                  onClick={async () => {
-                    setTempTonVal('');
-                    if (tonConnectUI && tonConnectUI.connected) {
-                      await tonConnectUI.disconnect();
-                    }
-                    showAlert(lang === 'ru' ? '✓ TON кошелек отключен' : '✓ TON Wallet disconnected');
-                  }}
-                >
-                  Disconnect wallet
-                </button>
-              ) : (
-                <button 
-                  type="button" 
-                  className="btn-primary" 
-                  style={{ 
-                    width: 'auto', padding: '0 16px', whiteSpace: 'nowrap', 
-                    fontSize: '12.5px', background: 'var(--tg-accent)' 
-                  }} 
-                  onClick={handleConnectWallet}
-                >
-                  Connect Wallet
-                </button>
-              )}
-            </div>
-          </div>
+            {/* ── CRYPTO TAB ── */}
+            {paymentSettingsTab === 'crypto' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }} className="animate-fade-in">
+                <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0 }}>
+                  {lang === 'ru'
+                    ? 'Введите крипто-адреса для приема платежей напрямую от покупателей.'
+                    : 'Set wallet addresses to receive crypto direct transfers.'}
+                </p>
 
-          {/* USDT Wallets (Bottom) */}
-          <div className="bottom-sheet-form-group" style={{ borderTop: '1px solid var(--tg-border)', paddingTop: '14px', marginTop: '6px' }}>
-            <label className="bottom-sheet-label">USDT TRC20</label>
-            <input 
-              type="text" 
-              className="tg-input" 
-              placeholder={lang === 'ru' ? 'Адрес кошелька USDT TRC20' : 'USDT TRC20 Wallet Address'} 
-              value={tempUsdtTrc20} 
-              onChange={(e) => setTempUsdtTrc20(e.target.value)} 
-              style={{ marginTop: '4px' }}
-            />
-          </div>
-          
-          <div className="bottom-sheet-form-group">
-            <label className="bottom-sheet-label">USDT BEP20</label>
-            <input 
-              type="text" 
-              className="tg-input" 
-              placeholder={lang === 'ru' ? 'Адрес кошелька USDT BEP20' : 'USDT BEP20 Wallet Address'} 
-              value={tempUsdtBep20} 
-              onChange={(e) => setTempUsdtBep20(e.target.value)} 
-              style={{ marginTop: '4px' }}
-            />
+                {/* TON Wallet */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="bottom-sheet-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <span>💎</span> TON Address
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input 
+                      type="text" 
+                      className="tg-input" 
+                      placeholder="UQ..." 
+                      value={tempTonVal} 
+                      onChange={(e) => setTempTonVal(e.target.value)} 
+                      style={{ fontSize: '12.5px', padding: '8px' }} 
+                    />
+                    {tempTonVal ? (
+                      <button 
+                        type="button" 
+                        className="btn-secondary" 
+                        style={{ width: 'auto', padding: '0 10px', fontSize: '11px', whiteSpace: 'nowrap' }} 
+                        onClick={async () => {
+                          setTempTonVal('');
+                          if (tonConnectUI && tonConnectUI.connected) {
+                            await tonConnectUI.disconnect();
+                          }
+                        }}
+                      >
+                        ✕
+                      </button>
+                    ) : (
+                      <button 
+                        type="button" 
+                        className="btn-primary" 
+                        style={{ width: 'auto', padding: '0 10px', fontSize: '11px', whiteSpace: 'nowrap', background: 'var(--tg-accent)' }} 
+                        onClick={handleConnectWallet}
+                      >
+                        Connect
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* USDT TRC20 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="bottom-sheet-label">USDT TRC20 (Tron)</label>
+                  <input 
+                    type="text" 
+                    className="tg-input" 
+                    placeholder="T..." 
+                    value={tempUsdtTrc20} 
+                    onChange={(e) => setTempUsdtTrc20(e.target.value)} 
+                    style={{ fontSize: '12.5px', padding: '8px' }} 
+                  />
+                </div>
+
+                {/* USDT BEP20 */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="bottom-sheet-label">USDT BEP20 (BSC)</label>
+                  <input 
+                    type="text" 
+                    className="tg-input" 
+                    placeholder="0x..." 
+                    value={tempUsdtBep20} 
+                    onChange={(e) => setTempUsdtBep20(e.target.value)} 
+                    style={{ fontSize: '12.5px', padding: '8px' }} 
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── OTHER TAB ── */}
+            {paymentSettingsTab === 'other' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} className="animate-fade-in">
+                <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0 }}>
+                  {lang === 'ru'
+                    ? 'Укажите свои инструкции или контакты для альтернативных способов оплаты.'
+                    : 'Provide manual payment instructions or links for other methods.'}
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="bottom-sheet-label">{lang === 'ru' ? 'Инструкции / Ссылка' : 'Instructions / Link'}</label>
+                  <textarea 
+                    className="tg-input" 
+                    placeholder={lang === 'ru' ? 'Например: Напишите мне в личные сообщения @username для оплаты через PayPal.' : 'e.g. PM me @username to pay via PayPal.'} 
+                    value={tempOther} 
+                    onChange={(e) => setTempOther(e.target.value)} 
+                    rows={4}
+                    style={{ resize: 'none', fontSize: '12.5px', padding: '8px' }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -606,32 +844,310 @@ export default function SettingsView({
 
           {/* Administrator Settings (Developer Mode) */}
           {isAdmin && (
-            <div style={{ borderTop: '2px dashed #ffd700', paddingTop: '14px', marginTop: '14px' }}>
-              <h4 style={{ margin: '0 0 8px 0', fontSize: '13.5px', fontWeight: 800, color: '#ffd700', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                👑 {lang === 'ru' ? 'АДМИНИСТРАТОР (Тестирование)' : 'ADMINISTRATOR (Testing)'}
+            <div style={{ borderTop: '2px dashed #ffd700', paddingTop: '14px', marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <h4 style={{ margin: '0', fontSize: '13.5px', fontWeight: 800, color: '#ffd700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                👑 {lang === 'ru' ? 'АДМИНИСТРАТОР: Прием оплат за Premium' : 'ADMINISTRATOR: Receive Premium Payments'}
               </h4>
-              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', lineHeight: 1.45, margin: '0 0 12px 0' }}>
-                {lang === 'ru' 
-                  ? 'Кнопка ниже мгновенно откроет приветственный онбординг (Stories) прямо на экране без перезапуска приложения.'
-                  : 'The button below will instantly open the welcoming onboarding Stories directly on the screen without restarting.'}
+              <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', lineHeight: 1.4, margin: '0' }}>
+                {lang === 'ru'
+                  ? 'Настройте кошельки платформы, на которые пользователи будут отправлять оплату за подписку Premium.'
+                  : 'Configure the platform wallets where users will send their payments for Premium subscriptions.'}
               </p>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={onTriggerOnboarding}
-                style={{ 
-                  background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)', 
-                  color: '#fff', 
-                  fontWeight: 700, 
-                  width: '100%', 
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                🚀 {lang === 'ru' ? 'Тест: Запустить онбординг' : 'Test: Run Onboarding'}
-              </button>
+
+              {/* Admin Payment Tabs */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', margin: '4px 0' }}>
+                {['card', 'crypto', 'other'].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setAdminPaymentTab(tab as any)}
+                    style={{
+                      padding: '8px 4px',
+                      borderRadius: '8px',
+                      border: adminPaymentTab === tab ? '1.5px solid #ffd700' : '1px solid var(--tg-border)',
+                      background: adminPaymentTab === tab ? 'rgba(255,215,0,0.08)' : 'transparent',
+                      color: 'var(--tg-text)',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <span>{tab === 'card' ? '💳' : tab === 'crypto' ? '💎' : '💬'}</span>
+                    <span>{tab === 'card' ? (lang === 'ru' ? 'Карты' : 'Cards') : tab === 'crypto' ? (lang === 'ru' ? 'Крипта' : 'Crypto') : (lang === 'ru' ? 'Другое' : 'Other')}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Admin Payment Content */}
+              <div style={{ background: 'rgba(0,0,0,0.15)', borderRadius: '10px', border: '1px solid var(--tg-border)', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {adminPaymentTab === 'card' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} className="animate-fade-in">
+                    <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0 }}>
+                      {lang === 'ru' ? 'Карты для приема оплат (до 5):' : 'Cards for receiving payments (up to 5):'}
+                    </p>
+                    {adminCards.map((item, idx) => (
+                      <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid var(--tg-border)' }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            placeholder={lang === 'ru' ? 'Банк (Сбер, Альфа...)' : 'Bank (e.g. Sber)'}
+                            className="tg-input"
+                            style={{ flex: 1, fontSize: '11.5px', padding: '6px' }}
+                            value={item.label}
+                            onChange={(e) => {
+                              const updated = [...adminCards];
+                              updated[idx].label = e.target.value;
+                              setAdminCards(updated);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setAdminCards(adminCards.filter(c => c.id !== item.id))}
+                            style={{
+                              background: 'rgba(233,92,92,0.12)', border: 'none', borderRadius: '4px',
+                              width: '26px', height: '26px', display: 'flex', alignItems: 'center',
+                              justifyContent: 'center', color: '#ff4d4d', cursor: 'pointer', fontSize: '12px'
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <input
+                          type="text"
+                          placeholder={lang === 'ru' ? 'Номер карты / получатель' : 'Card number / receiver info'}
+                          className="tg-input"
+                          style={{ fontSize: '11.5px', padding: '6px' }}
+                          value={item.card}
+                          onChange={(e) => {
+                            const updated = [...adminCards];
+                            updated[idx].card = e.target.value;
+                            setAdminCards(updated);
+                          }}
+                        />
+                      </div>
+                    ))}
+                    {adminCards.length < 5 && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        style={{ padding: '6px', fontSize: '11px', borderStyle: 'dashed' }}
+                        onClick={() => setAdminCards([...adminCards, { id: 'admin_card_' + Date.now(), label: '', card: '' }])}
+                      >
+                        ＋ {lang === 'ru' ? 'Добавить карту' : 'Add Card'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {adminPaymentTab === 'crypto' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} className="animate-fade-in">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="bottom-sheet-label" style={{ fontSize: '11px' }}>💎 TON Wallet Address</label>
+                      <input
+                        type="text"
+                        className="tg-input"
+                        placeholder="UQ..."
+                        value={adminTonVal}
+                        onChange={(e) => setAdminTonVal(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '6px' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="bottom-sheet-label" style={{ fontSize: '11px' }}>USDT TRC20 Address</label>
+                      <input
+                        type="text"
+                        className="tg-input"
+                        placeholder="T..."
+                        value={adminUsdtTrc20}
+                        onChange={(e) => setAdminUsdtTrc20(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '6px' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label className="bottom-sheet-label" style={{ fontSize: '11px' }}>USDT BEP20 Address</label>
+                      <input
+                        type="text"
+                        className="tg-input"
+                        placeholder="0x..."
+                        value={adminUsdtBep20}
+                        onChange={(e) => setAdminUsdtBep20(e.target.value)}
+                        style={{ fontSize: '11.5px', padding: '6px' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {adminPaymentTab === 'other' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }} className="animate-fade-in">
+                    <label className="bottom-sheet-label" style={{ fontSize: '11px' }}>{lang === 'ru' ? 'Альтернативные инструкции' : 'Alternative instructions'}</label>
+                    <textarea
+                      className="tg-input"
+                      placeholder={lang === 'ru' ? 'Например: Свяжитесь с @PayBioAdmin для оплаты через PayPal.' : 'e.g. Contact @PayBioAdmin for manual payout.'}
+                      value={adminOther}
+                      onChange={(e) => setAdminOther(e.target.value)}
+                      rows={3}
+                      style={{ resize: 'none', fontSize: '11.5px', padding: '6px' }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Keep Onboarding test button for convenience */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid var(--tg-border)', paddingTop: '10px', marginTop: '6px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--tg-hint)', flex: 1 }}>
+                  {lang === 'ru' ? 'Прочее тестирование:' : 'Other testing tools:'}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={onTriggerOnboarding}
+                  style={{ width: 'auto', padding: '6px 12px', fontSize: '11px', height: 'auto', borderRadius: '6px' }}
+                >
+                  🚀 {lang === 'ru' ? 'Тест: Запустить онбординг' : 'Test: Run Onboarding'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Section 5: Orders & Shipping */}
+        <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>📦</span> {lang === 'ru' ? 'Заказы и доставка' : 'Orders & Shipping'}
+          </h3>
+          
+          <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', margin: 0 }}>
+            {lang === 'ru' 
+              ? 'Список заказов на физические товары, требующие отправки.' 
+              : 'List of orders for physical goods requiring shipment.'}
+          </p>
+
+          {isLoadingOrders ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0' }}>
+              <span className="spinner-mini" style={{
+                width: '24px', height: '24px', border: '3px solid rgba(255,255,255,0.1)',
+                borderTopColor: 'var(--tg-accent)', borderRadius: '50%', animation: 'spin 1s linear infinite'
+              }} />
+            </div>
+          ) : ordersList.filter(o => o.voucher && o.product?.sub_type === 'PHYSICAL').length === 0 ? (
+            <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0, fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>
+              {lang === 'ru' ? 'Нет заказов физических товаров.' : 'No physical goods orders found.'}
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {ordersList.filter(o => o.voucher && o.product?.sub_type === 'PHYSICAL').map((order) => {
+                const voucher = order.voucher;
+                const delivery = voucher.delivery_data || {};
+                const status = order.status;
+                const isPending = status === 'PAID_PENDING_SHIPPING';
+                const isShipped = status === 'SHIPPED';
+                
+                const handleCopy = (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  const copyText = `Name: ${delivery.fullName || '—'}\nPhone: ${delivery.phone || '—'}\nMethod: ${delivery.shippingMethod || '—'}\nAddress: ${delivery.addressOrBranch || '—'}`;
+                  navigator.clipboard.writeText(copyText).then(() => {
+                    showAlert(lang === 'ru' ? '✓ Детали скопированы!' : '✓ Details copied!');
+                  });
+                };
+
+                const handleMarkShipped = async (e: React.MouseEvent) => {
+                  e.preventDefault();
+                  const tracking = prompt(
+                    lang === 'ru' 
+                      ? 'Введите трек-номер отправления:' 
+                      : 'Enter package tracking number:'
+                  );
+                  if (tracking === null) return;
+                  if (!tracking.trim()) {
+                    showAlert(lang === 'ru' ? 'Трек-номер не может быть пустым.' : 'Tracking number cannot be empty.');
+                    return;
+                  }
+                  
+                  setIsShippingActionLoading(prev => ({ ...prev, [order.id]: true }));
+                  try {
+                    const res = await fetch('/api/vouchers/ship', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ order_id: order.id, tracking_number: tracking.trim() })
+                    });
+                    const data = await res.json();
+                    if (res.ok && data.success) {
+                      showAlert(lang === 'ru' ? '✓ Заказ успешно отправлен!' : '✓ Order marked as shipped!');
+                      fetchOrders();
+                    } else {
+                      showAlert(data.error || 'Failed to update order.');
+                    }
+                  } catch (err: any) {
+                    showAlert(err.message || 'Error updating order.');
+                  } finally {
+                    setIsShippingActionLoading(prev => ({ ...prev, [order.id]: false }));
+                  }
+                };
+
+                return (
+                  <div key={order.id} style={{
+                    padding: '12px', background: 'var(--tg-secondary-bg)',
+                    borderRadius: '10px', border: '1px solid var(--tg-border)',
+                    display: 'flex', flexDirection: 'column', gap: '8px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--tg-text)' }}>
+                        {order.product?.title || 'Product'}
+                      </span>
+                      <span className={`chip ${isShipped ? 'chip-green' : isPending ? 'chip-orange' : 'chip-blue'}`} style={{ fontSize: '10.5px' }}>
+                        {isShipped ? (lang === 'ru' ? 'Отправлено' : 'Shipped') : isPending ? (lang === 'ru' ? 'Оплачено (Ждет отправку)' : 'Paid (Pending Shipping)') : status}
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: 'var(--tg-hint)', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <p style={{ margin: 0 }}>👤 <b>{lang === 'ru' ? 'Получатель:' : 'Name:'}</b> {delivery.fullName}</p>
+                      <p style={{ margin: 0 }}>📞 <b>{lang === 'ru' ? 'Телефон:' : 'Phone:'}</b> {delivery.phone}</p>
+                      <p style={{ margin: 0 }}>🚚 <b>{lang === 'ru' ? 'Способ:' : 'Method:'}</b> {delivery.shippingMethod}</p>
+                      <p style={{ margin: 0 }}>📍 <b>{lang === 'ru' ? 'Адрес:' : 'Address:'}</b> {delivery.addressOrBranch}</p>
+                      {delivery.trackingNumber && (
+                        <p style={{ margin: 0, color: 'var(--tg-green)' }}>🔢 <b>{lang === 'ru' ? 'Трек-номер:' : 'Tracking Number:'}</b> <code>{delivery.trackingNumber}</code></p>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={handleCopy}
+                        style={{ padding: '6px 12px', fontSize: '11.5px', height: 'auto', flex: 1 }}
+                      >
+                        📋 {lang === 'ru' ? 'Копировать адрес' : 'Copy Details'}
+                      </button>
+                      {isPending && (
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          onClick={handleMarkShipped}
+                          disabled={isShippingActionLoading[order.id]}
+                          style={{
+                            padding: '6px 12px', fontSize: '11.5px', height: 'auto', flex: 1,
+                            background: isShippingActionLoading[order.id] ? 'var(--tg-hint)' : 'var(--tg-green)',
+                            cursor: isShippingActionLoading[order.id] ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          {isShippingActionLoading[order.id] ? (
+                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                              <span className="spinner-mini" style={{ width: '10px', height: '10px' }} />
+                              {lang === 'ru' ? 'Обработка...' : 'Shipping...'}
+                            </span>
+                          ) : (
+                            lang === 'ru' ? 'Отметить как отправленный' : 'Mark as Shipped'
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -649,9 +1165,24 @@ export default function SettingsView({
           <button 
             type="submit" 
             className="btn-primary" 
-            style={{ flex: 2 }}
+            style={{
+              flex: 2,
+              background: isSaving ? 'var(--tg-hint)' : 'var(--tg-accent)',
+              cursor: isSaving ? 'not-allowed' : 'pointer'
+            }}
+            disabled={isSaving}
           >
-            {lang === 'ru' ? 'Сохранить настройки ✓' : 'Save Settings ✓'}
+            {isSaving ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <span className="spinner-mini" style={{
+                  width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite'
+                }} />
+                {lang === 'ru' ? 'Сохранение...' : 'Saving...'}
+              </span>
+            ) : (
+              lang === 'ru' ? 'Сохранить настройки ✓' : 'Save Settings ✓'
+            )}
           </button>
         </div>
       </form>

@@ -17,6 +17,7 @@ interface PremiumFlowProps {
   onApplyPromoCode: () => void;
   promoCodeStatus: { type: 'success' | 'error' | null; message: string };
   isApplyingPromo: boolean;
+  onBuyPremium?: () => void;
 }
 
 export default function PremiumFlow({
@@ -34,6 +35,7 @@ export default function PremiumFlow({
   onApplyPromoCode,
   promoCodeStatus,
   isApplyingPromo,
+  onBuyPremium,
 }: PremiumFlowProps) {
   return (
     <div className={`bottom-sheet-overlay ${isOpen ? 'active' : ''}`} onClick={onClose}>
@@ -153,20 +155,11 @@ export default function PremiumFlow({
           <button 
             type="button"
             className="btn-primary" 
-            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700, padding: '10px 16px', fontSize: '13.5px', height: '38px', borderRadius: '10px' }}
-            onClick={() => onBuyPremiumWithStars(false)}
+            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700, padding: '12px 16px', fontSize: '14.5px', height: '42px', borderRadius: '12px' }}
+            onClick={onBuyPremium}
             disabled={isUpgrading}
           >
-            {isUpgrading ? (lang === 'ru' ? 'Оформление…' : 'Processing…') : (lang === 'ru' ? 'Разово на 1 мес (500 Stars)' : 'One-time 1 Month (500 Stars)')}
-          </button>
-          <button 
-            type="button"
-            className="btn-primary" 
-            style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontWeight: 700, padding: '10px 16px', fontSize: '13.5px', height: '38px', borderRadius: '10px' }}
-            onClick={() => onBuyPremiumWithStars(true)}
-            disabled={isUpgrading}
-          >
-            {isUpgrading ? (lang === 'ru' ? 'Оформление…' : 'Processing…') : (lang === 'ru' ? 'Подписка на месяц (500 Stars/мес)' : 'Monthly Subscription (500 Stars/mo)')}
+            {isUpgrading ? (lang === 'ru' ? 'Оформление…' : 'Processing…') : (lang === 'ru' ? 'Купить Premium за $10 / 500 Stars →' : 'Buy Premium for $10 / 500 Stars →')}
           </button>
         </div>
 

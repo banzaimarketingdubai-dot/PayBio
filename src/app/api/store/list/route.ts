@@ -72,14 +72,7 @@ export async function GET(request: Request) {
 
       const products = await db.getProductsByCreatorId(creator.id);
       return NextResponse.json(
-        { success: true, creator, products: products || [] },
-        {
-          headers: {
-            // Cache catalog on Vercel CDN for 30s; stale-while-revalidate for 60s
-            // Product detail is NOT cached (has_bought is buyer-specific)
-            'Cache-Control': 's-maxage=30, stale-while-revalidate=60',
-          },
-        }
+        { success: true, creator, products: products || [] }
       );
     }
 

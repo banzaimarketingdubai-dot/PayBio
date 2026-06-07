@@ -14,7 +14,7 @@ export async function POST(request: Request) {
       }
       const result = await db.verifyAndApplyPromoCode(user_id, code);
       const user = await db.getUserById(user_id);
-      return NextResponse.json({ success: true, user, duration_days: result.duration_days });
+      return NextResponse.json({ user, ...result });
     } else if (action === 'stars') {
       // Direct premium activation via stars (fallback or administrative checkout confirmation)
       const user = await db.activatePremium(user_id, 30);

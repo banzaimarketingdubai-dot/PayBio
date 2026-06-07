@@ -1,165 +1,106 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
-import { verifyReceiptImage } from '@/lib/gemini';
-import ExifParser from 'exif-parser';
-
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-
-async function tgApi(method: string, body: any) {
-  if (!TELEGRAM_BOT_TOKEN) return null;
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return await res.json();
-  } catch (err) {
-    console.error(`Telegram Bot API Error (${method}):`, err);
-    return null;
-  }
-}
+import { sendTelegramNotification } from '@/lib/telegram';
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const orderId = formData.get('order_id') as string;
-    const file = formData.get('file') as File;
+    const body = await request.json();
+    const { order_id } = body;
 
-    if (!orderId || !file) {
+    if (!order_id) {
       return NextResponse.json(
-        { error: 'Missing order_id or receipt file.' },
+        { error: 'Missing order_id parameter.' },
         { status: 400 }
       );
     }
 
     // 1. Fetch order & product details
-    const order = await db.getOrderById(orderId);
+    const order = await db.getOrderById(order_id);
     if (!order) {
       return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
     }
 
-    // Idempotency: If already approved, return success immediately
-    if (order.status === 'approved') {
+    // Idempotency: If already approved/paid, return success immediately
+    if (order.status === 'PAID' || order.status === 'approved') {
       return NextResponse.json({
         success: true,
-        status: 'approved',
+        status: 'PAID',
         message: 'Order was already approved and fulfilled.',
       });
     }
 
-    const product = order.product;
-    if (!product) {
-      return NextResponse.json({ error: 'Associated product not found.' }, { status: 404 });
-    }
+    const isPremiumOrder = order.payment_method && order.payment_method.endsWith('_premium');
 
-    const creator = await db.getUserById(product.creator_id);
-    if (!creator) {
-      return NextResponse.json({ error: 'Creator not found.' }, { status: 404 });
-    }
-
-    // Convert file to buffer
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // --- PIPELINE STEP 1: EXIF Metadata Check ---
-    let exifFlagged = false;
-    let exifReason = '';
-    try {
-      const parser = ExifParser.create(buffer);
-      const result = parser.parse();
-      const software = result.tags?.Software || '';
-      if (software) {
-        const editedKeywords = ['adobe', 'photoshop', 'picsart', 'canva', 'lightroom', 'gimp', 'sketch', 'figma'];
-        if (editedKeywords.some(keyword => software.toLowerCase().includes(keyword))) {
-          exifFlagged = true;
-          exifReason = `EXIF metadata indicates editing software: ${software}`;
-        }
-      }
-    } catch (e: any) {
-      // Skip EXIF check if the file format doesn't support it (e.g. PNG)
-      console.log('EXIF extraction skipped/failed:', e.message);
-    }
-
-    if (exifFlagged) {
-      await db.updateOrderStatus(orderId, 'manual_review', 0.9);
-      
-      // Notify Creator
-      await tgApi('sendMessage', {
-        chat_id: creator.telegram_id,
-        text: `⚠️ *Order Flagged (EXIF check)*\n\nOrder ID: \`${orderId}\`\nProduct: *${product.title}*\nReason: ${exifReason}\n\nThis order has been set to *manual_review*.`,
-        parse_mode: 'Markdown',
-      });
-
-      return NextResponse.json({
-        success: false,
-        status: 'manual_review',
-        reason: exifReason,
-      });
-    }
-
-    // --- PIPELINE STEP 2 & 3: Vision LLM Analysis ---
-    const mimeType = file.type || 'image/jpeg';
-    const visionResult = await verifyReceiptImage(buffer, mimeType);
-
-    console.log('Gemini Vision analysis result:', visionResult);
-
-    // --- PIPELINE STEP 4: Logic Matching & Fulfillment ---
-    let orderStatus = 'manual_review';
-    let isMatch = false;
-
-    // Check amount matches within small margin
-    const expectedAmount = Number(product.price_fiat);
-    const actualAmount = visionResult.amount ? Number(visionResult.amount) : 0;
-    
-    // We allow matching within 10% discrepancy (or exact match) or absolute difference under 1.00 for local currency conversions
-    const isAmountCorrect = actualAmount > 0 && Math.abs(actualAmount - expectedAmount) < (expectedAmount * 0.1 || 1.00);
-
-    if (visionResult.is_valid_receipt && isAmountCorrect && visionResult.fraud_score < 0.3) {
-      isMatch = true;
-      orderStatus = 'approved';
-    }
-
-    // Update database status
-    await db.updateOrderStatus(orderId, orderStatus, visionResult.fraud_score);
-
-    if (orderStatus === 'approved') {
-      try {
-        const { fulfillOrder } = await import('@/lib/fulfillment');
-        await fulfillOrder(orderId);
-      } catch (err) {
-        console.error('P2P verification fulfillment error:', err);
-      }
-
-      return NextResponse.json({
-        success: true,
-        status: 'approved',
-        extracted_data: visionResult,
-      });
+    let creator = null;
+    if (isPremiumOrder) {
+      creator = await db.getAdminUser();
     } else {
-      // Send for manual review and notify Creator
-      let mismatchReason = '';
-      if (!isAmountCorrect) {
-        mismatchReason = `Amount mismatch (Expected $${expectedAmount}, extracted $${actualAmount}).`;
-      } else {
-        mismatchReason = visionResult.reason || 'Vision validation failed.';
+      const product = order.product;
+      if (!product) {
+        return NextResponse.json({ error: 'Associated product not found.' }, { status: 404 });
       }
-
-      await tgApi('sendMessage', {
-        chat_id: creator.telegram_id,
-        text: `⚠️ *Payment Verification Action Required*\n\nAn order for *${product.title}* requires manual review.\n\nReason: *${mismatchReason}*\nFraud Score: *${visionResult.fraud_score}*\n\nPlease inspect the receipt upload in your bank account before delivering the product.`,
-        parse_mode: 'Markdown',
-      });
-
-      return NextResponse.json({
-        success: false,
-        status: 'manual_review',
-        reason: mismatchReason,
-        extracted_data: visionResult,
-      });
+      creator = await db.getUserById(product.creator_id);
     }
+
+    if (!creator) {
+      return NextResponse.json({ error: 'Creator or administrator not found.' }, { status: 404 });
+    }
+
+    // 2. Update order status to PAYMENT_CLAIMED
+    await db.updateOrderStatus(order_id, 'PAYMENT_CLAIMED');
+
+    // 3. Notify Creator/Admin via Telegram Bot
+    const buyer = await db.getUserByTelegramId(order.buyer_tg_id);
+    const buyerName = buyer ? `@${buyer.username || 'user'}` : `ID: ${order.buyer_tg_id}`;
+    
+    // Simple language detection based on buyer language if available
+    const isRussian = buyer?.username ? /[а-яА-Я]/.test(buyer.username) : true;
+
+    let messageText = '';
+    let replyMarkup = {};
+
+    if (isPremiumOrder) {
+      const isCrypto = order.payment_method.includes('crypto');
+      messageText = isRussian
+        ? `👑 *Новый запрос на покупку PREMIUM!* \n\nПокупатель *${buyerName}* утверждает, что оплатил Premium ($10) через ${isCrypto ? 'Crypto (USDT/TON)' : 'Card/P2P'}. Проверьте ваш счет/кошелек.`
+        : `👑 *New PREMIUM Purchase Request!* \n\nBuyer *${buyerName}* claims they paid Premium ($10) via ${isCrypto ? 'Crypto (USDT/TON)' : 'Card/P2P'}. Please check your account/wallet.`;
+      
+      replyMarkup = {
+        inline_keyboard: [
+          [
+            { text: isRussian ? '✅ Одобрить и выдать Premium' : '✅ Approve & Grant Premium', callback_data: `approve_premium_${order_id}` },
+            { text: isRussian ? '❌ Отклонить запрос' : '❌ Reject Request', callback_data: `reject_premium_${order_id}` }
+          ]
+        ]
+      };
+    } else {
+      const product = order.product;
+      const price = product.price_fiat;
+      const currency = order.payment_method === 'crypto' ? 'USDT/TON' : 'USD';
+      const isProductRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
+
+      messageText = isProductRussian
+        ? `💰 *Новый запрос на подтверждение оплаты!* \n\nПокупатель утверждает, что перевел вам ${price} ${currency} за товар *"${product.title}"*. Проверьте ваш счет/кошелек.`
+        : `💰 *New Payment Confirmation Request!* \n\nBuyer claims they transferred ${price} ${currency} for *"${product.title}"*. Please check your banking app or wallet.`;
+
+      replyMarkup = {
+        inline_keyboard: [
+          [
+            { text: isProductRussian ? '✅ Подтвердить и выдать товар' : '✅ Approve & Deliver', callback_data: `approve_pay_${order_id}` },
+            { text: isProductRussian ? '❌ Возникла проблема' : '❌ Problem with Payment', callback_data: `reject_pay_${order_id}` }
+          ]
+        ]
+      };
+    }
+
+    await sendTelegramNotification(creator.telegram_id, messageText, replyMarkup);
+
+    return NextResponse.json({
+      success: true,
+      status: 'PAYMENT_CLAIMED'
+    });
   } catch (error: any) {
-    console.error('Verify error:', error);
+    console.error('Verify P2P payment claim error:', error);
     return NextResponse.json(
       { error: error.message || 'Internal Server Error' },
       { status: 500 }

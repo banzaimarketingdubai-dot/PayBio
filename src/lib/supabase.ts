@@ -32,6 +32,32 @@ export interface User {
   payment_details?: any;
   profile_customization?: any;
   created_at: string;
+  referred_by?: string | null;
+  partner_tier?: number;
+  ton_withdrawal_address?: string | null;
+}
+
+export interface ReferralCommission {
+  id: string;
+  partner_id: string;
+  referred_user_id: string | null;
+  order_id: string;
+  amount_usd: number;
+  commission_percentage: number;
+  commission_earned_usd: number;
+  status: 'earned' | 'pending_payout' | 'paid';
+  created_at: string;
+}
+
+export interface PartnerPayout {
+  id: string;
+  partner_id: string;
+  amount_usd: number;
+  ton_address: string;
+  status: 'requested' | 'approved' | 'rejected' | 'completed';
+  tx_hash: string | null;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface Product {
@@ -44,6 +70,7 @@ export interface Product {
   content_url: string;
   cover_url: string | null;
   product_type: string;
+  sub_type?: string | null;
   created_at: string;
   creator?: User;
 }
@@ -66,6 +93,13 @@ export interface Voucher {
   buyer_tg_id: string;
   qr_data: string;
   status: string;
+  delivery_data?: {
+    fullName: string;
+    phone: string;
+    shippingMethod: string;
+    addressOrBranch: string;
+    trackingNumber?: string;
+  } | null;
   created_at: string;
   order?: Order;
 }
@@ -110,6 +144,8 @@ interface DatabaseSchema {
   bookings?: Booking[];
   reviews?: Review[];
   promo_codes?: PromoCode[];
+  referral_commissions?: ReferralCommission[];
+  partner_payouts?: PartnerPayout[];
 }
 
 const MOCK_DB_PATH = path.join(process.cwd(), 'mock_db.json');
@@ -127,6 +163,8 @@ function readMockDb(): DatabaseSchema {
       if (!parsed.vouchers) parsed.vouchers = [];
       if (!parsed.bookings) parsed.bookings = [];
       if (!parsed.reviews) parsed.reviews = [];
+      if (!parsed.referral_commissions) parsed.referral_commissions = [];
+      if (!parsed.partner_payouts) parsed.partner_payouts = [];
       if (!parsed.promo_codes) {
         parsed.promo_codes = [
           {
@@ -166,7 +204,9 @@ function readMockDb(): DatabaseSchema {
         is_active: true,
         created_at: new Date().toISOString()
       }
-    ]
+    ],
+    referral_commissions: [],
+    partner_payouts: []
   };
   
   try {
@@ -245,7 +285,10 @@ export const db = {
   async upsertUser(tgId: number, username: string | null, paymentDetails?: any) {
     const existing = await this.getUserByTelegramId(tgId);
     const defaultPayment = paymentDetails || (existing ? existing.payment_details : { type: 'p2p', value: '1234-5678-9012-3456 (John Doe)' });
-    const isPremium = existing ? existing.is_premium : false;
+    const isPremium = existing ? existing.is_premium : true;
+    const premiumUntil = existing 
+      ? existing.premium_until 
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const customization = existing ? existing.profile_customization : null;
 
     if (isRealSupabaseConfigured) {
@@ -256,6 +299,7 @@ export const db = {
           username,
           payment_details: defaultPayment,
           is_premium: isPremium,
+          premium_until: premiumUntil,
           profile_customization: customization
         }, { onConflict: 'telegram_id' })
         .select()
@@ -274,9 +318,13 @@ export const db = {
           telegram_id: tgId,
           username,
           is_premium: isPremium,
+          premium_until: premiumUntil,
           payment_details: defaultPayment,
           profile_customization: customization,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          referred_by: null,
+          partner_tier: 1,
+          ton_withdrawal_address: null
         };
         mockDb.users.push(user);
       }
@@ -332,6 +380,17 @@ export const db = {
 
   async verifyAndApplyPromoCode(userId: string, code: string) {
     const codeUpper = code.trim().toUpperCase();
+    
+    // Custom Promo Codes
+    if (codeUpper === 'PAYBIO_7' || codeUpper === 'PREMIUM_7') {
+      await this.activatePremium(userId, 7);
+      return { success: true, duration_days: 7 };
+    }
+    
+    if (codeUpper === 'DEACTIVATE' || codeUpper === 'PAYBIO_DEACTIVATE') {
+      await this.updateUserPremium(userId, false, null);
+      return { success: true, duration_days: 0, deactivated: true };
+    }
     
     if (isRealSupabaseConfigured) {
       // 1. Fetch promo code
@@ -492,7 +551,7 @@ export const db = {
     }
   },
 
-  async createProduct(creatorId: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string, productType = 'DIGITAL') {
+  async createProduct(creatorId: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string, productType = 'DIGITAL', subType: string | null = null) {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('products')
@@ -504,7 +563,8 @@ export const db = {
           price_stars: priceStars,
           content_url: contentUrl,
           cover_url: coverUrl || null,
-          product_type: productType
+          product_type: productType,
+          sub_type: subType
         })
         .select()
         .single();
@@ -522,6 +582,7 @@ export const db = {
         content_url: contentUrl,
         cover_url: coverUrl || null,
         product_type: productType,
+        sub_type: subType,
         created_at: new Date().toISOString()
       };
       mockDb.products.push(newProduct);
@@ -546,7 +607,7 @@ export const db = {
     }
   },
 
-  async updateProduct(id: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string, productType = 'DIGITAL') {
+  async updateProduct(id: string, title: string, description: string, priceFiat: number, priceStars: number, contentUrl: string, coverUrl?: string, productType = 'DIGITAL', subType: string | null = null) {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('products')
@@ -557,7 +618,8 @@ export const db = {
           price_stars: priceStars,
           content_url: contentUrl,
           cover_url: coverUrl || null,
-          product_type: productType
+          product_type: productType,
+          sub_type: subType
         })
         .eq('id', id)
         .select()
@@ -575,6 +637,7 @@ export const db = {
         product.content_url = contentUrl;
         product.cover_url = coverUrl || null;
         product.product_type = productType;
+        product.sub_type = subType;
       }
       writeMockDb(mockDb);
       return product;
@@ -602,7 +665,7 @@ export const db = {
     }
   },
 
-  async createOrder(productId: string, buyerTgId: number, paymentMethod: string, receiptUrl?: string) {
+  async createOrder(productId: string | null, buyerTgId: number, paymentMethod: string, receiptUrl?: string) {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('orders')
@@ -611,7 +674,7 @@ export const db = {
           buyer_tg_id: buyerTgId,
           payment_method: paymentMethod,
           receipt_url: receiptUrl || null,
-          status: 'pending',
+          status: 'PENDING',
           fraud_score: 0
         })
         .select()
@@ -626,7 +689,7 @@ export const db = {
         buyer_tg_id: buyerTgId,
         payment_method: paymentMethod,
         receipt_url: receiptUrl || null,
-        status: 'pending',
+        status: 'PENDING',
         fraud_score: 0,
         created_at: new Date().toISOString()
       };
@@ -667,7 +730,7 @@ export const db = {
         .from('orders')
         .select('*, product:product_id(*)')
         .eq('buyer_tg_id', buyerTgId)
-        .eq('status', 'pending')
+        .eq('status', 'PENDING')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -681,7 +744,7 @@ export const db = {
     } else {
       const mockDb = readMockDb();
       const pending = mockDb.orders
-        .filter(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.status === 'pending')
+        .filter(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.status === 'PENDING')
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       if (pending.length > 0) {
         const order = pending[0];
@@ -724,12 +787,12 @@ export const db = {
         .from('orders')
         .select('*', { count: 'exact', head: true })
         .eq('product_id', productId)
-        .eq('status', 'approved');
+        .in('status', ['approved', 'PAID']);
       if (error) throw error;
       return count || 0;
     } else {
       const mockDb = readMockDb();
-      return mockDb.orders.filter(o => o.product_id === productId && o.status === 'approved').length;
+      return mockDb.orders.filter(o => o.product_id === productId && (o.status === 'approved' || o.status === 'PAID')).length;
     }
   },
 
@@ -753,7 +816,7 @@ export const db = {
       const { data, error } = await supabaseAdmin
         .from('orders')
         .select('*, product:product_id!inner(*)')
-        .eq('status', 'pending')
+        .eq('status', 'PENDING')
         .eq('product.creator_id', creatorId)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -763,11 +826,56 @@ export const db = {
       const creatorProducts = mockDb.products.filter(p => p.creator_id === creatorId);
       const productIds = creatorProducts.map(p => p.id);
       return mockDb.orders
-        .filter(o => o.status === 'pending' && o.product_id && productIds.includes(o.product_id))
+        .filter(o => o.status === 'PENDING' && o.product_id && productIds.includes(o.product_id))
         .map(o => {
           const product = creatorProducts.find(p => p.id === o.product_id);
           return { ...o, product };
         });
+    }
+  },
+
+  async getOrdersByCreatorId(creatorId: string) {
+    if (isRealSupabaseConfigured) {
+      // Fetch creator's products
+      const { data: products, error: prodError } = await supabaseAdmin
+        .from('products')
+        .select('id')
+        .eq('creator_id', creatorId);
+      if (prodError) throw prodError;
+      const productIds = (products || []).map((p: any) => p.id);
+
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('*, product:product_id(*)')
+        .in('product_id', productIds)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      // Fetch vouchers
+      const { data: vouchers, error: vError } = await supabaseAdmin
+        .from('vouchers')
+        .select('*')
+        .in('order_id', (data || []).map((o: any) => o.id));
+      
+      const ordersWithVouchers = (data || []).map((o: any) => {
+        const voucher = (vouchers || []).find((v: any) => v.order_id === o.id);
+        return { ...o, voucher };
+      });
+      return ordersWithVouchers;
+    } else {
+      const mockDb = readMockDb();
+      const creatorProducts = mockDb.products.filter(p => p.creator_id === creatorId);
+      const productIds = creatorProducts.map(p => p.id);
+      const mockVouchers = mockDb.vouchers || [];
+
+      return mockDb.orders
+        .filter(o => o.product_id && productIds.includes(o.product_id))
+        .map((o: any) => {
+          const product = creatorProducts.find((p: any) => p.id === o.product_id);
+          const voucher = mockVouchers.find((v: any) => v.order_id === o.id);
+          return { ...o, product, voucher };
+        })
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     }
   },
 
@@ -841,6 +949,50 @@ export const db = {
       const v = mockDb.vouchers.find(x => x.qr_data === qrData);
       if (v) {
         v.status = 'REDEEMED';
+        writeMockDb(mockDb);
+      }
+      return v;
+    }
+  },
+
+  async getVoucherByOrderId(orderId: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('vouchers')
+        .select('*, order:order_id(*, product:product_id(*))')
+        .eq('order_id', orderId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.vouchers) mockDb.vouchers = [];
+      const v = mockDb.vouchers.find(x => x.order_id === orderId);
+      if (v) {
+        const order = mockDb.orders.find(o => o.id === v.order_id);
+        const product = order ? mockDb.products.find(p => p.id === order.product_id) : null;
+        return { ...v, order: order ? { ...order, product } : null };
+      }
+      return null;
+    }
+  },
+
+  async updateVoucherDeliveryData(orderId: string, deliveryData: any) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('vouchers')
+        .update({ delivery_data: deliveryData })
+        .eq('order_id', orderId)
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.vouchers) mockDb.vouchers = [];
+      const v = mockDb.vouchers.find(x => x.order_id === orderId);
+      if (v) {
+        v.delivery_data = deliveryData;
         writeMockDb(mockDb);
       }
       return v;
@@ -962,13 +1114,13 @@ export const db = {
         .select("id")
         .eq("buyer_tg_id", buyerTgId)
         .eq("product_id", productId)
-        .eq("status", "approved")
+        .in("status", ["approved", "PAID"])
         .limit(1);
       if (error) throw error;
       return !!(data && data.length > 0);
     } else {
       const mockDb = readMockDb();
-      return mockDb.orders.some(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.product_id === productId && o.status === "approved");
+      return mockDb.orders.some(o => Number(o.buyer_tg_id) === Number(buyerTgId) && o.product_id === productId && (o.status === "approved" || o.status === "PAID"));
     }
   },
 
@@ -1038,6 +1190,330 @@ export const db = {
       writeMockDb(mockDb);
       return newReview;
     }
+  },
+
+  async getAdminWallets() {
+    const adminSystemTgId = 999999999;
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('payment_details')
+        .eq('telegram_id', adminSystemTgId)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.payment_details || null;
+    } else {
+      const mockDb = readMockDb();
+      const adminUser = mockDb.users.find(u => Number(u.telegram_id) === adminSystemTgId);
+      return adminUser?.payment_details || null;
+    }
+  },
+
+  async saveAdminWallets(paymentDetails: any) {
+    const adminSystemTgId = 999999999;
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .upsert({
+          telegram_id: adminSystemTgId,
+          username: 'paybio_admin_wallets',
+          payment_details: paymentDetails,
+          is_premium: true
+        }, { onConflict: 'telegram_id' })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      let adminUser = mockDb.users.find(u => Number(u.telegram_id) === adminSystemTgId);
+      if (adminUser) {
+        adminUser.payment_details = paymentDetails;
+      } else {
+        adminUser = {
+          id: 'admin-system-wallets-uuid',
+          telegram_id: adminSystemTgId,
+          username: 'paybio_admin_wallets',
+          is_premium: true,
+          payment_details: paymentDetails,
+          created_at: new Date().toISOString()
+        };
+        mockDb.users.push(adminUser);
+      }
+      writeMockDb(mockDb);
+      return adminUser;
+    }
+  },
+
+  async getAdminUser() {
+    const adminIds = [123456789, 7999888, 999999999, 1780771122];
+    if (isRealSupabaseConfigured) {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .in('telegram_id', adminIds)
+        .limit(1)
+        .maybeSingle();
+      if (data) return data;
+      const { data: data2 } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .or('username.ilike.%sher%,username.eq.shertyonok')
+        .limit(1)
+        .maybeSingle();
+      return data2;
+    } else {
+      const mockDb = readMockDb();
+      const user = mockDb.users.find(u => adminIds.includes(Number(u.telegram_id)));
+      if (user) return user;
+      const user2 = mockDb.users.find(u => u.username?.toLowerCase().includes('sher'));
+      return user2 || null;
+    }
+  },
+
+  async attributeReferral(buyerTgId: number, partnerRef: string): Promise<boolean> {
+    const buyer = await this.getUserByTelegramId(buyerTgId);
+    if (!buyer) return false;
+    if (buyer.referred_by) return false;
+
+    let partner = null;
+    if (isRealSupabaseConfigured) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(partnerRef)) {
+        const { data } = await supabaseAdmin.from('users').select('*').eq('id', partnerRef).maybeSingle();
+        partner = data;
+      } else {
+        const tgIdNum = Number(partnerRef);
+        if (!isNaN(tgIdNum)) {
+          const { data } = await supabaseAdmin.from('users').select('*').eq('telegram_id', tgIdNum).maybeSingle();
+          partner = data;
+        }
+      }
+    } else {
+      const mockDb = readMockDb();
+      partner = mockDb.users.find(u => u.id === partnerRef || String(u.telegram_id) === partnerRef) || null;
+    }
+
+    if (!partner) return false;
+    if (partner.id === buyer.id) return false; // self referral check
+
+    if (isRealSupabaseConfigured) {
+      const { error } = await supabaseAdmin
+        .from('users')
+        .update({ referred_by: partner.id })
+        .eq('id', buyer.id);
+      if (error) throw error;
+    } else {
+      const mockDb = readMockDb();
+      const b = mockDb.users.find(u => u.id === buyer.id);
+      if (b) {
+        b.referred_by = partner.id;
+        writeMockDb(mockDb);
+      }
+    }
+    return true;
+  },
+
+  async processPremiumCommission(buyerTgId: number, orderAmount: number, orderId: string) {
+    const buyer = await this.getUserByTelegramId(buyerTgId);
+    if (!buyer || !buyer.referred_by) return null;
+
+    const partnerId = buyer.referred_by;
+    const partner = await this.getUserById(partnerId);
+    if (!partner) return null;
+
+    const currentTier = partner.partner_tier || 1;
+    const pct = currentTier === 2 ? 30 : 20;
+    const commission = (orderAmount * pct) / 100;
+
+    let commissionRecord;
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('referral_commissions')
+        .insert({
+          partner_id: partnerId,
+          referred_user_id: buyer.id,
+          order_id: orderId,
+          amount_usd: orderAmount,
+          commission_percentage: pct,
+          commission_earned_usd: commission,
+          status: 'earned'
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      commissionRecord = data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.referral_commissions) mockDb.referral_commissions = [];
+      commissionRecord = {
+        id: Math.random().toString(36).substring(2, 15),
+        partner_id: partnerId,
+        referred_user_id: buyer.id,
+        order_id: orderId,
+        amount_usd: orderAmount,
+        commission_percentage: pct,
+        commission_earned_usd: commission,
+        status: 'earned' as const,
+        created_at: new Date().toISOString()
+      };
+      mockDb.referral_commissions.push(commissionRecord);
+      writeMockDb(mockDb);
+    }
+
+    // Check upgrade criteria (50+ active premium referred users)
+    let activeReferralsCount = 0;
+    if (isRealSupabaseConfigured) {
+      const { count, error } = await supabaseAdmin
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('referred_by', partnerId)
+        .eq('is_premium', true);
+      if (error) throw error;
+      activeReferralsCount = count || 0;
+    } else {
+      const mockDb = readMockDb();
+      activeReferralsCount = mockDb.users.filter(u => u.referred_by === partnerId && u.is_premium === true).length;
+    }
+
+    let upgradedToTier2 = false;
+    if (activeReferralsCount >= 50 && currentTier === 1) {
+      if (isRealSupabaseConfigured) {
+        await supabaseAdmin
+          .from('users')
+          .update({ partner_tier: 2 })
+          .eq('id', partnerId);
+      } else {
+        const mockDb = readMockDb();
+        const p = mockDb.users.find(u => u.id === partnerId);
+        if (p) p.partner_tier = 2;
+        writeMockDb(mockDb);
+      }
+      upgradedToTier2 = true;
+    }
+
+    return {
+      partnerTelegramId: partner.telegram_id,
+      commissionEarnedUsd: commission,
+      upgradedToTier2
+    };
+  },
+
+  async getPartnerStats(partnerId: string) {
+    let partnerTier = 1;
+    let tonWithdrawalAddress = null;
+    let totalEarnings = 0;
+    let totalPaid = 0;
+    let activeReferralsCount = 0;
+
+    if (isRealSupabaseConfigured) {
+      const { data: partner } = await supabaseAdmin
+        .from('users')
+        .select('partner_tier, ton_withdrawal_address')
+        .eq('id', partnerId)
+        .maybeSingle();
+      if (partner) {
+        partnerTier = partner.partner_tier || 1;
+        tonWithdrawalAddress = partner.ton_withdrawal_address || null;
+      }
+      const { data: commissions } = await supabaseAdmin
+        .from('referral_commissions')
+        .select('commission_earned_usd')
+        .eq('partner_id', partnerId);
+      if (commissions) {
+        totalEarnings = commissions.reduce((sum: number, c: any) => sum + Number(c.commission_earned_usd), 0);
+      }
+
+      const { data: payouts } = await supabaseAdmin
+        .from('partner_payouts')
+        .select('amount_usd')
+        .eq('partner_id', partnerId)
+        .eq('status', 'completed');
+      if (payouts) {
+        totalPaid = payouts.reduce((sum: number, p: any) => sum + Number(p.amount_usd), 0);
+      }
+
+      const { count } = await supabaseAdmin
+        .from('users')
+        .select('*', { count: 'exact', head: true })
+        .eq('referred_by', partnerId)
+        .eq('is_premium', true);
+      activeReferralsCount = count || 0;
+    } else {
+      const mockDb = readMockDb();
+      const partner = mockDb.users.find(u => u.id === partnerId);
+      if (partner) {
+        partnerTier = partner.partner_tier || 1;
+        tonWithdrawalAddress = partner.ton_withdrawal_address || null;
+      }
+
+      const commissions = (mockDb.referral_commissions || []).filter(c => c.partner_id === partnerId);
+      totalEarnings = commissions.reduce((sum: number, c: any) => sum + Number(c.commission_earned_usd), 0);
+
+      const payouts = (mockDb.partner_payouts || []).filter(p => p.partner_id === partnerId && p.status === 'completed');
+      totalPaid = payouts.reduce((sum: number, p: any) => sum + Number(p.amount_usd), 0);
+
+      activeReferralsCount = mockDb.users.filter(u => u.referred_by === partnerId && u.is_premium === true).length;
+    }
+
+    return {
+      total_earnings: Number(totalEarnings.toFixed(2)),
+      total_paid: Number(totalPaid.toFixed(2)),
+      available_balance: Number(Math.max(0, totalEarnings - totalPaid).toFixed(2)),
+      active_referrals_count: activeReferralsCount,
+      partner_tier: partnerTier,
+      ton_withdrawal_address: tonWithdrawalAddress
+    };
+  },
+
+  async requestPartnerPayout(partnerId: string, tonAddress: string, amount: number) {
+    const stats = await this.getPartnerStats(partnerId);
+    if (amount < 50) {
+      throw new Error('Minimum withdrawal amount is $50.00 USD.');
+    }
+    if (stats.available_balance < amount) {
+      throw new Error('Insufficient balance.');
+    }
+
+    let payout;
+    if (isRealSupabaseConfigured) {
+      await supabaseAdmin
+        .from('users')
+        .update({ ton_withdrawal_address: tonAddress })
+        .eq('id', partnerId);
+
+      const { data, error } = await supabaseAdmin
+        .from('partner_payouts')
+        .insert({
+          partner_id: partnerId,
+          amount_usd: amount,
+          ton_address: tonAddress,
+          status: 'requested'
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      payout = data;
+    } else {
+      const mockDb = readMockDb();
+      const user = mockDb.users.find(u => u.id === partnerId);
+      if (user) {
+        user.ton_withdrawal_address = tonAddress;
+      }
+      if (!mockDb.partner_payouts) mockDb.partner_payouts = [];
+      payout = {
+        id: Math.random().toString(36).substring(2, 15),
+        partner_id: partnerId,
+        amount_usd: amount,
+        ton_address: tonAddress,
+        status: 'requested' as const,
+        tx_hash: null,
+        created_at: new Date().toISOString()
+      };
+      mockDb.partner_payouts.push(payout);
+      writeMockDb(mockDb);
+    }
+    return payout;
   }
 };
 

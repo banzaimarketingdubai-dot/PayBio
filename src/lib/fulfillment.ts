@@ -9,13 +9,13 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       return false;
     }
 
-    if (order.status === 'approved') {
-      console.warn(`Order ${orderId} is already approved and fulfilled.`);
+    if (order.status === 'PAID' || order.status === 'approved') {
+      console.warn(`Order ${orderId} is already paid/approved and fulfilled.`);
       return true;
     }
 
     // 1. Update order status in DB
-    await db.updateOrderStatus(orderId, 'approved');
+    await db.updateOrderStatus(orderId, 'PAID');
 
     const product = order.product;
     if (!product) {
@@ -102,26 +102,45 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
         );
       }
     } else if (productType === 'VOUCHER') {
-      // Offline tickets & vouchers
+      // Offline tickets & vouchers or Physical Goods
       const qrData = `pb_v_${Math.random().toString(36).substring(2, 15)}_${orderId.substring(0, 8)}`;
       await db.createVoucher(orderId, String(buyerTgId), qrData);
 
-      // Generate public QR code link
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}`;
+      const isPhysical = product.sub_type === 'PHYSICAL';
 
-      await sendTelegramPhoto(
-        buyerTgId,
-        qrUrl,
-        `🎟️ *Ваш билет готов!*\n\nВы успешно приобрели билет на услугу/событие: *"${product.title}"*.\n\nПредъявите этот QR-код организатору для сканирования и подтверждения входа.`,
-        promoMarkup
-      );
-
-      // Notify Creator
-      if (creator) {
+      if (isPhysical) {
+        // Notify buyer to fill delivery details
         await sendTelegramNotification(
-          creator.telegram_id,
-          `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nВаучер успешно сгенерирован и отправлен покупателю.`
+          buyerTgId,
+          `🎉 *Спасибо за оплату!* \n\nВы успешно оплатили товар *"${product.title}"*.\n\nПожалуйста, откройте магазин в Telegram и заполните ваши адресные данные доставки, чтобы продавец мог отправить ваш заказ.`,
+          promoMarkup
         );
+
+        // Notify Creator
+        if (creator) {
+          await sendTelegramNotification(
+            creator.telegram_id,
+            `📦 *Оплата физического товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nПокупатель сейчас заполняет адресные данные доставки в приложении.`
+          );
+        }
+      } else {
+        // Generate public QR code link
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}`;
+
+        await sendTelegramPhoto(
+          buyerTgId,
+          qrUrl,
+          `🎟️ *Ваш билет готов!*\n\nВы успешно приобрели билет на услугу/событие: *"${product.title}"*.\n\nПредъявите этот QR-код организатору для сканирования и подтверждения входа.`,
+          promoMarkup
+        );
+
+        // Notify Creator
+        if (creator) {
+          await sendTelegramNotification(
+            creator.telegram_id,
+            `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nВаучер успешно сгенерирован и отправлен покупателю.`
+          );
+        }
       }
     } else if (productType === 'BOOKING') {
       // Consultation Booking slots
