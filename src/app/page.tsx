@@ -37,6 +37,17 @@ const coverStyles = [
   { bg: 'linear-gradient(135deg, #8E2DE2 0%, #4A00E0 100%)', icon: '🎨' }, // Assets
 ];
 
+const getDaysWord = (days: number, lang: 'ru' | 'en') => {
+  if (lang === 'en') return days === 1 ? 'day' : 'days';
+  const mod10 = days % 10;
+  const mod100 = days % 100;
+  if (mod100 >= 11 && mod100 <= 19) return 'дней';
+  if (mod10 === 1) return 'день';
+  if (mod10 >= 2 && mod10 <= 4) return 'дня';
+  return 'дней';
+};
+
+
 interface ProductListScreenProps {
   products: Product[];
   onSelect: (id: string) => void;
@@ -1081,6 +1092,51 @@ setIsGeneratingCover(false);
           </button>
         </div>
       )}
+
+      {isOwner && isCreatorPremium && creator?.premium_until && (() => {
+        const daysLeft = Math.ceil((new Date(creator.premium_until).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0 && daysLeft <= 7) {
+          const daysWord = getDaysWord(daysLeft, lang);
+          return (
+            <div style={{
+              background: 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
+              color: '#fff',
+              padding: '14px 16px',
+              textAlign: 'center',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}>
+              <div>
+                ⚠️ {lang === 'ru' 
+                  ? `Внимание! Осталось ${daysLeft} ${daysWord} пробного периода.` 
+                  : `Attention! ${daysLeft} ${daysWord} of the trial period left.`}
+              </div>
+              <button 
+                onClick={onOpenPremium}
+                style={{
+                  background: '#fff',
+                  color: '#2b8cf3',
+                  border: 'none',
+                  borderRadius: '20px',
+                  padding: '6px 14px',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                }}
+              >
+                👑 {lang === 'ru' ? 'Продлить Premium' : 'Extend Premium'}
+              </button>
+            </div>
+          );
+        }
+        return null;
+      })()}
 
       {/* ─── BANNER ─── */}
       <div 
@@ -2140,12 +2196,16 @@ export default function Storefront() {
         url.searchParams.set('product_id', id);
         url.searchParams.delete('startapp');
         url.searchParams.delete('tgWebAppStartParam');
+        // pushState when navigating INTO a product (forward navigation)
+        window.history.pushState(null, '', url.toString());
       } else {
         url.searchParams.delete('product_id');
         url.searchParams.delete('startapp');
         url.searchParams.delete('tgWebAppStartParam');
+        // replaceState when going BACK to catalog — prevents Telegram WebApp
+        // from treating this as a new page load and showing "This page couldn't load"
+        window.history.replaceState(null, '', url.toString());
       }
-      window.history.pushState(null, '', url.toString());
     }
   }, []);
 
@@ -3432,811 +3492,12 @@ export default function Storefront() {
       </div>
     );
   }
-  if (!productId) {
-    const isCreatorPremium = !!creator?.is_premium;
-    if (!isCreatorPremium && !isOwner) {
-      return (
-        <div style={{
-          minHeight: '100svh',
-          background: 'var(--tg-bg)',
-          color: 'var(--tg-text)',
-          padding: '40px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center'
-        }} className="animate-scale-in">
-          <div style={{
-            width: '80px', height: '80px', borderRadius: '50%',
-            background: 'rgba(239,92,92,0.1)', border: '2px solid var(--tg-red, #e95c5c)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '40px', marginBottom: '24px', color: 'var(--tg-red, #e95c5c)'
-          }}>
-            🔒
-          </div>
-          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
-            {lang === 'ru' ? 'Магазин временно приостановлен' : 'Store Temporarily Inactive'}
-          </h2>
-          <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
-            {lang === 'ru' 
-              ? 'Этот магазин временно недоступен, так как срок действия подписки владельца истек.'
-              : 'This store is temporarily unavailable because the owner\'s subscription has expired.'}
-          </p>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              if (typeof window !== 'undefined') {
-                const WebApp = (window as any).Telegram?.WebApp;
-                if (WebApp?.openTelegramLink) {
-                  WebApp.openTelegramLink('https://t.me/PaybioBot');
-                } else {
-                  window.open('https://t.me/PaybioBot', '_blank');
-                }
-              }
-            }}
-            style={{ width: '100%', maxWidth: '240px', background: 'var(--tg-accent)' }}
-          >
-            {lang === 'ru' ? 'Создать свой ИИ-магазин ⚡️' : 'Create Your AI Store ⚡️'}
-          </button>
-        </div>
-      );
-    }
-
+  const renderOverlays = () => {
     return (
       <>
-        <ProductListScreen 
-          products={productsList} 
-          onSelect={handleSelectProduct} 
-          creator={creator}
-          setCreator={setCreator}
-          storeName={storeName}
-          setStoreName={setStoreName}
-          storeDescription={storeDescription}
-          setStoreDescription={setStoreDescription}
-          storeAvatar={storeAvatar}
-          setStoreAvatar={setStoreAvatar}
-          storeBanner={storeBanner}
-          setStoreBanner={setStoreBanner}
-          socialLinks={socialLinks}
-          setSocialLinks={setSocialLinks}
-          onAddProduct={handleAddProduct}
-          onOpenPremium={() => setIsPremiumOpen(true)}
-          lang={lang}
-          setLang={setLang}
-          isOwner={!!isOwner}
-          onDeleteProduct={handleDeleteProduct}
-          onUpdateProduct={handleUpdateProduct}
-          
-          currentScreen={currentScreen}
-          setCurrentScreen={setCurrentScreen}
-          starredIds={starredIds}
-          setStarredIds={setStarredIds}
-          sectionsList={sectionsList}
-          setSectionsList={setSectionsList}
-          sectionOrder={sectionOrder}
-          setSectionOrder={setSectionOrder}
-          productSections={productSections}
-          setProductSections={setProductSections}
-          onSaveSettings={handleSaveSettings}
-          busySlots={busySlots}
-          dbBookings={dbBookings}
-          fetchBusySlotsForProduct={fetchBusySlotsForProduct}
-          buyerTgId={buyerTgId}
-          onTriggerOnboarding={() => {
-            setForceShowOnboarding(true);
-            setCurrentScreen('CATALOG');
-          }}
-        />
-        
-        <PremiumFlow
-          isOpen={isPremiumOpen}
-          onClose={() => setIsPremiumOpen(false)}
-          lang={lang}
-          t={t}
-          isUpgrading={isUpgrading}
-          onBuyPremiumWithStars={handleBuyPremiumWithStars}
-          isPremiumStarsHelpOpen={isPremiumStarsHelpOpen}
-          onTogglePremiumStarsHelp={() => setIsPremiumStarsHelpOpen(!isPremiumStarsHelpOpen)}
-          onOpenLink={handleOpenLink}
-          promoCodeInput={promoCodeInput}
-          onPromoCodeInputChange={setPromoCodeInput}
-          onApplyPromoCode={handleApplyPromoCode}
-          promoCodeStatus={promoCodeStatus}
-          isApplyingPromo={isApplyingPromo}
-          onBuyPremium={handleBuyPremium}
-        />
-      </>
-    );
-  }
-
-  if (error || !product) return (
-    <ErrorScreen message={error || 'This storefront no longer exists.'} onBack={() => setProductId(null)} lang={lang} />
-  );
-
-  const isStorePremium = product.creator?.is_premium;
-
-  if (!isStorePremium && !isOwner) {
-    return (
-      <div style={{
-        minHeight: '100svh',
-        background: 'var(--tg-bg)',
-        color: 'var(--tg-text)',
-        padding: '40px 24px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        textAlign: 'center'
-      }} className="animate-scale-in">
-        <div style={{
-          width: '80px', height: '80px', borderRadius: '50%',
-          background: 'rgba(239,92,92,0.1)', border: '2px solid var(--tg-red, #e95c5c)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '40px', marginBottom: '24px', color: 'var(--tg-red, #e95c5c)'
-        }}>
-          🔒
-        </div>
-        <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
-          {lang === 'ru' ? 'Магазин временно приостановлен' : 'Store Temporarily Inactive'}
-        </h2>
-        <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
-          {lang === 'ru' 
-            ? 'Этот магазин временно недоступен, так как срок действия подписки владельца истек.'
-            : 'This store is temporarily unavailable because the owner\'s subscription has expired.'}
-        </p>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            if (typeof window !== 'undefined') {
-              const WebApp = (window as any).Telegram?.WebApp;
-              if (WebApp?.openTelegramLink) {
-                WebApp.openTelegramLink('https://t.me/PaybioBot');
-              } else {
-                window.open('https://t.me/PaybioBot', '_blank');
-              }
-            }
-          }}
-          style={{ width: '100%', maxWidth: '240px', background: 'var(--tg-accent)' }}
-        >
-          {lang === 'ru' ? 'Создать свой ИИ-магазин ⚡️' : 'Create Your AI Store ⚡️'}
-        </button>
-      </div>
-    );
-  }
-
-  let slotsText = product.content_url || '';
-  let maxQuantity: number | null = null;
-  let fulfillmentUrl = product.content_url || '';
-  let hasLimit = false;
-
-  if (product.product_type === 'BOOKING' || product.product_type === 'VOUCHER') {
-    try {
-      const parsed = JSON.parse(product.content_url);
-      if (parsed) {
-        if (product.product_type === 'BOOKING') {
-          slotsText = parsed.slots || '';
-        } else if (product.product_type === 'VOUCHER') {
-          fulfillmentUrl = parsed.fulfillment_url || '';
-          if (typeof parsed.max_quantity === 'number') {
-            maxQuantity = parsed.max_quantity;
-            hasLimit = true;
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore JSON parse errors for legacy data
-    }
-  }
-
-  const isSoldOut = product.product_type === 'VOUCHER' && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
-
-  const hasBookingConflict = !!(product.product_type === 'BOOKING' && bookingDate && bookingTime && busySlots.some((slot) => {
-    const start = new Date(slot.start).getTime();
-    const end = new Date(slot.end).getTime();
-    const selStart = new Date(`${bookingDate}T${bookingTime}:00`).getTime();
-    const selEnd = selStart + 60 * 60 * 1000;
-    return selStart < end && selEnd > start;
-  }));
-
-  const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
-  const p2pList = product.creator?.payment_details?.p2p_list || [];
-
-  const tonDetails = tonList.length > 0 && selectedTonIdx < tonList.length
-    ? tonList[selectedTonIdx].address 
-    : (product.creator?.payment_details?.ton || 'No TON wallet configured');
-    
-  const p2pDetails = p2pList.length > 0 && selectedP2pIdx < p2pList.length
-    ? p2pList[selectedP2pIdx].card 
-    : (product.creator?.payment_details?.p2p || 'No card details configured');
-
-  const tonAmount = (product.price_fiat / 7.0).toFixed(2);
-
-  const STEPS = lang === 'ru' ? [
-    'Анализ метаданных и тегов квитанции',
-    'EXIF сканирование (проверка фотошопа)',
-    'Распознавание Vision AI · OCR данных',
-    'Сверка суммы и выдача файла',
-  ] : [
-    'Parsing receipt metadata & tags',
-    'EXIF fraud scan (Photoshop detection)',
-    'Vision AI · OCR data extraction',
-    'Amount reconciliation & fulfillment',
-  ];
-
-  return (
-    <div style={{
-      minHeight: '100svh',
-      background: 'var(--tg-bg)',
-      display: 'flex', flexDirection: 'column',
-    }} className="animate-fade-in">
-
-      {isOwner && !isStorePremium && (
-        <div style={{
-          background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)',
-          color: '#fff',
-          padding: '14px 16px',
-          textAlign: 'center',
-          fontSize: '13px',
-          fontWeight: 600,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-        }}>
-          <div>
-            ⚠️ {lang === 'ru' 
-              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
-              : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
-          </div>
-          <button 
-            onClick={() => setIsPremiumOpen(true)}
-            style={{
-              background: '#fff',
-              color: '#FF5E62',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 14px',
-              fontWeight: 700,
-              fontSize: '12px',
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
-            }}
-          >
-            👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
-          </button>
-        </div>
-      )}
-
-      {/* Top sticky navigation bar for buyer page */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        background: 'var(--tg-secondary-bg)',
-        borderBottom: '1px solid var(--tg-border)',
-        padding: 'calc(var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px)) + 12px) 16px 12px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        backdropFilter: 'blur(10px)'
-      }}>
-        <button 
-          onClick={() => handleSelectProduct(null)}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--tg-link)',
-            fontSize: '15px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: 0
-          }}
-        >
-          ← {lang === 'ru' ? 'Назад в каталог' : 'Back to Catalog'}
-        </button>
-        <span style={{ fontSize: '13px', color: 'var(--tg-hint)', fontWeight: 500 }}>
-          PayBio
-        </span>
-      </div>
-
-      {/* ── PRODUCT HERO ── */}
-      <div style={{
-        background: 'var(--tg-secondary-bg)',
-        borderBottom: '1px solid var(--tg-border)',
-        padding: '20px 16px 24px',
-      }}>
-        {/* Creator row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '10px',
-          marginBottom: '20px',
-        }}>
-          <div style={{
-            width: '34px', height: '34px', borderRadius: '50%',
-            background: 'var(--tg-accent)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, fontSize: '12px', color: '#fff',
-          }}>
-            {(product.creator?.username || 'PB').slice(0, 2).toUpperCase()}
-          </div>
-          <div>
-            <p style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 500 }}>
-              {lang === 'ru' ? 'Магазин автора' : 'Storefront by'}
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--tg-text)' }}>
-                @{product.creator?.username || 'creator'}
-              </p>
-              {isStorePremium && (
-                <span style={{ fontSize: '12px' }} title="Premium Creator">👑</span>
-              )}
-            </div>
-          </div>
-          <span className="chip chip-blue" style={{ marginLeft: 'auto' }}>
-            ✓ Verified
-          </span>
-        </div>
-
-        {/* Category-Specific Storefront Product Layout */}
-        {product.product_type === 'VOUCHER' ? (
-          /* ── VOUCHER / TICKET CATEGORY LAYOUT (TICKET STUB) ── */
-          <div style={{
-            background: 'var(--tg-surface)',
-            borderRadius: '16px',
-            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
-            textAlign: 'center',
-            marginBottom: '20px',
-            position: 'relative', overflow: 'hidden',
-            border: '1px solid var(--tg-border)',
-          }}>
-            {/* Ticket Notches */}
-            <div className="ticket-notch-left" />
-            <div className="ticket-notch-right" />
-
-            {product.cover_url && (
-              <div style={{
-                width: '100%',
-                height: '180px',
-                backgroundImage: `url("${product.cover_url}")`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                marginBottom: '16px',
-                position: 'relative'
-              }}>
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  height: '60px',
-                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
-                }} />
-              </div>
-            )}
-            
-            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
-              {!product.cover_url && (
-                <div style={{
-                  width: '56px', height: '56px', borderRadius: '50%',
-                  background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.2)',
-                  color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '26px', margin: '0 auto 16px',
-                  boxShadow: '0 4px 12px rgba(248,113,113,0.1)'
-                }}>
-                  🎟️
-                </div>
-              )}
-              
-              <span className="chip" style={{ marginBottom: '14px', display: 'inline-flex', background: 'rgba(248,113,113,0.15)', color: '#f87171' }}>
-                {lang === 'ru' ? '🎟️ Билет / Ваучер' : '🎟️ Ticket / Voucher'}
-              </span>
-              
-              <h1 style={{
-                fontSize: '22px', fontWeight: 800,
-                color: 'var(--tg-text)', lineHeight: 1.3,
-                letterSpacing: '-0.3px',
-              }}>
-                {product.title}
-              </h1>
-              
-              <div 
-                onClick={() => setIsProductReviewsOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginTop: '8px',
-                  padding: '5px 10px',
-                  background: 'rgba(255, 215, 0, 0.08)',
-                  border: '1px solid rgba(255, 215, 0, 0.2)',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#ffd700',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s ease'
-                }}
-                className="animate-scale-in"
-              >
-                <span>⭐️</span>
-                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
-              </div>
-              
-              <p style={{
-                marginTop: '10px', fontSize: '13px',
-                color: 'var(--tg-hint)', lineHeight: 1.6,
-              }}>
-                {product.description}
-              </p>
-
-              {/* Dotted separator for ticket stub effect */}
-              <div style={{
-                borderTop: '2px dashed var(--tg-border)',
-                margin: '18px 0',
-                position: 'relative'
-              }} />
-
-              <div style={{
-                padding: '10px 12px',
-                background: 'rgba(248,113,113,0.06)', borderRadius: '10px',
-                border: '1.5px dashed rgba(248,113,113,0.2)',
-                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
-                display: 'flex', alignItems: 'center', gap: '8px'
-              }}>
-                <span style={{ fontSize: '16px' }}>🎟️</span>
-                <span>
-                  {lang === 'ru' 
-                    ? 'После покупки билет появится в вашем кабинете. Предъявите его QR-код на входе.' 
-                    : 'Your e-ticket with a secure QR code will be generated immediately after payment.'}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : product.product_type === 'BOOKING' ? (
-          /* ── BOOKING / CALENDAR CATEGORY LAYOUT ── */
-          <div style={{
-            background: 'var(--tg-surface)',
-            borderRadius: '16px',
-            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
-            textAlign: 'center',
-            marginBottom: '20px',
-            position: 'relative', overflow: 'hidden',
-            border: '1px solid var(--tg-border)'
-          }}>
-            {product.cover_url && (
-              <div style={{
-                width: '100%',
-                height: '180px',
-                backgroundImage: `url("${product.cover_url}")`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                marginBottom: '16px',
-                position: 'relative'
-              }}>
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  height: '60px',
-                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
-                }} />
-              </div>
-            )}
-            
-            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
-              {!product.cover_url && (
-                <div style={{
-                  width: '56px', height: '56px', borderRadius: '50%',
-                  background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.2)',
-                  color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '26px', margin: '0 auto 16px',
-                  boxShadow: '0 4px 12px rgba(56,189,248,0.1)'
-                }}>
-                  📅
-                </div>
-              )}
-              
-              <span className="chip" style={{ marginBottom: '14px', display: 'inline-flex', background: 'rgba(56,189,248,0.15)', color: '#38bdf8' }}>
-                {lang === 'ru' ? '📅 Запись / Консультация' : '📅 Booking / Consultation'}
-              </span>
-              
-              <h1 style={{
-                fontSize: '22px', fontWeight: 800,
-                color: 'var(--tg-text)', lineHeight: 1.3,
-                letterSpacing: '-0.3px',
-              }}>
-                {product.title}
-              </h1>
-              
-              <div 
-                onClick={() => setIsProductReviewsOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginTop: '8px',
-                  padding: '5px 10px',
-                  background: 'rgba(255, 215, 0, 0.08)',
-                  border: '1px solid rgba(255, 215, 0, 0.2)',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#ffd700',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s ease'
-                }}
-                className="animate-scale-in"
-              >
-                <span>⭐️</span>
-                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
-              </div>
-              
-              <p style={{
-                marginTop: '10px', fontSize: '13px',
-                color: 'var(--tg-hint)', lineHeight: 1.6,
-              }}>
-                {product.description}
-              </p>
-
-              <div style={{
-                marginTop: '16px', padding: '10px 12px',
-                background: 'rgba(56,189,248,0.06)', borderRadius: '10px',
-                border: '1.5px dashed rgba(56,189,248,0.2)',
-                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
-                display: 'flex', alignItems: 'center', gap: '8px'
-              }}>
-                <span style={{ fontSize: '16px' }}>🕒</span>
-                <span>
-                  {lang === 'ru' 
-                    ? 'Выберите свободную дату и время перед совершением оплаты.' 
-                    : 'Select your preferred date and slot from the menu below before paying.'}
-                </span>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* ── DIGITAL DELIVERY LAYOUT (DEFAULT) ── */
-          <div style={{
-            background: 'var(--tg-surface)',
-            borderRadius: '16px',
-            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
-            textAlign: 'center',
-            marginBottom: '20px',
-            position: 'relative', overflow: 'hidden',
-            border: '1px solid var(--tg-border)'
-          }}>
-            {product.cover_url && (
-              <div style={{
-                width: '100%',
-                height: '180px',
-                backgroundImage: `url("${product.cover_url}")`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                marginBottom: '16px',
-                position: 'relative'
-              }}>
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  height: '60px',
-                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
-                }} />
-              </div>
-            )}
-            
-            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
-              {!product.cover_url && (
-                <div style={{
-                  width: '56px', height: '56px', borderRadius: '50%',
-                  background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.2)',
-                  color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '26px', margin: '0 auto 16px',
-                  boxShadow: '0 4px 12px rgba(96,165,250,0.1)'
-                }}>
-                  💾
-                </div>
-              )}
-              
-              <span className="chip chip-blue" style={{ marginBottom: '14px', display: 'inline-flex' }}>
-                {t.digitalProduct}
-              </span>
-              
-              <h1 style={{
-                fontSize: '22px', fontWeight: 800,
-                color: 'var(--tg-text)', lineHeight: 1.3,
-                letterSpacing: '-0.3px',
-              }}>
-                {product.title}
-              </h1>
-              
-              <div 
-                onClick={() => setIsProductReviewsOpen(true)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  marginTop: '8px',
-                  padding: '5px 10px',
-                  background: 'rgba(255, 215, 0, 0.08)',
-                  border: '1px solid rgba(255, 215, 0, 0.2)',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#ffd700',
-                  cursor: 'pointer',
-                  transition: 'transform 0.15s ease'
-                }}
-                className="animate-scale-in"
-              >
-                <span>⭐️</span>
-                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
-              </div>
-              
-              <p style={{
-                marginTop: '10px', fontSize: '13px',
-                color: 'var(--tg-hint)', lineHeight: 1.6,
-              }}>
-                {product.description}
-              </p>
-
-              <div style={{
-                marginTop: '16px', padding: '10px 12px',
-                background: 'rgba(96,165,250,0.06)', borderRadius: '10px',
-                border: '1.5px dashed rgba(96,165,250,0.2)',
-                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
-                display: 'flex', alignItems: 'center', gap: '8px'
-              }}>
-                <span style={{ fontSize: '16px' }}>⚡</span>
-                <span>
-                  {lang === 'ru' 
-                    ? 'Мгновенная выдача! Ссылку или файл вы получите сразу же после завершения платежа.' 
-                    : 'Instant access! File downloads or access links are provided right after checkout.'}
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-            {product.product_type === 'VOUCHER' && hasLimit && (
-              <div style={{ margin: '0 0 16px 0', padding: '12px 16px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)', display: 'flex', flexDirection: 'column', gap: '8px' }} className="animate-fade-up">
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600 }}>
-                  <span style={{ color: 'var(--tg-hint)' }}>
-                    {lang === 'ru' ? 'Доступно билетов:' : 'Tickets available:'}
-                  </span>
-                  <span style={{ color: (product.sold_count || 0) >= (maxQuantity || 0) ? 'var(--tg-red)' : 'var(--tg-text)' }}>
-                    {Math.max(0, (maxQuantity || 0) - (product.sold_count || 0))} / {maxQuantity}
-                  </span>
-                </div>
-                <div style={{ width: '100%', height: '6px', background: 'var(--tg-border)', borderRadius: '3px', overflow: 'hidden' }}>
-                  <div style={{
-                    width: `${Math.min(100, ((product.sold_count || 0) / (maxQuantity || 1)) * 100)}%`,
-                    height: '100%',
-                    background: (product.sold_count || 0) >= (maxQuantity || 0) 
-                      ? 'var(--tg-red)' 
-                      : (maxQuantity || 0) - (product.sold_count || 0) <= 5 
-                      ? 'linear-gradient(90deg, #f48020, #e95c5c)' 
-                      : 'var(--tg-accent)',
-                    borderRadius: '3px',
-                    transition: 'width 0.4s ease'
-                  }} />
-                </div>
-                {(maxQuantity || 0) - (product.sold_count || 0) <= 5 && (maxQuantity || 0) - (product.sold_count || 0) > 0 && (
-                  <p style={{ fontSize: '11px', color: '#e95c5c', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }} className="animate-pulse-soft">
-                    <span>🔥</span> {lang === 'ru' ? 'Почти все раскуплено! Спешите!' : 'Almost sold out! Hurry up!'}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {product.product_type === 'BOOKING' && (
-              <BookingCalendar
-                slotsText={slotsText}
-                busySlots={busySlots}
-                bookings={dbBookings}
-                bookingDate={bookingDate}
-                setBookingDate={setBookingDate}
-                bookingTime={bookingTime}
-                setBookingTime={setBookingTime}
-                lang={lang}
-                isOwner={!!isOwner}
-                productId={product.id}
-                userTgId={buyerTgId}
-                onRefreshBusySlots={() => fetchBusySlotsForProduct(product.id)}
-              />
-            )}
-
-            {/* Price row */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 16px',
-          background: 'var(--tg-surface)',
-          borderRadius: '14px',
-        }}>
-          <div>
-            <p style={{ fontSize: '11px', color: 'var(--tg-hint)', marginBottom: '3px' }}>{t.price}</p>
-            <p style={{ fontSize: '26px', fontWeight: 800, color: 'var(--tg-text)', letterSpacing: '-0.5px' }}>
-              ${product.price_fiat}
-            </p>
-          </div>
-          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <span className="chip chip-blue">{product.price_stars} ⭐ {t.stars}</span>
-            <span className="chip chip-hint">~{tonAmount} TON</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── PAYMENT SECTION ── */}
-      <div style={{ flex: 1, padding: '20px 16px 40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {isSoldOut ? (
-          <div style={{ textAlign: 'center', padding: '24px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)' }} className="animate-scale-in">
-            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎟️</div>
-            <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--tg-text)', margin: 0 }}>
-              {lang === 'ru' ? 'Все билеты распроданы!' : 'All tickets are sold out!'}
-            </p>
-            <p style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', marginBottom: 0 }}>
-              {lang === 'ru' ? 'Следите за новыми предложениями автора.' : 'Stay tuned for new offers from the creator.'}
-            </p>
-          </div>
-        ) : !isStorePremium ? (
-          <div className="tg-card animate-fade-up" style={{ padding: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <p style={{ fontWeight: 700, fontSize: '16px', color: 'var(--tg-text)', margin: 0 }}>
-              ⚠️ {lang === 'ru' ? 'Подписка истекла' : 'Subscription Expired'}
-            </p>
-            <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6, margin: 0 }}>
-              {lang === 'ru' 
-                ? 'Для активации возможности оплаты этого товара покупателями, пожалуйста, продлите Premium подписку.'
-                : 'To enable customers to pay for this product, please renew your Premium subscription.'}
-            </p>
-            <button className="btn-primary" onClick={() => setIsPremiumOpen(true)} style={{ background: 'var(--tg-accent)', color: '#fff', fontWeight: 700 }}>
-              👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
-            </button>
-          </div>
-        ) : (
-          <button 
-            onClick={() => {
-              if (product.product_type === 'BOOKING' && (!bookingDate || !bookingTime)) {
-                showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
-                return;
-              }
-              setIsPaymentSheetOpen(true);
-            }}
-            className="btn-primary"
-            style={{ 
-              background: 'var(--tg-accent)', 
-              fontSize: '16px', 
-              fontWeight: 700, 
-              height: '54px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '10px',
-              borderRadius: '16px',
-              boxShadow: '0 4px 15px rgba(43, 140, 243, 0.3)'
-            }}
-          >
-            <span>💳</span>
-            <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
-          </button>
-        )}
-      </div>
-
-      {/* Back button */}
-      <div style={{ padding: '0 16px 12px' }}>
-        <button className="btn-secondary" onClick={() => handleSelectProduct(null)}>
-          {t.backToCatalog}
-        </button>
-      </div>
-
-      {/* Footer Branding (Hidden if Premium) */}
-      {!isStorePremium && (
-        <div style={{
-          textAlign: 'center', padding: '12px 16px 24px',
-          fontSize: '11px', color: 'var(--tg-hint)', opacity: 0.5,
-        }}>
-          {t.poweredBy}
-        </div>
-      )}
-
-      {/* ─── BOTTOM SHEET: UNIVERSAL PAYMENT ─── */}
-      <div className={`bottom-sheet-overlay ${isPaymentSheetOpen ? 'active' : ''}`} onClick={() => {
+        {product && (
+// ─── BOTTOM SHEET: UNIVERSAL PAYMENT ───
+      <div className={`bottom-sheet-overlay ${isPaymentSheetOpen ? 'active' : ''}`} style={isPaymentSheetOpen ? { zIndex: 1100 } : undefined} onClick={() => {
         if (!verifying) {
           setIsPaymentSheetOpen(false);
           setCheckoutMethod(null);
@@ -4879,7 +4140,860 @@ export default function Storefront() {
           )}
         </div>
       </div>
+        )}
 
+<PremiumFlow
+        isOpen={isPremiumOpen}
+        onClose={() => setIsPremiumOpen(false)}
+        lang={lang}
+        t={t}
+        isUpgrading={isUpgrading}
+        onBuyPremiumWithStars={handleBuyPremiumWithStars}
+        isPremiumStarsHelpOpen={isPremiumStarsHelpOpen}
+        onTogglePremiumStarsHelp={() => setIsPremiumStarsHelpOpen(!isPremiumStarsHelpOpen)}
+        onOpenLink={handleOpenLink}
+        promoCodeInput={promoCodeInput}
+        onPromoCodeInputChange={setPromoCodeInput}
+        onApplyPromoCode={handleApplyPromoCode}
+        promoCodeStatus={promoCodeStatus}
+        isApplyingPromo={isApplyingPromo}
+        onBuyPremium={handleBuyPremium}
+      />
+      </>
+    );
+  };
+
+  if (!productId) {
+    const isCreatorPremium = !!creator?.is_premium;
+    if (!isCreatorPremium && !isOwner) {
+      return (
+        <div style={{
+          minHeight: '100svh',
+          background: 'var(--tg-bg)',
+          color: 'var(--tg-text)',
+          padding: '40px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center'
+        }} className="animate-scale-in">
+          <div style={{
+            width: '80px', height: '80px', borderRadius: '50%',
+            background: 'rgba(239,92,92,0.1)', border: '2px solid var(--tg-red, #e95c5c)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '40px', marginBottom: '24px', color: 'var(--tg-red, #e95c5c)'
+          }}>
+            🔒
+          </div>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
+            {lang === 'ru' ? 'Магазин временно приостановлен' : 'Store Temporarily Inactive'}
+          </h2>
+          <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
+            {lang === 'ru' 
+              ? 'Этот магазин временно недоступен, так как срок действия подписки владельца истек.'
+              : 'This store is temporarily unavailable because the owner\'s subscription has expired.'}
+          </p>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              if (typeof window !== 'undefined') {
+                const WebApp = (window as any).Telegram?.WebApp;
+                if (WebApp?.openTelegramLink) {
+                  WebApp.openTelegramLink('https://t.me/PaybioBot');
+                } else {
+                  window.open('https://t.me/PaybioBot', '_blank');
+                }
+              }
+            }}
+            style={{ width: '100%', maxWidth: '240px', background: 'var(--tg-accent)' }}
+          >
+            {lang === 'ru' ? 'Создать свой ИИ-магазин ⚡️' : 'Create Your AI Store ⚡️'}
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <ProductListScreen 
+          products={productsList} 
+          onSelect={handleSelectProduct} 
+          creator={creator}
+          setCreator={setCreator}
+          storeName={storeName}
+          setStoreName={setStoreName}
+          storeDescription={storeDescription}
+          setStoreDescription={setStoreDescription}
+          storeAvatar={storeAvatar}
+          setStoreAvatar={setStoreAvatar}
+          storeBanner={storeBanner}
+          setStoreBanner={setStoreBanner}
+          socialLinks={socialLinks}
+          setSocialLinks={setSocialLinks}
+          onAddProduct={handleAddProduct}
+          onOpenPremium={() => setIsPremiumOpen(true)}
+          lang={lang}
+          setLang={setLang}
+          isOwner={!!isOwner}
+          onDeleteProduct={handleDeleteProduct}
+          onUpdateProduct={handleUpdateProduct}
+          
+          currentScreen={currentScreen}
+          setCurrentScreen={setCurrentScreen}
+          starredIds={starredIds}
+          setStarredIds={setStarredIds}
+          sectionsList={sectionsList}
+          setSectionsList={setSectionsList}
+          sectionOrder={sectionOrder}
+          setSectionOrder={setSectionOrder}
+          productSections={productSections}
+          setProductSections={setProductSections}
+          onSaveSettings={handleSaveSettings}
+          busySlots={busySlots}
+          dbBookings={dbBookings}
+          fetchBusySlotsForProduct={fetchBusySlotsForProduct}
+          buyerTgId={buyerTgId}
+          onTriggerOnboarding={() => {
+            setForceShowOnboarding(true);
+            setCurrentScreen('CATALOG');
+          }}
+        />
+        
+        {renderOverlays()}
+      </>
+    );
+  }
+
+  if (error || !product) return (
+    <ErrorScreen message={error || 'This storefront no longer exists.'} onBack={() => setProductId(null)} lang={lang} />
+  );
+
+  const isStorePremium = product.creator?.is_premium;
+
+  if (!isStorePremium && !isOwner) {
+    return (
+      <div style={{
+        minHeight: '100svh',
+        background: 'var(--tg-bg)',
+        color: 'var(--tg-text)',
+        padding: '40px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center'
+      }} className="animate-scale-in">
+        <div style={{
+          width: '80px', height: '80px', borderRadius: '50%',
+          background: 'rgba(239,92,92,0.1)', border: '2px solid var(--tg-red, #e95c5c)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '40px', marginBottom: '24px', color: 'var(--tg-red, #e95c5c)'
+        }}>
+          🔒
+        </div>
+        <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 12px 0' }}>
+          {lang === 'ru' ? 'Магазин временно приостановлен' : 'Store Temporarily Inactive'}
+        </h2>
+        <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
+          {lang === 'ru' 
+            ? 'Этот магазин временно недоступен, так как срок действия подписки владельца истек.'
+            : 'This store is temporarily unavailable because the owner\'s subscription has expired.'}
+        </p>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            if (typeof window !== 'undefined') {
+              const WebApp = (window as any).Telegram?.WebApp;
+              if (WebApp?.openTelegramLink) {
+                WebApp.openTelegramLink('https://t.me/PaybioBot');
+              } else {
+                window.open('https://t.me/PaybioBot', '_blank');
+              }
+            }
+          }}
+          style={{ width: '100%', maxWidth: '240px', background: 'var(--tg-accent)' }}
+        >
+          {lang === 'ru' ? 'Создать свой ИИ-магазин ⚡️' : 'Create Your AI Store ⚡️'}
+        </button>
+      </div>
+    );
+  }
+
+  let slotsText = product.content_url || '';
+  let maxQuantity: number | null = null;
+  let fulfillmentUrl = product.content_url || '';
+  let hasLimit = false;
+
+  if (product.product_type === 'BOOKING' || product.product_type === 'VOUCHER') {
+    try {
+      const parsed = JSON.parse(product.content_url);
+      if (parsed) {
+        if (product.product_type === 'BOOKING') {
+          slotsText = parsed.slots || '';
+        } else if (product.product_type === 'VOUCHER') {
+          fulfillmentUrl = parsed.fulfillment_url || '';
+          if (typeof parsed.max_quantity === 'number') {
+            maxQuantity = parsed.max_quantity;
+            hasLimit = true;
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore JSON parse errors for legacy data
+    }
+  }
+
+  const isSoldOut = product.product_type === 'VOUCHER' && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
+
+  const hasBookingConflict = !!(product.product_type === 'BOOKING' && bookingDate && bookingTime && busySlots.some((slot) => {
+    const start = new Date(slot.start).getTime();
+    const end = new Date(slot.end).getTime();
+    const selStart = new Date(`${bookingDate}T${bookingTime}:00`).getTime();
+    const selEnd = selStart + 60 * 60 * 1000;
+    return selStart < end && selEnd > start;
+  }));
+
+  const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
+  const p2pList = product.creator?.payment_details?.p2p_list || [];
+
+  const tonDetails = tonList.length > 0 && selectedTonIdx < tonList.length
+    ? tonList[selectedTonIdx].address 
+    : (product.creator?.payment_details?.ton || 'No TON wallet configured');
+    
+  const p2pDetails = p2pList.length > 0 && selectedP2pIdx < p2pList.length
+    ? p2pList[selectedP2pIdx].card 
+    : (product.creator?.payment_details?.p2p || 'No card details configured');
+
+  const tonAmount = (product.price_fiat / 7.0).toFixed(2);
+
+  const STEPS = lang === 'ru' ? [
+    'Анализ метаданных и тегов квитанции',
+    'EXIF сканирование (проверка фотошопа)',
+    'Распознавание Vision AI · OCR данных',
+    'Сверка суммы и выдача файла',
+  ] : [
+    'Parsing receipt metadata & tags',
+    'EXIF fraud scan (Photoshop detection)',
+    'Vision AI · OCR data extraction',
+    'Amount reconciliation & fulfillment',
+  ];
+
+  return (
+    <div style={{
+      minHeight: '100svh',
+      background: 'var(--tg-bg)',
+      display: 'flex', flexDirection: 'column',
+    }} className="animate-fade-in">
+
+      {isOwner && !isStorePremium && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)',
+          color: '#fff',
+          padding: '14px 16px',
+          textAlign: 'center',
+          fontSize: '13px',
+          fontWeight: 600,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        }}>
+          <div>
+            ⚠️ {lang === 'ru' 
+              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
+              : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+          </div>
+          <button 
+            onClick={() => setIsPremiumOpen(true)}
+            style={{
+              background: '#fff',
+              color: '#FF5E62',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 14px',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+            }}
+          >
+            👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
+          </button>
+        </div>
+      )}
+
+      {isOwner && isStorePremium && product.creator?.premium_until && (() => {
+        const daysLeft = Math.ceil((new Date(product.creator.premium_until).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        if (daysLeft > 0 && daysLeft <= 7) {
+          const daysWord = getDaysWord(daysLeft, lang);
+          return (
+            <div style={{
+              background: 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
+              color: '#fff',
+              padding: '14px 16px',
+              textAlign: 'center',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+            }}>
+              <div>
+                ⚠️ {lang === 'ru' 
+                  ? `Внимание! Осталось ${daysLeft} ${daysWord} пробного периода.` 
+                  : `Attention! ${daysLeft} ${daysWord} of the trial period left.`}
+              </div>
+              <button 
+                onClick={() => setIsPremiumOpen(true)}
+                style={{
+                  background: '#fff',
+                  color: '#2b8cf3',
+                  border: 'none',
+                  borderRadius: '20px',
+                  padding: '6px 14px',
+                  fontWeight: 700,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                }}
+              >
+                👑 {lang === 'ru' ? 'Продлить Premium' : 'Extend Premium'}
+              </button>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
+      {/* Top sticky navigation bar for buyer page */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        background: 'var(--tg-secondary-bg)',
+        borderBottom: '1px solid var(--tg-border)',
+        padding: 'calc(var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px)) + 12px) 16px 12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <button 
+          onClick={() => handleSelectProduct(null)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--tg-link)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: 0
+          }}
+        >
+          ← {lang === 'ru' ? 'Назад в каталог' : 'Back to Catalog'}
+        </button>
+        <span style={{ fontSize: '13px', color: 'var(--tg-hint)', fontWeight: 500 }}>
+          PayBio
+        </span>
+      </div>
+
+      {/* ── PRODUCT HERO ── */}
+      <div style={{
+        background: 'var(--tg-secondary-bg)',
+        borderBottom: '1px solid var(--tg-border)',
+        padding: '20px 16px 24px',
+      }}>
+        {/* Creator row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '10px',
+          marginBottom: '20px',
+        }}>
+          <div style={{
+            width: '34px', height: '34px', borderRadius: '50%',
+            background: 'var(--tg-accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, fontSize: '12px', color: '#fff',
+          }}>
+            {(product.creator?.username || 'PB').slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 500 }}>
+              {lang === 'ru' ? 'Магазин автора' : 'Storefront by'}
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                @{product.creator?.username || 'creator'}
+              </p>
+              {isStorePremium && (
+                <span style={{ fontSize: '12px' }} title="Premium Creator">👑</span>
+              )}
+            </div>
+          </div>
+          <span className="chip chip-blue" style={{ marginLeft: 'auto' }}>
+            ✓ Verified
+          </span>
+        </div>
+
+        {/* Category-Specific Storefront Product Layout */}
+        {product.product_type === 'VOUCHER' ? (
+          /* ── VOUCHER / TICKET CATEGORY LAYOUT (TICKET STUB) ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '16px',
+            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
+            textAlign: 'center',
+            marginBottom: '20px',
+            position: 'relative', overflow: 'hidden',
+            border: '1px solid var(--tg-border)',
+          }}>
+            {/* Ticket Notches */}
+            <div className="ticket-notch-left" />
+            <div className="ticket-notch-right" />
+
+            {product.cover_url && (
+              <div style={{
+                width: '100%',
+                height: '180px',
+                backgroundImage: `url("${product.cover_url}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '16px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '60px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
+            )}
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              {!product.cover_url && (
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(248,113,113,0.12)', border: '1px solid rgba(248,113,113,0.2)',
+                  color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '26px', margin: '0 auto 16px',
+                  boxShadow: '0 4px 12px rgba(248,113,113,0.1)'
+                }}>
+                  🎟️
+                </div>
+              )}
+              
+              <span className="chip" style={{ marginBottom: '14px', display: 'inline-flex', background: 'rgba(248,113,113,0.15)', color: '#f87171' }}>
+                {lang === 'ru' ? '🎟️ Билет / Ваучер' : '🎟️ Ticket / Voucher'}
+              </span>
+              
+              <h1 style={{
+                fontSize: '22px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.3px',
+              }}>
+                {product.title}
+              </h1>
+              
+              <div 
+                onClick={() => setIsProductReviewsOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '8px',
+                  padding: '5px 10px',
+                  background: 'rgba(255, 215, 0, 0.08)',
+                  border: '1px solid rgba(255, 215, 0, 0.2)',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#ffd700',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s ease'
+                }}
+                className="animate-scale-in"
+              >
+                <span>⭐️</span>
+                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
+              </div>
+              
+              <p style={{
+                marginTop: '10px', fontSize: '13px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+              }}>
+                {product.description}
+              </p>
+
+              {/* Dotted separator for ticket stub effect */}
+              <div style={{
+                borderTop: '2px dashed var(--tg-border)',
+                margin: '18px 0',
+                position: 'relative'
+              }} />
+
+              <div style={{
+                padding: '10px 12px',
+                background: 'rgba(248,113,113,0.06)', borderRadius: '10px',
+                border: '1.5px dashed rgba(248,113,113,0.2)',
+                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>🎟️</span>
+                <span>
+                  {lang === 'ru' 
+                    ? 'После покупки билет появится в вашем кабинете. Предъявите его QR-код на входе.' 
+                    : 'Your e-ticket with a secure QR code will be generated immediately after payment.'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : product.product_type === 'BOOKING' ? (
+          /* ── BOOKING / CALENDAR CATEGORY LAYOUT ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '16px',
+            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
+            textAlign: 'center',
+            marginBottom: '20px',
+            position: 'relative', overflow: 'hidden',
+            border: '1px solid var(--tg-border)'
+          }}>
+            {product.cover_url && (
+              <div style={{
+                width: '100%',
+                height: '180px',
+                backgroundImage: `url("${product.cover_url}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '16px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '60px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
+            )}
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              {!product.cover_url && (
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(56,189,248,0.12)', border: '1px solid rgba(56,189,248,0.2)',
+                  color: '#38bdf8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '26px', margin: '0 auto 16px',
+                  boxShadow: '0 4px 12px rgba(56,189,248,0.1)'
+                }}>
+                  📅
+                </div>
+              )}
+              
+              <span className="chip" style={{ marginBottom: '14px', display: 'inline-flex', background: 'rgba(56,189,248,0.15)', color: '#38bdf8' }}>
+                {lang === 'ru' ? '📅 Запись / Консультация' : '📅 Booking / Consultation'}
+              </span>
+              
+              <h1 style={{
+                fontSize: '22px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.3px',
+              }}>
+                {product.title}
+              </h1>
+              
+              <div 
+                onClick={() => setIsProductReviewsOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '8px',
+                  padding: '5px 10px',
+                  background: 'rgba(255, 215, 0, 0.08)',
+                  border: '1px solid rgba(255, 215, 0, 0.2)',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#ffd700',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s ease'
+                }}
+                className="animate-scale-in"
+              >
+                <span>⭐️</span>
+                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
+              </div>
+              
+              <p style={{
+                marginTop: '10px', fontSize: '13px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+              }}>
+                {product.description}
+              </p>
+
+              <div style={{
+                marginTop: '16px', padding: '10px 12px',
+                background: 'rgba(56,189,248,0.06)', borderRadius: '10px',
+                border: '1.5px dashed rgba(56,189,248,0.2)',
+                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>🕒</span>
+                <span>
+                  {lang === 'ru' 
+                    ? 'Выберите свободную дату и время перед совершением оплаты.' 
+                    : 'Select your preferred date and slot from the menu below before paying.'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ── DIGITAL DELIVERY LAYOUT (DEFAULT) ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '16px',
+            padding: product.cover_url ? '0 0 20px 0' : '24px 20px',
+            textAlign: 'center',
+            marginBottom: '20px',
+            position: 'relative', overflow: 'hidden',
+            border: '1px solid var(--tg-border)'
+          }}>
+            {product.cover_url && (
+              <div style={{
+                width: '100%',
+                height: '180px',
+                backgroundImage: `url("${product.cover_url}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '16px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '60px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
+            )}
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              {!product.cover_url && (
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(96,165,250,0.12)', border: '1px solid rgba(96,165,250,0.2)',
+                  color: '#60a5fa', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '26px', margin: '0 auto 16px',
+                  boxShadow: '0 4px 12px rgba(96,165,250,0.1)'
+                }}>
+                  💾
+                </div>
+              )}
+              
+              <span className="chip chip-blue" style={{ marginBottom: '14px', display: 'inline-flex' }}>
+                {t.digitalProduct}
+              </span>
+              
+              <h1 style={{
+                fontSize: '22px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.3px',
+              }}>
+                {product.title}
+              </h1>
+              
+              <div 
+                onClick={() => setIsProductReviewsOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginTop: '8px',
+                  padding: '5px 10px',
+                  background: 'rgba(255, 215, 0, 0.08)',
+                  border: '1px solid rgba(255, 215, 0, 0.2)',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  color: '#ffd700',
+                  cursor: 'pointer',
+                  transition: 'transform 0.15s ease'
+                }}
+                className="animate-scale-in"
+              >
+                <span>⭐️</span>
+                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
+              </div>
+              
+              <p style={{
+                marginTop: '10px', fontSize: '13px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+              }}>
+                {product.description}
+              </p>
+
+              <div style={{
+                marginTop: '16px', padding: '10px 12px',
+                background: 'rgba(96,165,250,0.06)', borderRadius: '10px',
+                border: '1.5px dashed rgba(96,165,250,0.2)',
+                fontSize: '11.5px', color: 'var(--tg-text)', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>⚡</span>
+                <span>
+                  {lang === 'ru' 
+                    ? 'Мгновенная выдача! Ссылку или файл вы получите сразу же после завершения платежа.' 
+                    : 'Instant access! File downloads or access links are provided right after checkout.'}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+            {product.product_type === 'VOUCHER' && hasLimit && (
+              <div style={{ margin: '0 0 16px 0', padding: '12px 16px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)', display: 'flex', flexDirection: 'column', gap: '8px' }} className="animate-fade-up">
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600 }}>
+                  <span style={{ color: 'var(--tg-hint)' }}>
+                    {lang === 'ru' ? 'Доступно билетов:' : 'Tickets available:'}
+                  </span>
+                  <span style={{ color: (product.sold_count || 0) >= (maxQuantity || 0) ? 'var(--tg-red)' : 'var(--tg-text)' }}>
+                    {Math.max(0, (maxQuantity || 0) - (product.sold_count || 0))} / {maxQuantity}
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '6px', background: 'var(--tg-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.min(100, ((product.sold_count || 0) / (maxQuantity || 1)) * 100)}%`,
+                    height: '100%',
+                    background: (product.sold_count || 0) >= (maxQuantity || 0) 
+                      ? 'var(--tg-red)' 
+                      : (maxQuantity || 0) - (product.sold_count || 0) <= 5 
+                      ? 'linear-gradient(90deg, #f48020, #e95c5c)' 
+                      : 'var(--tg-accent)',
+                    borderRadius: '3px',
+                    transition: 'width 0.4s ease'
+                  }} />
+                </div>
+                {(maxQuantity || 0) - (product.sold_count || 0) <= 5 && (maxQuantity || 0) - (product.sold_count || 0) > 0 && (
+                  <p style={{ fontSize: '11px', color: '#e95c5c', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }} className="animate-pulse-soft">
+                    <span>🔥</span> {lang === 'ru' ? 'Почти все раскуплено! Спешите!' : 'Almost sold out! Hurry up!'}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {product.product_type === 'BOOKING' && (
+              <BookingCalendar
+                slotsText={slotsText}
+                busySlots={busySlots}
+                bookings={dbBookings}
+                bookingDate={bookingDate}
+                setBookingDate={setBookingDate}
+                bookingTime={bookingTime}
+                setBookingTime={setBookingTime}
+                lang={lang}
+                isOwner={!!isOwner}
+                productId={product.id}
+                userTgId={buyerTgId}
+                onRefreshBusySlots={() => fetchBusySlotsForProduct(product.id)}
+              />
+            )}
+
+            {/* Price row */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 16px',
+          background: 'var(--tg-surface)',
+          borderRadius: '14px',
+        }}>
+          <div>
+            <p style={{ fontSize: '11px', color: 'var(--tg-hint)', marginBottom: '3px' }}>{t.price}</p>
+            <p style={{ fontSize: '26px', fontWeight: 800, color: 'var(--tg-text)', letterSpacing: '-0.5px' }}>
+              ${product.price_fiat}
+            </p>
+          </div>
+          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <span className="chip chip-blue">{product.price_stars} ⭐ {t.stars}</span>
+            <span className="chip chip-hint">~{tonAmount} TON</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PAYMENT SECTION ── */}
+      <div style={{ flex: 1, padding: '20px 16px 40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        {isSoldOut ? (
+          <div style={{ textAlign: 'center', padding: '24px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)' }} className="animate-scale-in">
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎟️</div>
+            <p style={{ fontWeight: 700, fontSize: '15px', color: 'var(--tg-text)', margin: 0 }}>
+              {lang === 'ru' ? 'Все билеты распроданы!' : 'All tickets are sold out!'}
+            </p>
+            <p style={{ fontSize: '12px', color: 'var(--tg-hint)', marginTop: '4px', marginBottom: 0 }}>
+              {lang === 'ru' ? 'Следите за новыми предложениями автора.' : 'Stay tuned for new offers from the creator.'}
+            </p>
+          </div>
+        ) : !isStorePremium ? (
+          <div className="tg-card animate-fade-up" style={{ padding: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <p style={{ fontWeight: 700, fontSize: '16px', color: 'var(--tg-text)', margin: 0 }}>
+              ⚠️ {lang === 'ru' ? 'Подписка истекла' : 'Subscription Expired'}
+            </p>
+            <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6, margin: 0 }}>
+              {lang === 'ru' 
+                ? 'Для активации возможности оплаты этого товара покупателями, пожалуйста, продлите Premium подписку.'
+                : 'To enable customers to pay for this product, please renew your Premium subscription.'}
+            </p>
+            <button className="btn-primary" onClick={() => setIsPremiumOpen(true)} style={{ background: 'var(--tg-accent)', color: '#fff', fontWeight: 700 }}>
+              👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
+            </button>
+          </div>
+        ) : (
+          <button 
+            onClick={() => {
+              if (product.product_type === 'BOOKING' && (!bookingDate || !bookingTime)) {
+                showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
+                return;
+              }
+              setIsPaymentSheetOpen(true);
+            }}
+            className="btn-primary"
+            style={{ 
+              background: 'var(--tg-accent)', 
+              fontSize: '16px', 
+              fontWeight: 700, 
+              height: '54px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '10px',
+              borderRadius: '16px',
+              boxShadow: '0 4px 15px rgba(43, 140, 243, 0.3)'
+            }}
+          >
+            <span>💳</span>
+            <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Back button */}
+      <div style={{ padding: '0 16px 12px' }}>
+        <button className="btn-secondary" onClick={() => handleSelectProduct(null)}>
+          {t.backToCatalog}
+        </button>
+      </div>
+
+      {/* Footer Branding (Hidden if Premium) */}
+      {!isStorePremium && (
+        <div style={{
+          textAlign: 'center', padding: '12px 16px 24px',
+          fontSize: '11px', color: 'var(--tg-hint)', opacity: 0.5,
+        }}>
+          {t.poweredBy}
+        </div>
+      )}
 
       {/* ─── BOTTOM SHEET: PRODUCT REVIEWS ─── */}
       <div className={`bottom-sheet-overlay ${isProductReviewsOpen ? 'active' : ''}`} onClick={() => setIsProductReviewsOpen(false)}>
@@ -4908,23 +5022,7 @@ export default function Storefront() {
         </div>
       </div>
 
-      <PremiumFlow
-        isOpen={isPremiumOpen}
-        onClose={() => setIsPremiumOpen(false)}
-        lang={lang}
-        t={t}
-        isUpgrading={isUpgrading}
-        onBuyPremiumWithStars={handleBuyPremiumWithStars}
-        isPremiumStarsHelpOpen={isPremiumStarsHelpOpen}
-        onTogglePremiumStarsHelp={() => setIsPremiumStarsHelpOpen(!isPremiumStarsHelpOpen)}
-        onOpenLink={handleOpenLink}
-        promoCodeInput={promoCodeInput}
-        onPromoCodeInputChange={setPromoCodeInput}
-        onApplyPromoCode={handleApplyPromoCode}
-        promoCodeStatus={promoCodeStatus}
-        isApplyingPromo={isApplyingPromo}
-        onBuyPremium={handleBuyPremium}
-      />
+      {renderOverlays()}
     </div>
   );
 }
