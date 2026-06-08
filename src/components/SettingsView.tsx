@@ -328,7 +328,7 @@ export default function SettingsView({
       {/* Settings Form */}
       <form onSubmit={handleSettingsSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {/* Section 1: Profile Customization */}
-        <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="tg-card tour-settings-profile" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>👤</span> {lang === 'ru' ? 'Профиль магазина' : 'Shop Profile'}
           </h3>
@@ -380,6 +380,48 @@ export default function SettingsView({
               </button>
             )}
           </div>
+
+          {/* Onboarding & Tutorial Trigger */}
+          {onTriggerOnboarding && (
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              borderRadius: '12px',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '4px',
+              border: '1px solid var(--tg-border)'
+            }}>
+              <div>
+                <p style={{ margin: 0, fontSize: '13.5px', fontWeight: 600, color: 'var(--tg-text)' }}>
+                  {lang === 'ru' ? 'Обучение и подсказки' : 'Tutorial & Hints'}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--tg-hint)' }}>
+                  {lang === 'ru' ? 'Запустить интерактивный гид по приложению' : 'Launch interactive app guide'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onTriggerOnboarding}
+                className="btn-primary"
+                style={{
+                  width: 'auto',
+                  padding: '6px 14px',
+                  height: 'auto',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  background: 'var(--tg-accent)',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                🚀 {lang === 'ru' ? 'Запуск' : 'Start'}
+              </button>
+            </div>
+          )}
           
           <div className="bottom-sheet-form-group">
             <label className="bottom-sheet-label">{t.shopName}</label>
@@ -461,7 +503,7 @@ export default function SettingsView({
         </div>
 
         {/* Section 3: Payment Details */}
-        <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="tg-card tour-settings-payments" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>💳</span> {lang === 'ru' ? 'Реквизиты оплаты' : 'Payment Details'}
           </h3>
@@ -760,7 +802,7 @@ export default function SettingsView({
         </div>
 
         {/* Section 4: Calendar Sync & Schedule */}
-        <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="tg-card tour-settings-calendar" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>📅</span> {lang === 'ru' ? 'Интеграция календаря' : 'Calendar Integration'}
           </h3>

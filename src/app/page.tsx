@@ -39,6 +39,10 @@ const OnboardingScreen = dynamic(() => import('@/components/OnboardingScreen'), 
   ssr: false
 });
 
+const InteractiveTutorial = dynamic(() => import('@/components/InteractiveTutorial'), {
+  ssr: false
+});
+
 export default function Storefront() {
   const store = useStorefront();
 
@@ -186,43 +190,8 @@ export default function Storefront() {
   }
 
   // Product detail view page details
-  if (store.productId) {
-    if (store.error || !store.product) {
-      return (
-        <ErrorScreen message={store.error || 'This storefront no longer exists.'} onBack={() => store.handleSelectProduct(null)} lang={store.lang} />
-      );
-    }
-
-    return (
-      <>
-        <ProductDetailView
-          lang={store.lang}
-          product={store.product}
-          t={store.t}
-          isOwner={store.isOwner}
-          isStorePremium={store.isStorePremium}
-          tonAmount={store.tonAmount}
-          bookingDate={store.bookingDate}
-          setBookingDate={store.setBookingDate}
-          bookingTime={store.bookingTime}
-          setBookingTime={store.setBookingTime}
-          busySlots={store.busySlots}
-          dbBookings={store.dbBookings}
-          fetchBusySlotsForProduct={store.fetchBusySlotsForProduct}
-          buyerTgId={store.buyerTgId}
-          isProductReviewsOpen={store.isProductReviewsOpen}
-          setIsProductReviewsOpen={store.setIsProductReviewsOpen}
-          handleSelectProduct={store.handleSelectProduct}
-          setIsPaymentSheetOpen={store.setIsPaymentSheetOpen}
-          setIsPremiumOpen={store.setIsPremiumOpen}
-        />
-        {renderOverlays()}
-      </>
-    );
-  }
-
   // Normal storefront main catalog lists screen page
-  if (store.error) {
+  if (!store.productId && store.error) {
     return (
       <ErrorScreen message={store.error} onBack={() => store.handleSelectProduct(null)} lang={store.lang} />
     );
@@ -230,49 +199,95 @@ export default function Storefront() {
 
   return (
     <>
-      <ProductListScreen
-        products={store.productsList}
-        onSelect={store.handleSelectProduct}
-        creator={store.creator}
-        setCreator={store.setCreator}
-        storeName={store.storeName}
-        setStoreName={store.setStoreName}
-        storeDescription={store.storeDescription}
-        setStoreDescription={store.setStoreDescription}
-        storeAvatar={store.storeAvatar}
-        setStoreAvatar={store.setStoreAvatar}
-        storeBanner={store.storeBanner}
-        setStoreBanner={store.setStoreBanner}
-        socialLinks={store.socialLinks}
-        setSocialLinks={store.setSocialLinks}
-        onAddProduct={store.handleAddProduct}
-        onOpenPremium={() => store.setIsPremiumOpen(true)}
-        lang={store.lang}
-        setLang={store.setLang}
-        isOwner={store.isOwner}
-        onDeleteProduct={store.handleDeleteProduct}
-        onUpdateProduct={store.handleUpdateProduct}
-        currentScreen={store.currentScreen}
-        setCurrentScreen={store.setCurrentScreen}
-        starredIds={store.starredIds}
-        setStarredIds={store.setStarredIds}
-        sectionsList={store.sectionsList}
-        setSectionsList={store.setSectionsList}
-        sectionOrder={store.sectionOrder}
-        setSectionOrder={store.setSectionOrder}
-        productSections={store.productSections}
-        setProductSections={store.setProductSections}
-        onSaveSettings={store.handleSaveSettings}
-        busySlots={store.busySlots}
-        dbBookings={store.dbBookings}
-        fetchBusySlotsForProduct={store.fetchBusySlotsForProduct}
-        buyerTgId={store.buyerTgId}
-        onTriggerOnboarding={() => {
-          store.setForceShowOnboarding(true);
-          store.setCurrentScreen('CATALOG');
-        }}
-      />
+      {/* Главный каталог: постоянно смонтирован в DOM для сохранения состояния скролла */}
+      <div style={{ display: !store.productId ? 'block' : 'none' }}>
+        <ProductListScreen
+          products={store.productsList}
+          onSelect={store.handleSelectProduct}
+          creator={store.creator}
+          setCreator={store.setCreator}
+          storeName={store.storeName}
+          setStoreName={store.setStoreName}
+          storeDescription={store.storeDescription}
+          setStoreDescription={store.setStoreDescription}
+          storeAvatar={store.storeAvatar}
+          setStoreAvatar={store.setStoreAvatar}
+          storeBanner={store.storeBanner}
+          setStoreBanner={store.setStoreBanner}
+          socialLinks={store.socialLinks}
+          setSocialLinks={store.setSocialLinks}
+          onAddProduct={store.handleAddProduct}
+          onOpenPremium={() => store.setIsPremiumOpen(true)}
+          lang={store.lang}
+          setLang={store.setLang}
+          isOwner={store.isOwner}
+          onDeleteProduct={store.handleDeleteProduct}
+          onUpdateProduct={store.handleUpdateProduct}
+          currentScreen={store.currentScreen}
+          setCurrentScreen={store.setCurrentScreen}
+          starredIds={store.starredIds}
+          setStarredIds={store.setStarredIds}
+          sectionsList={store.sectionsList}
+          setSectionsList={store.setSectionsList}
+          sectionOrder={store.sectionOrder}
+          setSectionOrder={store.setSectionOrder}
+          productSections={store.productSections}
+          setProductSections={store.setProductSections}
+          onSaveSettings={store.handleSaveSettings}
+          busySlots={store.busySlots}
+          dbBookings={store.dbBookings}
+          fetchBusySlotsForProduct={store.fetchBusySlotsForProduct}
+          buyerTgId={store.buyerTgId}
+          onTriggerOnboarding={() => {
+            store.setForceShowOnboarding(true);
+            store.setCurrentScreen('CATALOG');
+          }}
+        />
+      </div>
+
+      {/* Карточка товара: монтируется только при выборе товара */}
+      {store.productId && (
+        <div style={{ display: store.productId ? 'block' : 'none' }}>
+          {store.error ? (
+            <ErrorScreen
+              message={store.error}
+              onBack={() => store.handleSelectProduct(null)}
+              lang={store.lang}
+            />
+          ) : !store.product ? (
+            <LoadingScreen lang={store.lang} />
+          ) : (
+            <ProductDetailView
+              lang={store.lang}
+              product={store.product}
+              t={store.t}
+              isOwner={store.isOwner}
+              isStorePremium={store.isStorePremium}
+              tonAmount={store.tonAmount}
+              bookingDate={store.bookingDate}
+              setBookingDate={store.setBookingDate}
+              bookingTime={store.bookingTime}
+              setBookingTime={store.setBookingTime}
+              busySlots={store.busySlots}
+              dbBookings={store.dbBookings}
+              fetchBusySlotsForProduct={store.fetchBusySlotsForProduct}
+              buyerTgId={store.buyerTgId}
+              isProductReviewsOpen={store.isProductReviewsOpen}
+              setIsProductReviewsOpen={store.setIsProductReviewsOpen}
+              handleSelectProduct={store.handleSelectProduct}
+              setIsPaymentSheetOpen={store.setIsPaymentSheetOpen}
+              setIsPremiumOpen={store.setIsPremiumOpen}
+            />
+          )}
+        </div>
+      )}
       {renderOverlays()}
+      <InteractiveTutorial
+        isOpen={store.isTutorialOpen}
+        onClose={() => store.setIsTutorialOpen(false)}
+        lang={store.lang}
+        setCurrentScreen={store.setCurrentScreen}
+      />
     </>
   );
 }

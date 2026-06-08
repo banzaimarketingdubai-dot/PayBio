@@ -44,6 +44,7 @@ export function useStorefront() {
   const [productSections, setProductSections] = useState<Record<string, string>>({});
   const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS' | 'PARTNER'>('CATALOG');
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
   // Premium modal state
   const [isPremiumOpen, setIsPremiumOpen] = useState(false);
@@ -97,6 +98,17 @@ export function useStorefront() {
 
   const { copied, copy } = useCopy();
 
+  const productsListRef = useRef(productsList);
+  const productRef = useRef(product);
+
+  useEffect(() => {
+    productsListRef.current = productsList;
+  }, [productsList]);
+
+  useEffect(() => {
+    productRef.current = product;
+  }, [product]);
+
   const t = useMemo(() => TRANSLATIONS[lang], [lang]);
 
   // Top-level, TDZ-safe variable definitions for product/creator state
@@ -130,6 +142,14 @@ export function useStorefront() {
 
   const handleSelectProduct = useCallback((id: string | null) => {
     setProductId(id);
+    if (id) {
+      const found = productsList.find(p => p.id === id);
+      if (found) {
+        setProduct(found);
+      }
+    } else {
+      setProduct(null);
+    }
     setIsPaymentSheetOpen(false);
     setCheckoutMethod(null);
     setFile(null);
@@ -157,7 +177,7 @@ export function useStorefront() {
         window.history.replaceState(null, '', url.toString());
       }
     }
-  }, []);
+  }, [productsList]);
 
   // Viewport Zoom Lock
   useEffect(() => {
@@ -428,7 +448,15 @@ export function useStorefront() {
     const { signal } = controller;
 
     async function loadData() {
-      setLoading(true);
+      const currentProductsList = productsListRef.current;
+      const currentProduct = productRef.current;
+      const needsLoader = productId 
+        ? !currentProduct && !currentProductsList.some(p => p.id === productId)
+        : currentProductsList.length === 0;
+
+      if (needsLoader) {
+        setLoading(true);
+      }
       setError(null);
       try {
         if (productId) {
@@ -684,6 +712,7 @@ export function useStorefront() {
       profile_customization: updatedCustom,
     });
     setForceShowOnboarding(false);
+    setIsTutorialOpen(true);
 
     try {
       await fetch('/api/store/profile', {
@@ -1202,6 +1231,8 @@ export function useStorefront() {
     setCurrentScreen,
     forceShowOnboarding,
     setForceShowOnboarding,
+    isTutorialOpen,
+    setIsTutorialOpen,
     isPremiumOpen,
     setIsPremiumOpen,
     isUpgrading,
