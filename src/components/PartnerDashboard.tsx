@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 
 const DASHBOARD_TRANSLATIONS = {
   en: {
-    title: 'Partner Dashboard',
-    back: 'Back to Catalog',
+    title: 'Partner Cabin',
+    back: 'Back',
     earningsCard: 'Total Earnings',
     paidCard: 'Paid Out',
     availableCard: 'Available to Withdraw',
@@ -12,22 +12,22 @@ const DASHBOARD_TRANSLATIONS = {
     tier1Name: 'Tier 1 (20% Recurring)',
     tier2Name: 'Tier 2 (30% Recurring)',
     progressText: '{count}/50 active referrals to unlock Tier 2 (30%)',
-    tonInputLabel: 'TON Wallet Address',
-    tonInputPlaceholder: 'Enter your TON address (e.g. UQ...)',
+    tonInputLabel: 'TON Payout Address',
+    tonInputPlaceholder: 'Enter your TON address (e.g., UQ...)',
     amountLabel: 'Amount in USD',
-    minWithdrawMessage: 'Minimum withdrawal amount is $50 USD',
+    minWithdrawMessage: 'Minimum withdrawal is $50 USD',
     withdrawBtn: 'Withdraw Funds',
-    withdrawSuccess: '🎉 Withdrawal request submitted successfully! Admin will process your TON payout shortly.',
+    withdrawSuccess: '🎉 Payout request submitted! Admin will process your TON transfer shortly.',
     withdrawFailed: '❌ Payout request failed: ',
     loading: 'Loading partner statistics...',
-    copyBtn: 'Copy Link',
+    copyBtn: 'Copy',
     copiedText: 'Copied!',
     inviteText: 'Your Referral Link',
-    shareBtn: 'Share Link',
+    shareBtn: 'Share',
   },
   ru: {
     title: 'Кабинет партнера',
-    back: 'Назад в каталог',
+    back: 'Назад',
     earningsCard: 'Всего заработано',
     paidCard: 'Выплачено',
     availableCard: 'Доступно к выводу',
@@ -41,7 +41,7 @@ const DASHBOARD_TRANSLATIONS = {
     amountLabel: 'Сумма в USD',
     minWithdrawMessage: 'Минимальная сумма вывода — $50 USD',
     withdrawBtn: 'Вывести средства',
-    withdrawSuccess: '🎉 Запрос на выплату успешно отправлен! Администратор произведет выплату в TON в ближайшее время.',
+    withdrawSuccess: '🎉 Запрос на выплату отправлен! Администратор произведет выплату в TON в ближайшее время.',
     withdrawFailed: '❌ Ошибка запроса выплаты: ',
     loading: 'Загрузка статистики...',
     copyBtn: 'Копировать',
@@ -94,7 +94,6 @@ export default function PartnerDashboard({
         const data = await res.json();
         if (data.success) {
           setStats(data);
-          // If available balance is less than $50, default withdraw input to 50 anyway (but validation block handles it)
           if (data.available_balance >= 50) {
             setWithdrawAmount(Number(data.available_balance.toFixed(2)));
           }
@@ -156,13 +155,11 @@ export default function PartnerDashboard({
       const data = await res.json();
       if (res.ok && data.success) {
         setStatusMsg({ type: 'success', text: dt.withdrawSuccess });
-        // Update stats locally
         setStats((prev: any) => ({
           ...prev,
           total_paid: prev.total_paid + withdrawAmount,
           available_balance: Math.max(0, prev.available_balance - withdrawAmount)
         }));
-        // Update creator object in parent state
         setCreator((prev: any) => ({
           ...prev,
           ton_withdrawal_address: tonAddress.trim()
@@ -181,10 +178,16 @@ export default function PartnerDashboard({
     return (
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        minHeight: '80vh', gap: '16px', color: 'var(--tg-text)'
+        minHeight: '80vh', gap: '20px', color: 'var(--tg-text)'
       }}>
-        <div className="spinner" />
-        <p style={{ fontSize: '14px', fontWeight: 500 }}>{dt.loading}</p>
+        <div style={{
+          width: '36px', height: '36px',
+          border: '3.5px solid rgba(255,255,255,0.08)',
+          borderTopColor: 'var(--tg-accent, #2b8cf3)',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }} />
+        <p style={{ fontSize: '14px', fontWeight: 600, opacity: 0.7, letterSpacing: '0.2px' }}>{dt.loading}</p>
       </div>
     );
   }
@@ -192,61 +195,102 @@ export default function PartnerDashboard({
   const isTier2 = stats?.partner_tier === 2;
   const activeCount = stats?.active_referrals_count || 0;
   const progressPercent = Math.min(100, (activeCount / 50) * 100);
-
   const canWithdraw = stats && stats.available_balance >= 50 && tonAddress.trim().length > 0;
 
   return (
-    <div style={{ padding: '16px', color: 'var(--tg-text)', minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div style={{
+      padding: '16px 20px 40px',
+      color: 'var(--tg-text)',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '24px',
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif"
+    }}>
       
       {/* HEADER */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>{dt.title}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>{dt.title}</h2>
+          <span style={{ fontSize: '11px', color: 'var(--tg-hint)', opacity: 0.8 }}>PayBio Affiliate Program</span>
+        </div>
         <button 
           onClick={() => setCurrentScreen('CATALOG')}
           style={{
-            background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '12px',
-            padding: '8px 12px', color: 'var(--tg-text)', fontSize: '13px', fontWeight: 600,
-            cursor: 'pointer'
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.05)',
+            borderRadius: '12px',
+            padding: '8px 16px',
+            color: 'var(--tg-text)',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
           }}
+          onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.96)')}
+          onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
         >
+          <svg style={{ width: '14px', height: '14px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
           {dt.back}
         </button>
       </div>
 
       {/* TIER LEVEL AND PROGRESS */}
-      <div className="tg-card" style={{
-        background: 'rgba(255, 255, 255, 0.02)',
-        border: '1px solid var(--tg-border)',
-        borderRadius: '16px',
-        padding: '16px',
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '20px',
+        padding: '20px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '12px'
+        gap: '16px',
+        boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)',
+        backdropFilter: 'blur(10px)'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{dt.tierInfo}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '18px' }}>👑</span>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--tg-hint)' }}>{dt.tierInfo}</span>
+          </div>
           <span style={{
-            fontSize: '13px', fontWeight: 700,
-            background: isTier2 ? 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)' : 'rgba(255,255,255,0.08)',
-            color: isTier2 ? '#000' : 'var(--tg-text)',
-            padding: '4px 10px', borderRadius: '20px'
+            fontSize: '12px',
+            fontWeight: 800,
+            background: isTier2 
+              ? 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)' 
+              : 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
+            color: isTier2 ? '#000' : '#fff',
+            padding: '6px 14px',
+            borderRadius: '24px',
+            boxShadow: isTier2 
+              ? '0 2px 10px rgba(255,215,0,0.2)' 
+              : '0 2px 10px rgba(43,140,243,0.2)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.3px'
           }}>
-            {isTier2 ? dt.tier2Name : dt.tier1Name}
+            {isTier2 ? 'Tier 2 (30%)' : 'Tier 1 (20%)'}
           </span>
         </div>
 
         {/* PROGRESS BAR (Only if Tier 1) */}
         {!isTier2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tg-hint)' }}>
-              <span>{dt.progressText.replace('{count}', String(activeCount))}</span>
-              <span>{activeCount}/50</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 500 }}>
+              <span style={{ opacity: 0.9 }}>{dt.progressText.replace('{count}', String(activeCount))}</span>
+              <span style={{ color: 'var(--tg-text)', fontWeight: 700 }}>{activeCount} / 50</span>
             </div>
-            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ width: '100%', height: '10px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', overflow: 'hidden' }}>
               <div style={{
-                width: `${progressPercent}%`, height: '100%',
-                background: 'linear-gradient(90deg, var(--tg-accent) 0%, #38ef7d 100%)',
-                borderRadius: '4px', transition: 'width 0.4s ease'
+                width: `${progressPercent}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #2b8cf3 0%, #38ef7d 100%)',
+                borderRadius: '6px',
+                transition: 'width 0.6s cubic-bezier(0.1, 0.8, 0.2, 1)'
               }} />
             </div>
           </div>
@@ -254,96 +298,185 @@ export default function PartnerDashboard({
 
         {isTier2 && (
           <div style={{
-            padding: '8px 12px', background: 'rgba(255, 215, 0, 0.05)', border: '1px dashed #FFD700',
-            borderRadius: '8px', fontSize: '12px', color: '#FFD700', display: 'flex', gap: '8px', alignItems: 'center'
+            padding: '10px 14px',
+            background: 'rgba(255, 215, 0, 0.05)',
+            border: '1px dashed rgba(255, 215, 0, 0.2)',
+            borderRadius: '12px',
+            fontSize: '12.5px',
+            color: '#ffd700',
+            fontWeight: 500,
+            display: 'flex',
+            gap: '8px',
+            alignItems: 'center',
+            lineHeight: 1.4
           }}>
-            🎉 <span>You have unlocked permanent maximum referral commission (30%)!</span>
+            <span>✨</span>
+            <span>You have unlocked permanent maximum referral commission (30%)!</span>
           </div>
         )}
       </div>
 
       {/* METRIC CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-        <div className="tg-card" style={{
-          background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--tg-border)',
-          borderRadius: '16px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px'
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+        
+        {/* Total Earnings */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(56, 239, 125, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%)',
+          border: '1px solid rgba(56, 239, 125, 0.15)',
+          borderRadius: '20px',
+          padding: '18px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
         }}>
-          <span style={{ fontSize: '11.5px', color: 'var(--tg-hint)' }}>{dt.earningsCard}</span>
-          <span style={{ fontSize: '20px', fontWeight: 800, color: '#38ef7d' }}>${stats?.total_earnings.toFixed(2)}</span>
+          <span style={{ fontSize: '12px', color: 'var(--tg-hint)', fontWeight: 600 }}>{dt.earningsCard}</span>
+          <span style={{ fontSize: '24px', fontWeight: 900, color: '#38ef7d', letterSpacing: '-0.5px' }}>
+            ${stats?.total_earnings.toFixed(2)}
+          </span>
         </div>
 
-        <div className="tg-card" style={{
-          background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--tg-border)',
-          borderRadius: '16px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '4px'
+        {/* Referrals Count */}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          borderRadius: '20px',
+          padding: '18px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
         }}>
-          <span style={{ fontSize: '11.5px', color: 'var(--tg-hint)' }}>{dt.referredCount}</span>
-          <span style={{ fontSize: '20px', fontWeight: 800 }}>{activeCount} 👥</span>
+          <span style={{ fontSize: '12px', color: 'var(--tg-hint)', fontWeight: 600 }}>{dt.referredCount}</span>
+          <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--tg-text)', letterSpacing: '-0.5px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {activeCount} <span style={{ fontSize: '18px', opacity: 0.7 }}>👥</span>
+          </span>
         </div>
 
-        <div className="tg-card" style={{
+        {/* Large Available to Withdraw Card */}
+        <div style={{
           gridColumn: 'span 2',
-          background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.2)', backdropFilter: 'blur(8px)',
-          borderRadius: '16px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          background: 'linear-gradient(135deg, rgba(43, 140, 243, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%)',
+          border: '1px solid rgba(43, 140, 243, 0.2)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.25)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: '20px',
+          padding: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
         }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{dt.availableCard}</span>
-            <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--tg-accent)' }}>${stats?.available_balance.toFixed(2)}</span>
+            <span style={{ fontSize: '12px', color: 'var(--tg-hint)', fontWeight: 600 }}>{dt.availableCard}</span>
+            <span style={{ fontSize: '32px', fontWeight: 900, color: '#2b8cf3', letterSpacing: '-1px' }}>
+              ${stats?.available_balance.toFixed(2)}
+            </span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', textAlign: 'right' }}>
-            <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{dt.paidCard}</span>
-            <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--tg-hint)' }}>${stats?.total_paid.toFixed(2)}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'right' }}>
+            <span style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>{dt.paidCard}</span>
+            <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--tg-hint)', opacity: 0.9 }}>
+              ${stats?.total_paid.toFixed(2)}
+            </span>
           </div>
         </div>
       </div>
 
       {/* REFERRAL LINK CARD */}
-      <div className="tg-card" style={{
-        background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--tg-border)',
-        borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px'
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.02)',
+        border: '1px solid var(--tg-border)',
+        borderRadius: '20px',
+        padding: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
       }}>
-        <label style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tg-text)' }}>{dt.inviteText}</label>
+        <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--tg-text)', letterSpacing: '-0.2px' }}>{dt.inviteText}</label>
+        
         <div style={{ display: 'flex', gap: '8px' }}>
           <input 
             type="text" 
             readOnly 
             value={affiliateLink}
             style={{
-              flex: 1, background: 'rgba(0,0,0,0.2)', border: '1px solid var(--tg-border)',
-              borderRadius: '10px', padding: '10px', color: 'var(--tg-hint)', fontSize: '12px',
-              outline: 'none'
+              flex: 1,
+              background: 'rgba(0,0,0,0.25)',
+              border: '1px solid var(--tg-border)',
+              borderRadius: '12px',
+              padding: '12px',
+              color: 'var(--tg-hint)',
+              fontSize: '12.5px',
+              outline: 'none',
+              fontFamily: 'monospace'
             }}
           />
           <button 
             onClick={handleCopyLink}
             style={{
-              background: copied ? '#38ef7d' : 'var(--tg-accent)', color: '#fff',
-              border: 'none', borderRadius: '10px', padding: '0 14px', fontSize: '12px',
-              fontWeight: 700, cursor: 'pointer', transition: 'background-color 0.2s'
+              background: copied ? '#38ef7d' : '#2b8cf3',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '0 16px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: '90px'
             }}
+            onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.95)')}
+            onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
             {copied ? dt.copiedText : dt.copyBtn}
           </button>
+          
           <button 
             onClick={handleShareLink}
             style={{
-              background: 'rgba(255,255,255,0.08)', color: 'var(--tg-text)',
-              border: 'none', borderRadius: '10px', padding: '0 12px', fontSize: '12px',
-              fontWeight: 700, cursor: 'pointer'
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid rgba(255,255,255,0.05)',
+              color: 'var(--tg-text)',
+              borderWidth: '1px',
+              borderRadius: '12px',
+              padding: '0 16px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
             }}
+            onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.95)')}
+            onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
+            <svg style={{ width: '13px', height: '13px' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="5" r="3"></circle>
+              <circle cx="6" cy="12" r="3"></circle>
+              <circle cx="18" cy="19" r="3"></circle>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+            </svg>
             {dt.shareBtn}
           </button>
         </div>
       </div>
 
       {/* WITHDRAWAL FORM */}
-      <form onSubmit={handleWithdraw} className="tg-card" style={{
-        background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--tg-border)',
-        borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px'
+      <form onSubmit={handleWithdraw} style={{
+        background: 'rgba(255, 255, 255, 0.02)',
+        border: '1px solid var(--tg-border)',
+        borderRadius: '20px',
+        padding: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '20px'
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '13px', fontWeight: 700 }}>{dt.tonInputLabel}</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '14px', fontWeight: 700, color: 'var(--tg-text)' }}>{dt.tonInputLabel}</label>
           <input 
             type="text" 
             required
@@ -351,71 +484,124 @@ export default function PartnerDashboard({
             value={tonAddress}
             onChange={(e) => setTonAddress(e.target.value)}
             style={{
-              background: 'rgba(0,0,0,0.15)', border: '1px solid var(--tg-border)',
-              borderRadius: '10px', padding: '12px', color: 'var(--tg-text)', fontSize: '13px',
-              outline: 'none'
+              background: 'rgba(0,0,0,0.2)',
+              border: '1px solid var(--tg-border)',
+              borderRadius: '12px',
+              padding: '14px',
+              color: 'var(--tg-text)',
+              fontSize: '13px',
+              outline: 'none',
+              transition: 'border-color 0.2s',
+              fontFamily: 'monospace'
             }}
           />
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label style={{ fontSize: '13px', fontWeight: 700 }}>{dt.amountLabel}</label>
-            <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--tg-accent)' }}>${withdrawAmount.toFixed(0)}</span>
+            <label style={{ fontSize: '14px', fontWeight: 700 }}>{dt.amountLabel}</label>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: '#2b8cf3' }}>${withdrawAmount.toFixed(0)}</span>
           </div>
           
           {/* Slider input */}
-          <input 
-            type="range"
-            min={50}
-            max={stats ? Math.max(50, Math.ceil(stats.available_balance)) : 100}
-            step={1}
-            disabled={!stats || stats.available_balance < 50}
-            value={withdrawAmount}
-            onChange={(e) => setWithdrawAmount(Number(e.target.value))}
-            style={{
-              width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)',
-              borderRadius: '3px', outline: 'none', cursor: 'pointer', accentColor: 'var(--tg-accent)'
-            }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--tg-hint)' }}>
-            <span>$50 Min</span>
-            <span>Max: ${stats ? stats.available_balance.toFixed(2) : '$0'}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <input 
+              type="range"
+              min={50}
+              max={stats ? Math.max(50, Math.ceil(stats.available_balance)) : 100}
+              step={1}
+              disabled={!stats || stats.available_balance < 50}
+              value={withdrawAmount}
+              onChange={(e) => setWithdrawAmount(Number(e.target.value))}
+              style={{
+                width: '100%',
+                height: '6px',
+                background: 'rgba(255,255,255,0.08)',
+                borderRadius: '3px',
+                outline: 'none',
+                cursor: 'pointer',
+                accentColor: '#2b8cf3'
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 500 }}>
+              <span>$50 Min</span>
+              <span>Max: ${stats ? stats.available_balance.toFixed(2) : '$0'}</span>
+            </div>
           </div>
         </div>
 
         {/* STATUS MESSAGE */}
         {statusMsg && (
           <div style={{
-            padding: '10px 12px', borderRadius: '10px', fontSize: '12px', lineHeight: '1.4',
-            background: statusMsg.type === 'success' ? 'rgba(56, 239, 125, 0.06)' : 'rgba(255, 94, 98, 0.06)',
-            border: statusMsg.type === 'success' ? '1px solid #38ef7d' : '1px solid #ff5e62',
-            color: statusMsg.type === 'success' ? '#38ef7d' : '#ff5e62'
+            padding: '12px 14px',
+            borderRadius: '12px',
+            fontSize: '12.5px',
+            lineHeight: '1.45',
+            background: statusMsg.type === 'success' ? 'rgba(56, 239, 125, 0.05)' : 'rgba(255, 94, 98, 0.05)',
+            border: statusMsg.type === 'success' ? '1px solid rgba(56, 239, 125, 0.2)' : '1px solid rgba(255, 94, 98, 0.2)',
+            color: statusMsg.type === 'success' ? '#38ef7d' : '#ff5e62',
+            display: 'flex',
+            gap: '8px'
           }}>
-            {statusMsg.text}
+            <span>{statusMsg.type === 'success' ? '✓' : '⚠️'}</span>
+            <span>{statusMsg.text}</span>
           </div>
         )}
 
         {/* Withdrawal warning */}
         {stats && stats.available_balance < 50 && (
-          <span style={{ fontSize: '11px', color: '#ff5e62', alignSelf: 'center', marginTop: '-4px' }}>
-            ⚠️ {dt.minWithdrawMessage}
-          </span>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            color: '#ff5e62',
+            fontSize: '11.5px',
+            fontWeight: 600,
+            background: 'rgba(255, 94, 98, 0.03)',
+            padding: '8px',
+            borderRadius: '10px',
+            border: '1px dashed rgba(255, 94, 98, 0.15)'
+          }}>
+            <span>⚠️</span>
+            <span>{dt.minWithdrawMessage}</span>
+          </div>
         )}
 
         <button 
           type="submit"
           disabled={withdrawing || !canWithdraw}
           style={{
-            background: canWithdraw ? 'var(--tg-accent)' : 'rgba(255,255,255,0.04)',
+            background: canWithdraw 
+              ? 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)' 
+              : 'rgba(255,255,255,0.03)',
             color: canWithdraw ? '#fff' : 'var(--tg-hint)',
-            border: 'none', borderRadius: '12px', padding: '14px', fontSize: '14px',
-            fontWeight: 700, cursor: canWithdraw ? 'pointer' : 'default',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-            transition: 'background-color 0.2s'
+            border: 'none',
+            borderRadius: '14px',
+            padding: '16px',
+            fontSize: '14.5px',
+            fontWeight: 700,
+            cursor: canWithdraw ? 'pointer' : 'default',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '10px',
+            transition: 'all 0.2s ease',
+            boxShadow: canWithdraw ? '0 4px 15px rgba(43, 140, 243, 0.25)' : 'none'
           }}
+          onMouseDown={(e) => { if (canWithdraw) e.currentTarget.style.transform = 'scale(0.97)'; }}
+          onMouseUp={(e) => { if (canWithdraw) e.currentTarget.style.transform = 'scale(1)'; }}
         >
-          {withdrawing && <div className="spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }} />}
+          {withdrawing && (
+            <div style={{
+              width: '16px',
+              height: '16px',
+              border: '2px solid rgba(255,255,255,0.2)',
+              borderTopColor: '#fff',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }} />
+          )}
           <span>{dt.withdrawBtn}</span>
         </button>
       </form>
