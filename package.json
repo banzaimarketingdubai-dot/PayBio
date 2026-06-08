@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
-    "@twa-dev/sdk": "^8.0.2",
     "exif-parser": "^0.1.12",
     "next": "16.2.7",
     "react": "19.2.4",

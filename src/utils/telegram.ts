@@ -1,10 +1,39 @@
-// Singleton: resolved once at startup to prevent dynamic import latency on button taps
+// Safe Telegram WebApp accessor — avoids importing @twa-dev/sdk at module
+// evaluation time, which crashes with "Cannot access 'tW' before initialization"
+// (a TDZ error caused by circular deps in the SDK when bundled with Next.js).
+//
+// Instead, it polls the window.Telegram.WebApp global object, which is
+// injected by the Telegram client script, with a timeout to prevent hanging.
 let _twaSDK: any = null;
+
 export const getTWA = async () => {
-  if (!_twaSDK) {
-    _twaSDK = (await import('@twa-dev/sdk')).default;
+  if (_twaSDK) return _twaSDK;
+  
+  if (typeof window === 'undefined') {
+    return null;
   }
-  return _twaSDK;
+  
+  const immediateWebApp = (window as any).Telegram?.WebApp;
+  if (immediateWebApp) {
+    _twaSDK = immediateWebApp;
+    return immediateWebApp;
+  }
+  
+  return new Promise((resolve) => {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      const WebApp = (window as any).Telegram?.WebApp;
+      attempts++;
+      if (WebApp) {
+        clearInterval(interval);
+        _twaSDK = WebApp;
+        resolve(WebApp);
+      } else if (attempts > 20) { // 20 * 10ms = 200ms max wait
+        clearInterval(interval);
+        resolve(null);
+      }
+    }, 10);
+  });
 };
 
 export const showAlert = (message: string) => {
