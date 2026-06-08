@@ -640,6 +640,28 @@ export default function ProductDetailView({
               👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
             </button>
           </div>
+        ) : product.has_bought ? (
+          <button 
+            disabled
+            className="btn-primary"
+            style={{ 
+              background: 'var(--tg-green, #4dca5a)', 
+              fontSize: '16px', 
+              fontWeight: 700, 
+              height: '54px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '10px',
+              borderRadius: '16px',
+              cursor: 'not-allowed',
+              opacity: 0.9,
+              boxShadow: '0 4px 15px rgba(77, 202, 90, 0.2)'
+            }}
+          >
+            <span>✓</span>
+            <span>{lang === 'ru' ? 'Оплачено (Получено в боте)' : 'Paid (Delivered to bot)'}</span>
+          </button>
         ) : (
           <button 
             onClick={() => {

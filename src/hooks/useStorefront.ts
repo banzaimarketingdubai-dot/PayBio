@@ -73,6 +73,7 @@ export function useStorefront() {
   const [verifySuccess, setVerifySuccess] = useState(false);
   const [extractedData, setExtractedData] = useState<any>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // Buyer shipping form states
   const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
@@ -914,7 +915,7 @@ export function useStorefront() {
   }, [creator, productSections]);
 
   const handleStarsPayment = useCallback(async () => {
-    if (!product) return;
+    if (!product || isProcessingPayment) return;
     if (product.id === 'premium_virtual') {
       setIsPaymentSheetOpen(false);
       handleBuyPremiumWithStars(false);
@@ -926,6 +927,7 @@ export function useStorefront() {
         return;
       }
     }
+    setIsProcessingPayment(true);
     try {
       const bookingSlot = product.product_type === 'BOOKING' ? {
         start: `${bookingDate}T${bookingTime}:00`,
@@ -938,11 +940,20 @@ export function useStorefront() {
         body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot }),
       });
       const data = await res.json();
-      if (!res.ok) { showAlert(data.error || 'Failed to create invoice.'); return; }
+      if (!res.ok) {
+        showAlert(data.error || 'Failed to create invoice.');
+        setIsProcessingPayment(false);
+        return;
+      }
       const orderId = data.order_id;
       const WebApp = await getTWA();
-      if (!WebApp) return;
+      if (!WebApp) {
+        setIsProcessingPayment(false);
+        return;
+      }
+      setIsPaymentSheetOpen(false);
       WebApp.openInvoice(data.invoice_link, (status: string) => {
+        setIsProcessingPayment(false);
         if (status === 'paid') {
           if (product.sub_type === 'PHYSICAL') {
             setPaidOrderId(orderId);
@@ -956,8 +967,9 @@ export function useStorefront() {
       });
     } catch (e: any) {
       showAlert('Error initiating payment.');
+      setIsProcessingPayment(false);
     }
-  }, [product, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered]);
+  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered]);
 
   const handleBuyDirect = useCallback(async () => {
     if (!product) return;
@@ -1218,6 +1230,7 @@ export function useStorefront() {
     verifyError,
     setVerifyError,
     activeOrderId,
+    isProcessingPayment,
     showDeliveryForm,
     setShowDeliveryForm,
     shippingSubmitted,

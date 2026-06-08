@@ -82,6 +82,7 @@ export default function Storefront() {
             verifySuccess={store.verifySuccess}
             verifyError={store.verifyError}
             setVerifyError={store.setVerifyError}
+            isProcessingPayment={store.isProcessingPayment}
             handleClaimPayment={store.handleClaimPayment}
           />
         )}

@@ -31,6 +31,7 @@ export interface PaymentSheetProps {
   verifySuccess: boolean;
   verifyError: string | null;
   setVerifyError: (error: string | null) => void;
+  isProcessingPayment: boolean;
   handleClaimPayment: () => void;
 }
 
@@ -61,6 +62,7 @@ export default function PaymentSheet({
   verifySuccess,
   verifyError,
   setVerifyError,
+  isProcessingPayment,
   handleClaimPayment
 }: PaymentSheetProps) {
   if (!isOpen) return null;
@@ -577,13 +579,21 @@ export default function PaymentSheet({
                 <button 
                   className="btn-primary" 
                   onClick={() => {
-                    onClose();
                     handleStarsPayment();
                   }} 
-                  disabled={hasBookingConflict}
-                  style={{ background: 'var(--tg-accent)', height: '48px', fontSize: '14.5px' }}
+                  disabled={hasBookingConflict || isProcessingPayment}
+                  style={{ 
+                    background: hasBookingConflict || isProcessingPayment ? 'var(--tg-hint)' : 'var(--tg-accent)', 
+                    height: '48px', 
+                    fontSize: '14.5px',
+                    cursor: hasBookingConflict || isProcessingPayment ? 'not-allowed' : 'pointer'
+                  }}
                 >
-                  {lang === 'ru' ? `Оплатить ${product.price_stars} ⭐` : `Pay ${product.price_stars} ⭐`}
+                  {isProcessingPayment ? (
+                    <span>{lang === 'ru' ? 'Запуск оплаты...' : 'Launching payment...'}</span>
+                  ) : (
+                    <span>{lang === 'ru' ? `Оплатить ${product.price_stars} ⭐` : `Pay ${product.price_stars} ⭐`}</span>
+                  )}
                 </button>
 
                 {/* Stars top-up instructions */}
