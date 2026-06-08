@@ -2175,6 +2175,21 @@ export default function Storefront() {
 
   const t = TRANSLATIONS[lang];
 
+  // Top-level, TDZ-safe variable definitions for product/creator state
+  const isStorePremium = !!(product?.creator?.is_premium ?? creator?.is_premium);
+  const tonList = (isStorePremium && product?.creator?.payment_details?.ton_list) || (creator?.payment_details?.ton_list) || [];
+  const p2pList = (product?.creator?.payment_details?.p2p_list) || (creator?.payment_details?.p2p_list) || [];
+
+  const tonDetails = tonList.length > 0 && selectedTonIdx < tonList.length
+    ? tonList[selectedTonIdx].address 
+    : (product?.creator?.payment_details?.ton || creator?.payment_details?.ton || 'No TON wallet configured');
+    
+  const p2pDetails = p2pList.length > 0 && selectedP2pIdx < p2pList.length
+    ? p2pList[selectedP2pIdx].card 
+    : (product?.creator?.payment_details?.p2p || creator?.payment_details?.p2p || 'No card details configured');
+
+  const tonAmount = product ? (product.price_fiat / 7.0).toFixed(2) : '0';
+
   const handleSelectProduct = useCallback((id: string | null) => {
     setProductId(id);
     setIsPaymentSheetOpen(false);
@@ -4269,8 +4284,6 @@ export default function Storefront() {
     <ErrorScreen message={error || 'This storefront no longer exists.'} onBack={() => setProductId(null)} lang={lang} />
   );
 
-  const isStorePremium = product.creator?.is_premium;
-
   if (!isStorePremium && !isOwner) {
     return (
       <div style={{
@@ -4354,18 +4367,7 @@ export default function Storefront() {
     return selStart < end && selEnd > start;
   }));
 
-  const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
-  const p2pList = product.creator?.payment_details?.p2p_list || [];
 
-  const tonDetails = tonList.length > 0 && selectedTonIdx < tonList.length
-    ? tonList[selectedTonIdx].address 
-    : (product.creator?.payment_details?.ton || 'No TON wallet configured');
-    
-  const p2pDetails = p2pList.length > 0 && selectedP2pIdx < p2pList.length
-    ? p2pList[selectedP2pIdx].card 
-    : (product.creator?.payment_details?.p2p || 'No card details configured');
-
-  const tonAmount = (product.price_fiat / 7.0).toFixed(2);
 
   const STEPS = lang === 'ru' ? [
     'Анализ метаданных и тегов квитанции',
