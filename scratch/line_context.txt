@@ -1,0 +1,60 @@
+4401:           boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+4402:         }}>
+4403:           <div>
+4404:             ⚠️ {lang === 'ru' 
+4405:               ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
+4406:               : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+4407:           </div>
+4408:           <button 
+4409:             onClick={() => setIsPremiumOpen(true)}
+4410:             style={{
+4411:               background: '#fff',
+4412:               color: '#FF5E62',
+4413:               border: 'none',
+4414:               borderRadius: '20px',
+4415:               padding: '6px 14px',
+4416:               fontWeight: 700,
+4417:               fontSize: '12px',
+4418:               cursor: 'pointer',
+4419:               boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+4420:             }}
+4421:           >
+4422:             👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
+4423:           </button>
+4424:         </div>
+4425:       )}
+4426: 
+4427:       {isOwner && isStorePremium && product.creator?.premium_until && (() => {
+4428:         const daysLeft = Math.ceil((new Date(product.creator.premium_until).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+4429:         if (daysLeft > 0 && daysLeft <= 7) {
+4430:           const daysWord = getDaysWord(daysLeft, lang);
+4431:           return (
+4432:             <div style={{
+4433:               background: 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
+4434:               color: '#fff',
+4435:               padding: '14px 16px',
+4436:               textAlign: 'center',
+4437:               fontSize: '13px',
+4438:               fontWeight: 600,
+4439:               display: 'flex',
+4440:               flexDirection: 'column',
+4441:               alignItems: 'center',
+4442:               gap: '8px',
+4443:               boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+4444:             }}>
+4445:               <div>
+4446:                 ⚠️ {lang === 'ru' 
+4447:                   ? `Внимание! Осталось ${daysLeft} ${daysWord} пробного периода.` 
+4448:                   : `Attention! ${daysLeft} ${daysWord} of the trial period left.`}
+4449:               </div>
+4450:               <button 
+4451:                 onClick={() => setIsPremiumOpen(true)}
+4452:                 style={{
+4453:                   background: '#fff',
+4454:                   color: '#2b8cf3',
+4455:                   border: 'none',
+4456:                   borderRadius: '20px',
+4457:                   padding: '6px 14px',
+4458:                   fontWeight: 700,
+4459:                   fontSize: '12px',
+4460:                   cursor: 'pointer',

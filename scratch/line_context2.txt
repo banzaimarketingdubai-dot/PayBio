@@ -1,0 +1,60 @@
+4351:     const end = new Date(slot.end).getTime();
+4352:     const selStart = new Date(`${bookingDate}T${bookingTime}:00`).getTime();
+4353:     const selEnd = selStart + 60 * 60 * 1000;
+4354:     return selStart < end && selEnd > start;
+4355:   }));
+4356: 
+4357:   const tonList = isStorePremium && product.creator?.payment_details?.ton_list || [];
+4358:   const p2pList = product.creator?.payment_details?.p2p_list || [];
+4359: 
+4360:   const tonDetails = tonList.length > 0 && selectedTonIdx < tonList.length
+4361:     ? tonList[selectedTonIdx].address 
+4362:     : (product.creator?.payment_details?.ton || 'No TON wallet configured');
+4363:     
+4364:   const p2pDetails = p2pList.length > 0 && selectedP2pIdx < p2pList.length
+4365:     ? p2pList[selectedP2pIdx].card 
+4366:     : (product.creator?.payment_details?.p2p || 'No card details configured');
+4367: 
+4368:   const tonAmount = (product.price_fiat / 7.0).toFixed(2);
+4369: 
+4370:   const STEPS = lang === 'ru' ? [
+4371:     'Анализ метаданных и тегов квитанции',
+4372:     'EXIF сканирование (проверка фотошопа)',
+4373:     'Распознавание Vision AI · OCR данных',
+4374:     'Сверка суммы и выдача файла',
+4375:   ] : [
+4376:     'Parsing receipt metadata & tags',
+4377:     'EXIF fraud scan (Photoshop detection)',
+4378:     'Vision AI · OCR data extraction',
+4379:     'Amount reconciliation & fulfillment',
+4380:   ];
+4381: 
+4382:   return (
+4383:     <div style={{
+4384:       minHeight: '100svh',
+4385:       background: 'var(--tg-bg)',
+4386:       display: 'flex', flexDirection: 'column',
+4387:     }} className="animate-fade-in">
+4388: 
+4389:       {isOwner && !isStorePremium && (
+4390:         <div style={{
+4391:           background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)',
+4392:           color: '#fff',
+4393:           padding: '14px 16px',
+4394:           textAlign: 'center',
+4395:           fontSize: '13px',
+4396:           fontWeight: 600,
+4397:           display: 'flex',
+4398:           flexDirection: 'column',
+4399:           alignItems: 'center',
+4400:           gap: '8px',
+4401:           boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+4402:         }}>
+4403:           <div>
+4404:             ⚠️ {lang === 'ru' 
+4405:               ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
+4406:               : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+4407:           </div>
+4408:           <button 
+4409:             onClick={() => setIsPremiumOpen(true)}
+4410:             style={{

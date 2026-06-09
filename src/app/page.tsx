@@ -277,6 +277,7 @@ export default function Storefront() {
               handleSelectProduct={store.handleSelectProduct}
               setIsPaymentSheetOpen={store.setIsPaymentSheetOpen}
               setIsPremiumOpen={store.setIsPremiumOpen}
+              hasBoughtInSession={store.hasBoughtInSession}
             />
           )}
         </div>

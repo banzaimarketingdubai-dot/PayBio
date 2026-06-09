@@ -1,0 +1,72 @@
+--- renderOverlays starts at line 3495 ---
+3490:           {lang === 'ru' ? 'Вернуться в магазин' : 'Back to Shop'}
+3491:         </button>
+3492:       </div>
+3493:     );
+3494:   }
+3495:   const renderOverlays = () => {
+3496:     return (
+3497:       <>
+3498:         {product && (
+3499: // ─── BOTTOM SHEET: UNIVERSAL PAYMENT ───
+3500:       <div className={`bottom-sheet-overlay ${isPaymentSheetOpen ? 'active' : ''}`} style={isPaymentSheetOpen ? { zIndex: 1100 } : undefined} onClick={() => {
+3501:         if (!verifying) {
+3502:           setIsPaymentSheetOpen(false);
+3503:           setCheckoutMethod(null);
+3504:           setFile(null);
+3505:           setVerifyError(null);
+3506:           setActiveOrderId(null);
+3507:         }
+3508:       }}>
+3509:         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90svh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+3510:           <div className="bottom-sheet-handle" />
+3511:           <button 
+3512:             type="button" 
+3513:             onClick={() => {
+3514:               if (!verifying) {
+3515:                 setIsPaymentSheetOpen(false);
+3516:                 setCheckoutMethod(null);
+3517:                 setFile(null);
+3518:                 setVerifyError(null);
+3519:                 setActiveOrderId(null);
+3520:               }
+3521:             }}
+3522:             style={{
+3523:               position: 'absolute', top: '16px', right: '16px',
+3524:               background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: '50%',
+--- PremiumFlow found at line 4145 ---
+4135:                     💬 {lang === 'ru' ? 'Написать автору' : 'Contact Creator'}
+4136:                   </button>
+4137:                 </div>
+4138:               )}
+4139:             </div>
+4140:           )}
+4141:         </div>
+4142:       </div>
+4143:         )}
+4144: 
+4145: <PremiumFlow
+4146:         isOpen={isPremiumOpen}
+4147:         onClose={() => setIsPremiumOpen(false)}
+4148:         lang={lang}
+4149:         t={t}
+4150:         isUpgrading={isUpgrading}
+4151:         onBuyPremiumWithStars={handleBuyPremiumWithStars}
+4152:         isPremiumStarsHelpOpen={isPremiumStarsHelpOpen}
+4153:         onTogglePremiumStarsHelp={() => setIsPremiumStarsHelpOpen(!isPremiumStarsHelpOpen)}
+4154:         onOpenLink={handleOpenLink}
+4155:         promoCodeInput={promoCodeInput}
+4156:         onPromoCodeInputChange={setPromoCodeInput}
+4157:         onApplyPromoCode={handleApplyPromoCode}
+4158:         promoCodeStatus={promoCodeStatus}
+4159:         isApplyingPromo={isApplyingPromo}
+4160:         onBuyPremium={handleBuyPremium}
+4161:       />
+4162:       </>
+4163:     );
+4164:   };
+4165: 
+4166:   if (!productId) {
+4167:     const isCreatorPremium = !!creator?.is_premium;
+4168:     if (!isCreatorPremium && !isOwner) {
+4169:       return (

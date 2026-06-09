@@ -35,6 +35,7 @@ interface ProductDetailViewProps {
   handleSelectProduct: (id: string | null) => void;
   setIsPaymentSheetOpen: (open: boolean) => void;
   setIsPremiumOpen: (open: boolean) => void;
+  hasBoughtInSession: boolean;
 }
 
 const getDaysWord = (days: number, lang: 'ru' | 'en') => {
@@ -66,7 +67,8 @@ export default function ProductDetailView({
   setIsProductReviewsOpen,
   handleSelectProduct,
   setIsPaymentSheetOpen,
-  setIsPremiumOpen
+  setIsPremiumOpen,
+  hasBoughtInSession
 }: ProductDetailViewProps) {
   let slotsText = product.content_url || '';
   let maxQuantity: number | null = null;
@@ -145,36 +147,43 @@ export default function ProductDetailView({
             <div style={{
               background: 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
               color: '#fff',
-              padding: '14px 16px',
-              textAlign: 'center',
-              fontSize: '13px',
+              padding: '8px 16px',
+              fontSize: '12.5px',
               fontWeight: 600,
               display: 'flex',
-              flexDirection: 'column',
+              flexDirection: 'row',
               alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              justifyContent: 'space-between',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              position: 'relative',
+              zIndex: 100
             }}>
-              <div>
-                ⚠️ {lang === 'ru' 
-                  ? `Внимание! Осталось ${daysLeft} ${daysWord} пробного периода.` 
-                  : `Attention! ${daysLeft} ${daysWord} of the trial period left.`}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'left' }}>
+                <span>⚠️</span>
+                <span>
+                  {lang === 'ru'
+                    ? `Осталось ${daysLeft} ${daysWord} пробного периода.`
+                    : `${daysLeft} ${daysWord} of trial period left.`}
+                </span>
               </div>
-              <button 
+              <button
                 onClick={() => setIsPremiumOpen(true)}
                 style={{
                   background: '#fff',
                   color: '#2b8cf3',
                   border: 'none',
                   borderRadius: '20px',
-                  padding: '6px 14px',
+                  padding: '4px 10px',
                   fontWeight: 700,
-                  fontSize: '12px',
+                  fontSize: '11px',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
-                👑 {lang === 'ru' ? 'Продлить Premium' : 'Extend Premium'}
+                👑 {lang === 'ru' ? 'Купить Premium' : 'Buy Premium'}
               </button>
             </div>
           );
@@ -640,7 +649,7 @@ export default function ProductDetailView({
               👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
             </button>
           </div>
-        ) : product.has_bought ? (
+        ) : hasBoughtInSession ? (
           <button 
             disabled
             className="btn-primary"
@@ -730,7 +739,7 @@ export default function ProductDetailView({
             buyerTgId={buyerTgId} 
             lang={lang} 
             t={t} 
-            hasBought={!!product.has_bought} 
+            hasBought={!!product.has_bought || hasBoughtInSession} 
           />
         </div>
       </div>

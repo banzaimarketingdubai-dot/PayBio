@@ -12,6 +12,18 @@ export async function GET(request: Request) {
     const buyerTgIdParam = searchParams.get('buyer_tg_id');
     const buyerUsername = searchParams.get('buyer_username');
     const buyerName = searchParams.get('buyer_name');
+    const referrerTgIdParam = searchParams.get('referrer_tg_id');
+
+    if (buyerTgIdParam && referrerTgIdParam) {
+      const buyerTgId = Number(buyerTgIdParam);
+      if (buyerTgId > 0) {
+        try {
+          await db.attributeReferral(buyerTgId, referrerTgIdParam);
+        } catch (err) {
+          console.error('Failed to attribute referral in store/list API:', err);
+        }
+      }
+    }
 
     if (productId) {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

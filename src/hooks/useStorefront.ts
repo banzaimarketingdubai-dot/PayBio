@@ -75,6 +75,7 @@ export function useStorefront() {
   const [extractedData, setExtractedData] = useState<any>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [hasBoughtInSession, setHasBoughtInSession] = useState(false);
 
   // Buyer shipping form states
   const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
@@ -158,6 +159,7 @@ export function useStorefront() {
     setExtractedData(null);
     setVerifying(false);
     setActiveOrderId(null);
+    setHasBoughtInSession(false);
     if (typeof window !== 'undefined') {
       if (id) {
         localStorage.setItem('paybio_current_product_id', id);
@@ -266,6 +268,21 @@ export function useStorefront() {
         if (isNumeric(refIdStr)) {
           detectedCreatorTgId = Number(refIdStr);
         }
+      } else if (rawPid.includes('_ref_')) {
+        const parts = rawPid.split('_ref_');
+        let prodPart = parts[0];
+        const refPart = parts[1];
+        if (prodPart.startsWith('p_')) {
+          prodPart = prodPart.substring(2);
+        } else if (prodPart.startsWith('prod_')) {
+          prodPart = prodPart.substring(5);
+        }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('paybio_referrer_tg_id', refPart);
+        }
+        if (isUuid(prodPart)) {
+          detectedPid = prodPart;
+        }
       } else if (isNumeric(rawPid)) {
         detectedCreatorTgId = Number(rawPid);
       } else if (isUuid(rawPid)) {
@@ -338,6 +355,24 @@ export function useStorefront() {
             activeCreatorTgId = Number(refIdStr);
           }
           setProductId(null);
+        } else if (startParam.includes('_ref_')) {
+          const parts = startParam.split('_ref_');
+          let prodPart = parts[0];
+          const refPart = parts[1];
+          if (prodPart.startsWith('p_')) {
+            prodPart = prodPart.substring(2);
+          } else if (prodPart.startsWith('prod_')) {
+            prodPart = prodPart.substring(5);
+          }
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('paybio_referrer_tg_id', refPart);
+          }
+          if (isUuid(prodPart)) {
+            setProductId(prodPart);
+            const url = new URL(window.location.href);
+            url.searchParams.set('product_id', prodPart);
+            window.history.replaceState(null, '', url.toString());
+          }
         } else if (isNumeric(startParam)) {
           activeCreatorTgId = Number(startParam);
           setProductId(null);
@@ -469,7 +504,15 @@ export function useStorefront() {
             bUsername = u.username || '';
             bName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
           }
-          const res = await fetch(`/api/store/list?product_id=${productId}&buyer_tg_id=${bTgId}&buyer_username=${encodeURIComponent(bUsername)}&buyer_name=${encodeURIComponent(bName)}`, { signal });
+          let refParam = '';
+          if (typeof window !== 'undefined') {
+            const savedRef = localStorage.getItem('paybio_referrer_tg_id');
+            if (savedRef) {
+              refParam = `&referrer_tg_id=${encodeURIComponent(savedRef)}`;
+            }
+          }
+
+          const res = await fetch(`/api/store/list?product_id=${productId}&buyer_tg_id=${bTgId}&buyer_username=${encodeURIComponent(bUsername)}&buyer_name=${encodeURIComponent(bName)}${refParam}`, { signal });
           const data = await res.json();
           if (signal.aborted) return;
           if (data.success && data.product) {
@@ -487,7 +530,15 @@ export function useStorefront() {
           const urlParams = new URLSearchParams(window.location.search);
           const cTgId = urlParams.get('creator_tg_id') || String(creatorTgId);
 
-          const res = await fetch(`/api/store/list?creator_tg_id=${cTgId}`, { signal });
+          let refParam = '';
+          if (typeof window !== 'undefined') {
+            const savedRef = localStorage.getItem('paybio_referrer_tg_id');
+            if (savedRef) {
+              refParam = `&referrer_tg_id=${encodeURIComponent(savedRef)}`;
+            }
+          }
+
+          const res = await fetch(`/api/store/list?creator_tg_id=${cTgId}&buyer_tg_id=${buyerTgId}${refParam}`, { signal });
           const data = await res.json();
           if (signal.aborted) return;
           if (data.success) {
@@ -662,20 +713,23 @@ export function useStorefront() {
       const data = await res.json();
       if (res.ok && data.success) {
         const isDeactivated = !!data.deactivated;
-        setPromoCodeStatus({
-          type: 'success',
-          message: isDeactivated
-            ? (lang === 'ru' ? '✓ Премиум-подписка деактивирована.' : '✓ Premium subscription deactivated.')
+        const isLifetime = data.duration_days === -1;
+        const successMsg = isDeactivated
+          ? (lang === 'ru' ? '✓ Премиум-подписка деактивирована.' : '✓ Premium subscription deactivated.')
+          : isLifetime
+            ? (lang === 'ru' ? '♾️ Пожизненный Premium активирован! Добро пожаловать навсегда.' : '♾️ Lifetime Premium activated! Welcome forever.')
             : (lang === 'ru'
                 ? `✓ Промокод применен! Активировано ${data.duration_days} дней Premium.`
-                : `✓ Promo code applied! Activated ${data.duration_days} days of Premium.`),
-        });
+                : `✓ Promo code applied! Activated ${data.duration_days} days of Premium.`);
+        setPromoCodeStatus({ type: 'success', message: successMsg });
         showAlert(
           isDeactivated
             ? (lang === 'ru' ? '🎉 Премиум-подписка отключена.' : '🎉 Premium subscription deactivated.')
-            : (lang === 'ru'
-                ? `🎉 Промокод применен! Активировано ${data.duration_days} дней Premium.`
-                : `🎉 Promo code applied! Activated ${data.duration_days} days of Premium.`)
+            : isLifetime
+              ? (lang === 'ru' ? '♾️ Пожизненный Premium активирован!' : '♾️ Lifetime Premium activated!')
+              : (lang === 'ru'
+                  ? `🎉 Промокод применен! Активировано ${data.duration_days} дней Premium.`
+                  : `🎉 Promo code applied! Activated ${data.duration_days} days of Premium.`)
         );
         setPromoCodeInput('');
         await refreshCreatorData();
@@ -984,6 +1038,7 @@ export function useStorefront() {
       WebApp.openInvoice(data.invoice_link, (status: string) => {
         setIsProcessingPayment(false);
         if (status === 'paid') {
+          setHasBoughtInSession(true);
           if (product.sub_type === 'PHYSICAL') {
             setPaidOrderId(orderId);
             setShowDeliveryForm(true);
@@ -1007,7 +1062,7 @@ export function useStorefront() {
       ? `https://t.me/${creatorUsername}`
       : `tg://user?id=${product.creator?.telegram_id}`;
     
-    const productLink = `https://t.me/PaybioBot/app?startapp=${product.id}`;
+    const productLink = `https://t.me/PaybioBot/app?startapp=p_${product.id}_ref_${product.creator?.telegram_id || ''}`;
     const text = lang === 'ru'
       ? `Привет! Я хочу купить твой товар: "${product.title}"\nСсылка на товар: ${productLink}`
       : `Hi! I want to buy your product: "${product.title}"\nProduct link: ${productLink}`;
@@ -1125,6 +1180,7 @@ export function useStorefront() {
       const result = await res.json();
       if (res.ok && result.success) {
         setVerifySuccess(true);
+        setHasBoughtInSession(true);
         if (product.sub_type === 'PHYSICAL') {
           setPaidOrderId(currentOrderId);
           setShowDeliveryForm(true);
@@ -1261,6 +1317,7 @@ export function useStorefront() {
     verifyError,
     setVerifyError,
     activeOrderId,
+    hasBoughtInSession,
     isProcessingPayment,
     showDeliveryForm,
     setShowDeliveryForm,

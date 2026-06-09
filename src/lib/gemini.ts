@@ -217,3 +217,94 @@ export async function generateChannelDescription(topics: string): Promise<string
   }
 }
 
+/**
+ * Generates a Layout-First prompt for an image generator (like Reve 2.0 / Runware FLUX)
+ * based on product title, description/prompt, and price.
+ */
+export async function generateLayoutFirstPrompt(
+  title: string,
+  description: string,
+  price: string
+): Promise<string> {
+  const analysisPrompt = `
+    Ты — AI-дизайнер системы Paybio. Твоя задача: на основе данных о товаре (Название, Описание, Цена) составить структуру запроса для API Reve 2.0.
+
+    ПРАВИЛА ГЕНЕРАЦИИ:
+    1. Текстовая иерархия: Название товара всегда в центре/верхней части (крупный шрифт, высокий контраст). Цена — в нижней части, выделена отдельным блоком.
+    2. Контраст: Если фон светлый, текст — черный/темно-серый. Если фон темный, текст — белый.
+    3. Читаемость: Использовать только "clean sans-serif typography". Никаких рукописных шрифтов.
+    4. Структура промпта: [Описание стиля + Описание объекта] | [Инструкции по тексту: Текст, Позиция, Шрифт, Цвет].
+
+    Product details:
+    - Title: "${title.replace(/"/g, '\\"')}"
+    - Description: "${description.replace(/"/g, '\\"')}"
+    - Price: "${price.replace(/"/g, '\\"')}"
+    
+    1. Identify the Niche (e.g., "Psychology", "Finance", "Crypto", "Fitness", "Education", "Art", "Tech", "General").
+    2. Choose a style preset for the background and text contrast (e.g., "soft pastel tones, deep focus, warm ambient light" for Psychology, "dark mode sleek neon accents, ultra modern, tech" for Crypto, "aggressive contrast, high energy, bold shadows" for Fitness, etc.).
+    3. Determine the best high-contrast text color based on the chosen background style (e.g. "White" or "Black").
+    
+    Return ONLY a JSON object containing these keys:
+    {
+      "niche": "string",
+      "stylePreset": "string",
+      "textColor": "string"
+    }
+    
+    Do not include markdown code block formatting.
+  `;
+
+  const contents = [
+    {
+      parts: [
+        { text: analysisPrompt }
+      ]
+    }
+  ];
+
+  try {
+    const resultText = await callGemini(contents, true);
+    const cleanedText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+    const parsed = JSON.parse(cleanedText);
+    
+    const niche = parsed.niche || 'General';
+    const stylePreset = parsed.stylePreset || 'Minimalist, clean, studio lighting';
+    const textColor = parsed.textColor || 'High-Contrast';
+    
+    // Package into layout-first prompt contract
+    return `A professional, high-end commercial product banner for Telegram. 
+Subject: ${description || title} (Niche: ${niche}). 
+Style: ${stylePreset}, minimalist, clean, high-contrast, studio lighting. 
+Background: Soft-focus, relevant to the product niche to ensure text readability.
+
+TEXT_OVERLAY_INSTRUCTIONS:
+- Headline: '${title}' (Position: Center, Font: Bold Sans-Serif, Color: ${textColor})
+- Subline: 'Price: ${price}' (Position: Bottom-Right, Font: Medium Sans-Serif, Color: ${textColor === 'White' ? 'White with subtle shadow' : 'Dark Gray'} for readability)
+
+CONSTRAINTS:
+- No text blurring.
+- Sharp edges for typography.
+- Maximum readability score.
+- Aspect ratio: 16:9.`;
+
+  } catch (error) {
+    console.error('Error generating Layout-First prompt:', error);
+    // Fallback prompt layout
+    return `A professional, high-end commercial product banner for Telegram. 
+Subject: ${description || title}. 
+Style: Minimalist, clean, high-contrast, studio lighting. 
+Background: Soft-focus, relevant to the product niche to ensure text readability.
+
+TEXT_OVERLAY_INSTRUCTIONS:
+- Headline: '${title}' (Position: Center, Font: Bold Sans-Serif, Color: High-Contrast)
+- Subline: 'Price: ${price}' (Position: Bottom-Right, Font: Medium Sans-Serif, Color: White with subtle shadow for readability)
+
+CONSTRAINTS:
+- No text blurring.
+- Sharp edges for typography.
+- Maximum readability score.
+- Aspect ratio: 16:9.`;
+  }
+}
+
+

@@ -175,6 +175,15 @@ function readMockDb(): DatabaseSchema {
             used_count: 0,
             is_active: true,
             created_at: new Date().toISOString()
+          },
+          {
+            id: 'mock-promo-lifetime',
+            code: 'PAYBIO_LIFETIME_2025',
+            duration_days: -1,
+            max_uses: 1,
+            used_count: 0,
+            is_active: true,
+            created_at: new Date().toISOString()
           }
         ];
         try {
@@ -200,6 +209,15 @@ function readMockDb(): DatabaseSchema {
         code: 'PAYBIO_FREE_30',
         duration_days: 30,
         max_uses: 1000,
+        used_count: 0,
+        is_active: true,
+        created_at: new Date().toISOString()
+      },
+      {
+        id: 'mock-promo-lifetime',
+        code: 'PAYBIO_LIFETIME_2025',
+        duration_days: -1,
+        max_uses: 1,
         used_count: 0,
         is_active: true,
         created_at: new Date().toISOString()
@@ -365,6 +383,11 @@ export const db = {
     const user = await this.getUserById(userId);
     if (!user) return null;
 
+    // -1 = lifetime premium (no expiry date)
+    if (durationDays === -1) {
+      return await this.updateUserPremium(userId, true, null);
+    }
+
     let currentPremiumUntil = user.premium_until ? new Date(user.premium_until) : new Date();
     // If user is not currently premium or has expired premium, start from now
     if (!user.is_premium || currentPremiumUntil.getTime() < Date.now()) {
@@ -434,6 +457,15 @@ export const db = {
             code: 'PAYBIO_FREE_30',
             duration_days: 30,
             max_uses: 1000,
+            used_count: 0,
+            is_active: true,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'mock-promo-lifetime',
+            code: 'PAYBIO_LIFETIME_2025',
+            duration_days: -1,
+            max_uses: 1,
             used_count: 0,
             is_active: true,
             created_at: new Date().toISOString()

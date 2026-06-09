@@ -94,9 +94,7 @@ export default function PartnerDashboard({
         const data = await res.json();
         if (data.success) {
           setStats(data);
-          if (data.available_balance >= 50) {
-            setWithdrawAmount(Number(data.available_balance.toFixed(2)));
-          }
+          setWithdrawAmount(Number(data.available_balance.toFixed(2)));
         }
       } catch (err) {
         console.error('Failed to load partner stats:', err);
@@ -174,24 +172,6 @@ export default function PartnerDashboard({
     }
   };
 
-  if (loading) {
-    return (
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        minHeight: '80vh', gap: '20px', color: 'var(--tg-text)'
-      }}>
-        <div style={{
-          width: '36px', height: '36px',
-          border: '3.5px solid rgba(255,255,255,0.08)',
-          borderTopColor: 'var(--tg-accent, #2b8cf3)',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
-        }} />
-        <p style={{ fontSize: '14px', fontWeight: 600, opacity: 0.7, letterSpacing: '0.2px' }}>{dt.loading}</p>
-      </div>
-    );
-  }
-
   const isTier2 = stats?.partner_tier === 2;
   const activeCount = stats?.active_referrals_count || 0;
   const progressPercent = Math.min(100, (activeCount / 50) * 100);
@@ -241,10 +221,26 @@ export default function PartnerDashboard({
         </button>
       </div>
 
-      {/* TIER LEVEL AND PROGRESS */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
+      {loading ? (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          flexGrow: 1, gap: '20px', color: 'var(--tg-text)', minHeight: '50vh'
+        }}>
+          <div style={{
+            width: '36px', height: '36px',
+            border: '3.5px solid rgba(255,255,255,0.08)',
+            borderTopColor: 'var(--tg-accent, #2b8cf3)',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <p style={{ fontSize: '14px', fontWeight: 600, opacity: 0.7, letterSpacing: '0.2px' }}>{dt.loading}</p>
+        </div>
+      ) : (
+        <>
+          {/* TIER LEVEL AND PROGRESS */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
         borderRadius: '20px',
         padding: '20px',
         display: 'flex',
@@ -500,32 +496,23 @@ export default function PartnerDashboard({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <label style={{ fontSize: '14px', fontWeight: 700 }}>{dt.amountLabel}</label>
-            <span style={{ fontSize: '18px', fontWeight: 900, color: '#2b8cf3' }}>${withdrawAmount.toFixed(0)}</span>
+            <span style={{ fontSize: '18px', fontWeight: 900, color: '#2b8cf3' }}>${withdrawAmount.toFixed(2)}</span>
           </div>
           
-          {/* Slider input */}
+          {/* Progress bar towards $50 threshold */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <input 
-              type="range"
-              min={50}
-              max={stats ? Math.max(50, Math.ceil(stats.available_balance)) : 100}
-              step={1}
-              disabled={!stats || stats.available_balance < 50}
-              value={withdrawAmount}
-              onChange={(e) => setWithdrawAmount(Number(e.target.value))}
-              style={{
-                width: '100%',
-                height: '6px',
-                background: 'rgba(255,255,255,0.08)',
-                borderRadius: '3px',
-                outline: 'none',
-                cursor: 'pointer',
-                accentColor: '#2b8cf3'
-              }}
-            />
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 500 }}>
-              <span>$50 Min</span>
-              <span>Max: ${stats ? stats.available_balance.toFixed(2) : '$0'}</span>
+            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{
+                width: `${Math.min(100, ((stats?.available_balance || 0) / 50) * 100)}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #2b8cf3 0%, #38ef7d 100%)',
+                borderRadius: '4px',
+                transition: 'width 0.4s ease'
+              }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 700 }}>
+              <span>0</span>
+              <span>50</span>
             </div>
           </div>
         </div>
@@ -605,6 +592,8 @@ export default function PartnerDashboard({
           <span>{dt.withdrawBtn}</span>
         </button>
       </form>
+        </>
+      )}
     </div>
   );
 }

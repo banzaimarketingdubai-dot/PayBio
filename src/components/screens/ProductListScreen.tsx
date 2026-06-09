@@ -32,6 +32,12 @@ const getDaysWord = (days: number, lang: 'ru' | 'en') => {
   return 'дней';
 };
 
+const getProductSection = (sections: Record<string, string>, id: string): string | undefined => {
+  if (!id) return undefined;
+  const match = Object.entries(sections).find(([k]) => k === id);
+  return match ? match[1] : undefined;
+};
+
 interface ProductListScreenProps {
   products: Product[];
   onSelect: (id: string) => void;
@@ -53,7 +59,7 @@ interface ProductListScreenProps {
   isOwner: boolean;
   onDeleteProduct: (id: string) => Promise<boolean>;
   onUpdateProduct: (id: string, title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<boolean>;
-  
+
   currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER';
   setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER') => void;
   starredIds: string[];
@@ -95,7 +101,7 @@ export const ProductListScreen = memo(function ProductListScreen({
   isOwner,
   onDeleteProduct,
   onUpdateProduct,
-  
+
   currentScreen,
   setCurrentScreen,
   starredIds,
@@ -134,11 +140,11 @@ export const ProductListScreen = memo(function ProductListScreen({
     setProdTitle(p.title);
     setProdDesc(p.description || '');
     setProdPriceUSD(String(p.price_fiat));
-    setProdPriceStars(p.price_stars ? String(p.price_stars) : '');
+    setProdPriceStars(p.price_stars ? String(p.price_stars) : String(Math.round(p.price_fiat * 50)));
     setProdCoverUrl(p.cover_url || '');
     setProdType(p.product_type || 'DIGITAL');
     setProdSubType(p.sub_type || '');
-    setSelectedProductSection(productSections[p.id] || p.product_type || 'DIGITAL');
+    setSelectedProductSection(getProductSection(productSections, p.id) || p.product_type || 'DIGITAL');
 
     let urlVal = p.content_url || '';
     let icsVal = '';
@@ -216,27 +222,31 @@ export const ProductListScreen = memo(function ProductListScreen({
 
   // 2. Grouped products by section
   const groupedProducts = useMemo(() => {
-    const groups: Record<string, Product[]> = {};
-    
+    const groups = new Map<string, Product[]>();
+
     // Initialize default groups
-    groups['DIGITAL'] = [];
-    groups['VOUCHER'] = [];
-    groups['BOOKING'] = [];
-    
+    groups.set('DIGITAL', []);
+    groups.set('VOUCHER', []);
+    groups.set('BOOKING', []);
+
     // Initialize custom groups
     sectionsList.forEach(sec => {
-      groups[sec] = [];
+      if (sec !== '__proto__' && sec !== 'constructor' && sec !== 'prototype') {
+        groups.set(sec, []);
+      }
     });
-    
+
     // Group products
     products.forEach(p => {
-      const sec = productSections[p.id] || p.product_type || 'DIGITAL';
-      if (!groups[sec]) {
-        groups[sec] = [];
+      const sec = getProductSection(productSections, p.id) || p.product_type || 'DIGITAL';
+      let secGroup = groups.get(sec);
+      if (!secGroup) {
+        secGroup = [];
+        groups.set(sec, secGroup);
       }
-      groups[sec].push(p);
+      secGroup.push(p);
     });
-    
+
     return groups;
   }, [products, sectionsList, productSections]);
 
@@ -244,14 +254,13 @@ export const ProductListScreen = memo(function ProductListScreen({
   const handleMoveSection = async (idx: number, direction: 'up' | 'down') => {
     const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= sectionOrder.length) return;
-    
+
     const newOrder = [...sectionOrder];
-    const temp = newOrder[idx];
-    newOrder[idx] = newOrder[targetIdx];
-    newOrder[targetIdx] = temp;
-    
+    const [item] = newOrder.splice(idx, 1);
+    newOrder.splice(targetIdx, 0, item);
+
     setSectionOrder(newOrder);
-    
+
     if (creator) {
       const pc = creator.profile_customization || {};
       const updatedCustom = {
@@ -274,13 +283,13 @@ export const ProductListScreen = memo(function ProductListScreen({
       showAlert(lang === 'ru' ? 'Раздел с таким именем уже существует!' : 'Section with this name already exists!');
       return;
     }
-    
+
     const newList = [...sectionsList, cleaned];
     const newOrder = [...sectionOrder, cleaned];
-    
+
     setSectionsList(newList);
     setSectionOrder(newOrder);
-    
+
     if (creator) {
       const pc = creator.profile_customization || {};
       const updatedCustom = {
@@ -302,9 +311,9 @@ export const ProductListScreen = memo(function ProductListScreen({
     const newStarred = starredIds.includes(productId)
       ? starredIds.filter(id => id !== productId)
       : [...starredIds, productId];
-      
+
     setStarredIds(newStarred);
-    
+
     if (creator) {
       const pc = creator.profile_customization || {};
       const updatedCustom = {
@@ -322,11 +331,11 @@ export const ProductListScreen = memo(function ProductListScreen({
   const dragThrottleRef = useRef(0);
   // 6. Section Drag & Drop Reordering
   const [draggedSection, setDraggedSection] = useState<string | null>(null);
-  
+
   const handleDragStart = (section: string) => {
     setDraggedSection(section);
   };
-  
+
   const handleDragOver = (e: React.DragEvent, targetSection: string) => {
     e.preventDefault();
     const now = Date.now();
@@ -360,11 +369,11 @@ export const ProductListScreen = memo(function ProductListScreen({
   // 7. Store Share handler
   const handleShareStore = () => {
     if (!creator) return;
-    const storeLink = `https://t.me/PaybioBot/app?startapp=${creator.telegram_id}`;
+    const storeLink = `https://t.me/PaybioBot/app?startapp=ref_${creator.telegram_id}`;
     const shareText = lang === 'ru'
       ? `Посмотри классные цифровые товары, билеты и услуги в магазине @${creator.username || 'автора'} на PayBio!`
       : `Check out digital products, tickets, and services in @${creator.username || 'creator'}'s storefront on PayBio!`;
-      
+
     if (typeof window !== 'undefined') {
       const WebApp = (window as any).Telegram?.WebApp;
       if (WebApp?.openTelegramLink) {
@@ -372,7 +381,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         return;
       }
     }
-    
+
     navigator.clipboard.writeText(storeLink).then(() => {
       showAlert(lang === 'ru' ? '✓ Ссылка на магазин скопирована в буфер обмена!' : '✓ Storefront link copied to clipboard!');
     });
@@ -385,7 +394,7 @@ export const ProductListScreen = memo(function ProductListScreen({
     const shareText = lang === 'ru'
       ? '🚀 Создай свой ИИ-магазин цифровых товаров за 1 минуту в Telegram с помощью PayBio!'
       : '🚀 Build your AI-powered Telegram storefront for digital products in 1 minute with PayBio!';
-      
+
     try {
       const WebApp = await getTWA();
       const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(affiliateLink)}&text=${encodeURIComponent(shareText)}`;
@@ -426,7 +435,7 @@ export const ProductListScreen = memo(function ProductListScreen({
   const promoContainerRef = useRef<HTMLDivElement>(null);
 
   const handleConfirmDelete = (productId: string, productTitle: string) => {
-    const confirmMsg = lang === 'ru' 
+    const confirmMsg = lang === 'ru'
       ? `Вы уверены, что хотите удалить товар "${productTitle}"?`
       : `Are you sure you want to delete product "${productTitle}"?`;
 
@@ -441,7 +450,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         return;
       }
     }
-    
+
     if (window.confirm(confirmMsg)) {
       executeDelete(productId);
     }
@@ -465,13 +474,13 @@ export const ProductListScreen = memo(function ProductListScreen({
     setIsPromoOpen(true);
     setIsGeneratingPromo(true);
     setPromoText('');
-    
+
     if (p.cover_url) {
       setPromoBgUrl(p.cover_url);
     } else {
       setPromoBgUrl('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80');
     }
-    
+
     try {
       const res = await fetch(`/api/promo/generate?product_id=${p.id}`);
       const data = await res.json();
@@ -644,7 +653,12 @@ export const ProductListScreen = memo(function ProductListScreen({
       const res = await fetch('/api/store/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiPrompt })
+        body: JSON.stringify({ 
+          prompt: aiPrompt,
+          title: prodTitle,
+          description: prodDesc || aiPrompt,
+          price: prodPriceUSD
+        })
       });
       const data = await res.json();
       if (res.ok && data.success && data.image_url) {
@@ -660,7 +674,8 @@ export const ProductListScreen = memo(function ProductListScreen({
     }
   };
 
-  const t = TRANSLATIONS[lang];
+
+  const t = lang === 'ru' ? TRANSLATIONS.ru : TRANSLATIONS.en;
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -699,11 +714,11 @@ export const ProductListScreen = memo(function ProductListScreen({
         );
       } else {
         success = await onAddProduct(
-          prodTitle, 
-          prodDesc, 
-          priceUSD, 
-          priceStars, 
-          finalContentUrl || undefined, 
+          prodTitle,
+          prodDesc,
+          priceUSD,
+          priceStars,
+          finalContentUrl || undefined,
           prodCoverUrl || undefined,
           prodType,
           selectedProductSection,
@@ -778,7 +793,7 @@ export const ProductListScreen = memo(function ProductListScreen({
 
   return (
     <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px))' }} className="animate-fade-in">
-      
+
       {isOwner && !isCreatorPremium && (
         <div style={{
           background: 'linear-gradient(135deg, #FF9966 0%, #FF5E62 100%)',
@@ -794,11 +809,11 @@ export const ProductListScreen = memo(function ProductListScreen({
           boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
         }}>
           <div>
-            ⚠️ {lang === 'ru' 
-              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
+            ⚠️ {lang === 'ru'
+              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.'
               : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
           </div>
-          <button 
+          <button
             onClick={onOpenPremium}
             style={{
               background: '#fff',
@@ -825,36 +840,43 @@ export const ProductListScreen = memo(function ProductListScreen({
             <div style={{
               background: 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
               color: '#fff',
-              padding: '14px 16px',
-              textAlign: 'center',
-              fontSize: '13px',
+              padding: '8px 16px',
+              fontSize: '12.5px',
               fontWeight: 600,
               display: 'flex',
-              flexDirection: 'column',
+              flexDirection: 'row',
               alignItems: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+              justifyContent: 'space-between',
+              gap: '12px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              position: 'relative',
+              zIndex: 100
             }}>
-              <div>
-                ⚠️ {lang === 'ru' 
-                  ? `Внимание! Осталось ${daysLeft} ${daysWord} пробного периода.` 
-                  : `Attention! ${daysLeft} ${daysWord} of the trial period left.`}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'left' }}>
+                <span>⚠️</span>
+                <span>
+                  {lang === 'ru'
+                    ? `Осталось ${daysLeft} ${daysWord} пробного периода.`
+                    : `${daysLeft} ${daysWord} of trial period left.`}
+                </span>
               </div>
-              <button 
+              <button
                 onClick={onOpenPremium}
                 style={{
                   background: '#fff',
                   color: '#2b8cf3',
                   border: 'none',
                   borderRadius: '20px',
-                  padding: '6px 14px',
+                  padding: '4px 10px',
                   fontWeight: 700,
-                  fontSize: '12px',
+                  fontSize: '11px',
                   cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
-                👑 {lang === 'ru' ? 'Продлить Premium' : 'Extend Premium'}
+                👑 {lang === 'ru' ? 'Купить Premium' : 'Buy Premium'}
               </button>
             </div>
           );
@@ -863,8 +885,8 @@ export const ProductListScreen = memo(function ProductListScreen({
       })()}
 
       {/* ─── BANNER ─── */}
-      <div 
-        className="store-banner animate-fade-in" 
+      <div
+        className="store-banner animate-fade-in"
         style={{ height: '100px', ...(storeBanner ? { backgroundImage: `url("${storeBanner}")` } : {}) }}
       >
         <div className="store-banner-glow" />
@@ -876,48 +898,42 @@ export const ProductListScreen = memo(function ProductListScreen({
         )}
       </div>
 
-      {/* ─── PROFILE HEADER CARD (Horizontal Space-Saving Layout) ─── */}
-      <div style={{ display: 'flex', padding: '0 20px', gap: '16px', alignItems: 'flex-start', marginTop: '-36px', zIndex: 10, position: 'relative' }}>
-        <div className="store-avatar-wrapper tour-avatar" style={{ margin: 0, flexShrink: 0, width: '76px', height: '76px', border: '4px solid var(--tg-bg)' }}>
-          {storeAvatar ? (
-            <img src={storeAvatar} alt="Store Avatar" className="store-avatar-img" />
-          ) : (
-            <div className="store-avatar-fallback" style={{ fontSize: '26px' }}>
-              {storeName.slice(0, 1).toUpperCase()}
-            </div>
-          )}
-          {isOwner && (
-            <label className="store-upload-trigger" style={{ width: '24px', height: '24px', fontSize: '11px', bottom: '-2px', right: '-2px' }}>
-              📷
-              <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
-            </label>
-          )}
-        </div>
-
-        <div style={{ flex: 1, paddingTop: '10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--tg-text)', letterSpacing: '-0.5px', margin: 0, lineHeight: 1.2 }}>
-              {storeName}
-            </h1>
-            {isCreatorPremium && (
-              <span className="chip" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontSize: '9px', padding: '1px 6px', height: '18px', display: 'inline-flex', alignItems: 'center' }}>
-                {t.premiumCreator}
-              </span>
-            )}
+      {/* ─── PROFILE HEADER CARD ─── */}
+      <div className="store-avatar-wrapper tour-avatar">
+        {storeAvatar ? (
+          <img src={storeAvatar} alt="Store Avatar" className="store-avatar-img" />
+        ) : (
+          <div className="store-avatar-fallback">
+            {storeName.slice(0, 1).toUpperCase()}
           </div>
-          {creator?.username && (
-            <p style={{ fontSize: '13px', color: 'var(--tg-accent)', fontWeight: 600, marginTop: '2px' }}>
-              @{creator.username}
-            </p>
+        )}
+        {isOwner && (
+          <label className="store-upload-trigger">
+            📷
+            <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
+          </label>
+        )}
+      </div>
+
+      {/* ─── SHOP INFORMATION ─── */}
+      <div style={{ padding: '0 20px', marginTop: '-6px', zIndex: 10, position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--tg-text)', letterSpacing: '-0.5px', margin: 0, lineHeight: 1.2 }}>
+            {storeName}
+          </h1>
+          {isCreatorPremium && (
+            <span className="chip" style={{ background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', color: '#000', fontSize: '9px', padding: '1px 6px', height: '18px', display: 'inline-flex', alignItems: 'center' }}>
+              {t.premiumCreator}
+            </span>
           )}
         </div>
       </div>
 
       {/* ─── QUICK ACTIONS BAR ─── */}
-      <div className="tour-lang-row" style={{ padding: '0 20px', marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="tour-lang-row" style={{ padding: '0 20px', marginTop: '10px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
         {isOwner && (
           <>
-            <button 
+            <button
               onClick={() => setCurrentScreen('PARTNER')}
               className="tour-partner-btn"
               style={{
@@ -929,7 +945,7 @@ export const ProductListScreen = memo(function ProductListScreen({
             >
               🤝 {lang === 'ru' ? 'Кабинет' : 'Partner'}
             </button>
-            <button 
+            <button
               onClick={() => setCurrentScreen('SETTINGS')}
               style={{
                 background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
@@ -940,22 +956,22 @@ export const ProductListScreen = memo(function ProductListScreen({
             >
               ⚙️ {lang === 'ru' ? 'Настройки' : 'Settings'}
             </button>
-            <button 
+            <button
               onClick={handleScanTicket}
               style={{
                 background: 'rgba(77,202,90,0.12)', border: '1px solid rgba(77,202,90,0.2)', borderRadius: '12px',
                 height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
                 cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#4dca5a'
               }}
-              title={lang === 'ru' ? 'Сканировать билет' : 'Scan Ticket'}
+              title={lang === 'ru' ? 'Скан билета' : 'Scan Ticket'}
             >
-              📷 {lang === 'ru' ? 'Сканировать' : 'Scan'}
+              📷 {lang === 'ru' ? 'Скан' : 'Scan'}
             </button>
           </>
         )}
-        
+
         {/* Language Switcher */}
-        <button 
+        <button
           onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
           style={{
             background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
@@ -964,11 +980,11 @@ export const ProductListScreen = memo(function ProductListScreen({
           }}
           title="Change Language / Сменить язык"
         >
-          🌐 {lang === 'en' ? 'English' : 'Русский'}
+          🌐 {lang === 'en' ? 'EN' : 'RU'}
         </button>
 
         {isOwner && !isCreatorPremium && (
-          <button 
+          <button
             onClick={onOpenPremium}
             style={{
               background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)', border: 'none', borderRadius: '12px',
@@ -981,40 +997,23 @@ export const ProductListScreen = memo(function ProductListScreen({
         )}
       </div>
 
+      {/* ─── NICKNAME / HANDLE ─── */}
+      {creator?.username && (
+        <div style={{ padding: '0 20px', marginTop: '6px' }}>
+          <p style={{ fontSize: '13.5px', color: 'var(--tg-accent)', fontWeight: 600, margin: 0 }}>
+            @{creator.username}
+          </p>
+        </div>
+      )}
+
       {/* ─── SHOP DESCRIPTION ─── */}
-      <div style={{ padding: '0 20px', marginTop: '12px', marginBottom: '20px' }}>
+      <div style={{ padding: '0 20px', marginTop: '8px', marginBottom: '20px' }}>
         <p style={{ fontSize: '13.5px', color: 'var(--tg-hint)', lineHeight: 1.5, margin: 0 }}>
           {storeDescription}
         </p>
       </div>
 
-      {/* ─── FEATURED GALLERY (CENTER ACCENT PIECE) ─── */}
-      {promotedProducts.length > 0 && (
-        <div style={{ padding: '0 16px', marginBottom: '24px' }}>
-          <p className="section-header" style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#ffd700' }}>
-            <span>⭐</span> {lang === 'ru' ? 'ИЗБРАННОЕ' : 'FEATURED'}
-          </p>
-          <div className="featured-gallery">
-            {promotedProducts.map((p, idx) => (
-              <ProductCard
-                key={p.id}
-                product={p}
-                idx={idx}
-                isOwner={isOwner}
-                starredIds={starredIds}
-                lang={lang}
-                t={t}
-                onSelect={onSelect}
-                onToggleStar={handleToggleStar}
-                onGeneratePromo={handleGeneratePromo}
-                onOpenEditProduct={handleOpenEditProduct}
-                onConfirmDelete={handleConfirmDelete}
-                variant="featured"
-              />
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* ─── LOWER UTILITY SECTION (SOCIALS, STATS) ─── */}
       <div style={{ padding: '0 20px', marginBottom: '24px' }}>
@@ -1072,9 +1071,9 @@ export const ProductListScreen = memo(function ProductListScreen({
                   <MaxIcon />
                 </a>
               )}
-              
+
               {isOwner && !hasSocials && (
-                <button 
+                <button
                   onClick={() => setCurrentScreen('SETTINGS')}
                   style={{
                     background: 'none', border: 'none', color: 'var(--tg-hint)',
@@ -1089,7 +1088,7 @@ export const ProductListScreen = memo(function ProductListScreen({
           )}
 
           {/* Stats Row */}
-          <div style={{ 
+          <div style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px',
             padding: '10px', background: 'var(--tg-secondary-bg)',
             borderRadius: 'var(--radius-md)', border: '1px solid var(--tg-border)',
@@ -1099,7 +1098,7 @@ export const ProductListScreen = memo(function ProductListScreen({
               <p style={{ fontSize: '10px', color: 'var(--tg-hint)', textTransform: 'uppercase', fontWeight: 600 }}>{t.products}</p>
               <p style={{ fontSize: '14px', fontWeight: 800, color: 'var(--tg-text)', marginTop: '2px' }}>{products.length}</p>
             </div>
-            <div 
+            <div
               onClick={() => setIsReviewsOpen(true)}
               style={{ borderLeft: '1px solid var(--tg-border)', borderRight: '1px solid var(--tg-border)', cursor: 'pointer' }}
             >
@@ -1187,7 +1186,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         )}
 
         <p className="section-header" style={{ marginBottom: '14px' }}>{t.storeCatalog}</p>
-        
+
         {/* Promoted / Starred horizontal gallery */}
         {promotedProducts.length > 0 && (
           <div style={{ marginBottom: '28px' }}>
@@ -1219,24 +1218,24 @@ export const ProductListScreen = memo(function ProductListScreen({
         {/* Catalog Categories */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
           {sectionOrder.map((sectionName, secIdx) => {
-            const secProducts = groupedProducts[sectionName] || [];
+            const secProducts = groupedProducts.get(sectionName) || [];
             if (secProducts.length === 0 && !isOwner) return null;
 
             return (
-              <div 
+              <div
                 key={sectionName}
                 draggable={isOwner}
                 onDragStart={() => handleDragStart(sectionName)}
                 onDragOver={(e) => handleDragOver(e, sectionName)}
                 onDragEnd={handleDragEnd}
-                style={{ 
+                style={{
                   border: draggedSection === sectionName ? '2px dashed var(--tg-accent)' : 'none',
                   background: draggedSection === sectionName ? 'rgba(82,158,255,0.05)' : 'transparent',
                   borderRadius: '8px',
                   padding: draggedSection === sectionName ? '8px' : '0'
                 }}
               >
-                <div 
+                <div
                   className={secIdx === 0 ? "tour-section-header" : ""}
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}
                 >
@@ -1248,9 +1247,9 @@ export const ProductListScreen = memo(function ProductListScreen({
                     )}
                     <h3 style={{ fontSize: '16px', fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>
                       {sectionName === 'DIGITAL' ? (lang === 'ru' ? 'Файлы' : 'Files') :
-                       sectionName === 'VOUCHER' ? (lang === 'ru' ? 'Билеты' : 'Tickets') :
-                       sectionName === 'BOOKING' ? (lang === 'ru' ? 'Записи' : 'Bookings') :
-                       sectionName}
+                        sectionName === 'VOUCHER' ? (lang === 'ru' ? 'Билеты' : 'Tickets') :
+                          sectionName === 'BOOKING' ? (lang === 'ru' ? 'Записи' : 'Bookings') :
+                            sectionName}
                     </h3>
                     <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>({secProducts.length})</span>
                   </div>
@@ -1356,7 +1355,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         {isOwner && (
           <div style={{ padding: '0', marginTop: '30px', borderTop: '1px solid var(--tg-border)', paddingTop: '20px' }}>
             <div className="tg-card" style={{ padding: '12px 16px', border: '1px solid rgba(82,158,255,0.2)', background: 'rgba(82,158,255,0.02)', borderRadius: '12px' }}>
-              <div 
+              <div
                 onClick={() => setIsBioLinkExpanded(!isBioLinkExpanded)}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
               >
@@ -1365,28 +1364,28 @@ export const ProductListScreen = memo(function ProductListScreen({
                 </span>
                 <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{isBioLinkExpanded ? '▲' : '▼'}</span>
               </div>
-              
+
               {isBioLinkExpanded && (
                 <div style={{ marginTop: '12px' }} className="animate-fade-in">
                   <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
-                    {lang === 'ru' 
-                      ? 'Скопируйте ссылку на магазин и рекомендуемый текст описания ниже, затем вставьте их в поле «О себе» (Bio) в настройках вашего профиля Telegram.' 
+                    {lang === 'ru'
+                      ? 'Скопируйте ссылку на магазин и рекомендуемый текст описания ниже, затем вставьте их в поле «О себе» (Bio) в настройках вашего профиля Telegram.'
                       : 'Copy the storefront link and suggested bio description text below, then paste them into your Telegram "About" (Bio) profile settings.'}
                   </p>
-                  
+
                   {/* Storefront Link */}
                   <p style={{ margin: '8px 0 4px 0', fontSize: '11.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
                     🌐 {lang === 'ru' ? 'Ссылка на ваш магазин:' : 'Your storefront link:'}
                   </p>
                   <div className="copy-block" style={{ background: 'var(--tg-bg)', marginBottom: '12px' }}>
                     <span className="copy-value" style={{ fontSize: '12px' }}>
-                      {`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`}
+                      {`https://t.me/PaybioBot/app?startapp=ref_${creator?.telegram_id || ''}`}
                     </span>
-                    <button 
-                      type="button" 
-                      className="copy-btn" 
+                    <button
+                      type="button"
+                      className="copy-btn"
                       onClick={() => {
-                        navigator.clipboard.writeText(`https://t.me/PaybioBot/app?startapp=${creator?.telegram_id || ''}`);
+                        navigator.clipboard.writeText(`https://t.me/PaybioBot/app?startapp=ref_${creator?.telegram_id || ''}`);
                         showAlert(lang === 'ru' ? '✓ Ссылка скопирована!' : '✓ Link copied!');
                       }}
                     >
@@ -1402,9 +1401,9 @@ export const ProductListScreen = memo(function ProductListScreen({
                     <span className="copy-value" style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '70%' }}>
                       {lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇'}
                     </span>
-                    <button 
-                      type="button" 
-                      className="copy-btn" 
+                    <button
+                      type="button"
+                      className="copy-btn"
                       onClick={() => {
                         navigator.clipboard.writeText(lang === 'ru' ? '🏪 Мой ИИ-магазин. Покупайте товары и услуги здесь 👇' : '🏪 My AI storefront. Buy products and services here 👇');
                         showAlert(lang === 'ru' ? '✓ Текст скопирован!' : '✓ Text copied!');
@@ -1434,7 +1433,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         {/* ─── SHARE STORE & PARTNER BLOCK ─── */}
         <div style={{ padding: '0', marginTop: '20px' }}>
           <div className="tg-card" style={{ padding: '12px 16px', border: '1px dashed var(--tg-border)', background: 'rgba(255,255,255,0.01)', borderRadius: '12px' }}>
-            <div 
+            <div
               onClick={() => setIsShareEarnExpanded(!isShareEarnExpanded)}
               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
             >
@@ -1447,26 +1446,26 @@ export const ProductListScreen = memo(function ProductListScreen({
             {isShareEarnExpanded && (
               <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }} className="animate-fade-in">
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <button 
+                  <button
                     type="button"
                     onClick={handleShareStore}
                     className="btn-primary"
-                    style={{ 
-                      background: 'var(--tg-accent)', 
-                      color: '#fff', 
-                      padding: '10px', 
+                    style={{
+                      background: 'var(--tg-accent)',
+                      color: '#fff',
+                      padding: '10px',
                       fontSize: '13px',
                       fontWeight: 700
                     }}
                   >
                     📢 {lang === 'ru' ? 'Поделиться' : 'Share Store'}
                   </button>
-                  <button 
+                  <button
                     type="button"
                     onClick={handleShareAffiliateLink}
                     className="btn-secondary"
-                    style={{ 
-                      padding: '10px', 
+                    style={{
+                      padding: '10px',
                       fontSize: '13px',
                       fontWeight: 700
                     }}
@@ -1483,8 +1482,8 @@ export const ProductListScreen = memo(function ProductListScreen({
                   color: 'var(--tg-hint)',
                   lineHeight: '1.4'
                 }}>
-                  💡 {lang === 'ru' 
-                    ? 'Попросите клиентов делиться ссылкой на ваш магазин, чтобы привлечь больше покупателей!' 
+                  💡 {lang === 'ru'
+                    ? 'Попросите клиентов делиться ссылкой на ваш магазин, чтобы привлечь больше покупателей!'
                     : 'Ask clients to share your storefront link to drive more sales!'}
                 </div>
               </div>
@@ -1497,8 +1496,8 @@ export const ProductListScreen = memo(function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isReviewsOpen ? 'active' : ''}`} onClick={() => setIsReviewsOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '85svh', overflowY: 'auto' }}>
           <div className="bottom-sheet-handle" />
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={() => setIsReviewsOpen(false)}
             style={{
               position: 'absolute', top: '16px', right: '16px',
@@ -1517,8 +1516,8 @@ export const ProductListScreen = memo(function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isAddProductOpen ? 'active' : ''}`} onClick={() => setIsAddProductOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="bottom-sheet-handle" />
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={() => setIsAddProductOpen(false)}
             style={{
               position: 'absolute', top: '16px', right: '16px',
@@ -1530,7 +1529,7 @@ export const ProductListScreen = memo(function ProductListScreen({
             ✕
           </button>
           <h2 className="bottom-sheet-title">{editingProduct ? (lang === 'ru' ? 'Редактировать товар' : 'Edit Product') : t.addNewProduct}</h2>
-          
+
           {creationStep === 'TYPE_SELECT' && !editingProduct ? (
             <div className="animate-fade-in" style={{ padding: '4px 0 16px' }}>
               <p style={{ fontSize: '13px', color: 'var(--tg-hint)', textAlign: 'center', marginBottom: '20px', lineHeight: 1.4 }}>
@@ -1538,7 +1537,7 @@ export const ProductListScreen = memo(function ProductListScreen({
                   ? 'Выберите категорию товара для настройки индивидуального дизайна страницы'
                   : 'Choose a product category to set up a customized page design'}
               </p>
-              
+
               <div className="type-selector-container">
                 <button
                   type="button"
@@ -1601,7 +1600,7 @@ export const ProductListScreen = memo(function ProductListScreen({
                   ← {lang === 'ru' ? 'Сменить тип товара' : 'Change product type'}
                 </button>
               )}
-              
+
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
                 padding: '10px 12px', background: 'rgba(255,255,255,0.03)',
@@ -1616,34 +1615,34 @@ export const ProductListScreen = memo(function ProductListScreen({
                     {lang === 'ru' ? 'Выбранный тип' : 'Selected Type'}
                   </span>
                   <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--tg-text)' }}>
-                    {prodType === 'VOUCHER' 
+                    {prodType === 'VOUCHER'
                       ? (lang === 'ru' ? 'Билет или Ваучер' : 'Ticket or Voucher')
                       : prodType === 'BOOKING'
-                      ? (lang === 'ru' ? 'Запись на время' : 'Booking / Session')
-                      : (lang === 'ru' ? 'Цифровой товар' : 'Digital Product')}
+                        ? (lang === 'ru' ? 'Запись на время' : 'Booking / Session')
+                        : (lang === 'ru' ? 'Цифровой товар' : 'Digital Product')}
                   </span>
                 </div>
               </div>
 
               <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">{t.productTitle}</label>
-                <input 
-                  type="text" 
-                  className="tg-input" 
+                <input
+                  type="text"
+                  className="tg-input"
                   placeholder="e.g. Beginners Guide to AI"
-                  value={prodTitle} 
-                  onChange={(e) => setProdTitle(e.target.value)} 
-                  required 
+                  value={prodTitle}
+                  onChange={(e) => setProdTitle(e.target.value)}
+                  required
                 />
               </div>
-              
+
               <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">{t.productDesc}</label>
-                <textarea 
-                  className="tg-input" 
+                <textarea
+                  className="tg-input"
                   placeholder="Describe what customers get..."
-                  value={prodDesc} 
-                  onChange={(e) => setProdDesc(e.target.value)} 
+                  value={prodDesc}
+                  onChange={(e) => setProdDesc(e.target.value)}
                   rows={3}
                   style={{ resize: 'none' }}
                 />
@@ -1652,24 +1651,42 @@ export const ProductListScreen = memo(function ProductListScreen({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="bottom-sheet-form-group">
                   <label className="bottom-sheet-label">{t.priceUSD}</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     step="0.01"
-                    className="tg-input" 
+                    className="tg-input"
                     placeholder="9.99"
-                    value={prodPriceUSD} 
-                    onChange={(e) => setProdPriceUSD(e.target.value)} 
-                    required 
+                    value={prodPriceUSD}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setProdPriceUSD(val);
+                      const num = Number(val);
+                      if (!isNaN(num) && num > 0) {
+                        setProdPriceStars(String(Math.round(num * 50)));
+                      } else {
+                        setProdPriceStars('');
+                      }
+                    }}
+                    required
                   />
                 </div>
                 <div className="bottom-sheet-form-group">
                   <label className="bottom-sheet-label">{t.priceStarsLabel}</label>
-                  <input 
-                    type="number" 
-                    className="tg-input" 
+                  <input
+                    type="number"
+                    className="tg-input"
                     placeholder={t.calculatedStars}
-                    value={prodPriceStars} 
-                    onChange={(e) => setProdPriceStars(e.target.value)} 
+                    value={prodPriceStars}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setProdPriceStars(val);
+                      const num = Number(val);
+                      if (!isNaN(num) && num > 0) {
+                        setProdPriceUSD(String(Math.round((num / 50) * 100) / 100));
+                      } else {
+                        setProdPriceUSD('');
+                      }
+                    }}
                   />
                 </div>
               </div>
@@ -1695,12 +1712,12 @@ export const ProductListScreen = memo(function ProductListScreen({
                     <label className="bottom-sheet-label">
                       {lang === 'ru' ? 'Лимит количества' : 'Max Quantity Limit'}
                     </label>
-                    <input 
-                      type="number" 
-                      className="tg-input" 
+                    <input
+                      type="number"
+                      className="tg-input"
                       placeholder="e.g. 50"
-                      value={prodMaxQuantity} 
-                      onChange={(e) => setProdMaxQuantity(e.target.value)} 
+                      value={prodMaxQuantity}
+                      onChange={(e) => setProdMaxQuantity(e.target.value)}
                     />
                   </div>
                 </>
@@ -1708,16 +1725,16 @@ export const ProductListScreen = memo(function ProductListScreen({
 
               <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">
-                  {prodType === 'BOOKING' 
+                  {prodType === 'BOOKING'
                     ? (lang === 'ru' ? 'Свободные часы' : 'Available Slots')
                     : t.fulfillmentUrl}
                 </label>
-                <input 
-                  type="text" 
-                  className="tg-input" 
+                <input
+                  type="text"
+                  className="tg-input"
                   placeholder={prodType === 'BOOKING' ? "e.g. Mon 10:00-12:00" : "https://example.com/ebook.pdf"}
-                  value={prodUrl} 
-                  onChange={(e) => setProdUrl(e.target.value)} 
+                  value={prodUrl}
+                  onChange={(e) => setProdUrl(e.target.value)}
                   required={prodType === 'BOOKING'}
                 />
               </div>
@@ -1727,19 +1744,19 @@ export const ProductListScreen = memo(function ProductListScreen({
                   <label className="bottom-sheet-label">
                     {lang === 'ru' ? 'Ссылка на ICS календарь' : 'Calendar ICS Link'}
                   </label>
-                  <input 
-                    type="text" 
-                    className="tg-input" 
+                  <input
+                    type="text"
+                    className="tg-input"
                     placeholder="webcal://..."
-                    value={prodCalendarIcsUrl} 
-                    onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+                    value={prodCalendarIcsUrl}
+                    onChange={(e) => setProdCalendarIcsUrl(e.target.value)}
                   />
                 </div>
               )}
 
               <div className="bottom-sheet-form-group">
                 <label className="bottom-sheet-label">{t.productCover}</label>
-                
+
                 {prodCoverUrl && (
                   <div style={{
                     width: '100%',
@@ -1770,12 +1787,12 @@ export const ProductListScreen = memo(function ProductListScreen({
                 {isCreatorPremium ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ display: 'flex', gap: '8px' }}>
-                      <input 
-                        type="text" 
-                        className="tg-input" 
+                      <input
+                        type="text"
+                        className="tg-input"
                         placeholder={t.enterPrompt}
-                        value={aiPrompt} 
-                        onChange={(e) => setAiPrompt(e.target.value)} 
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
                       />
                       <button
                         type="button"
@@ -1806,14 +1823,14 @@ export const ProductListScreen = memo(function ProductListScreen({
                 )}
               </div>
 
-              <button 
-                type="submit" 
-                className="btn-primary" 
-                style={{ 
+              <button
+                type="submit"
+                className="btn-primary"
+                style={{
                   marginTop: '14px',
                   background: isAdding ? 'var(--tg-hint)' : 'var(--tg-accent)',
                   cursor: isAdding ? 'not-allowed' : 'pointer'
-                }} 
+                }}
                 disabled={isAdding}
               >
                 {isAdding ? (
@@ -1837,8 +1854,8 @@ export const ProductListScreen = memo(function ProductListScreen({
       <div className={`bottom-sheet-overlay ${isPromoOpen ? 'active' : ''}`} onClick={() => setIsPromoOpen(false)}>
         <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
           <div className="bottom-sheet-handle" />
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={() => setIsPromoOpen(false)}
             style={{
               position: 'absolute', top: '16px', right: '16px',
@@ -1850,12 +1867,12 @@ export const ProductListScreen = memo(function ProductListScreen({
             ✕
           </button>
           <h2 className="bottom-sheet-title">📢 {lang === 'ru' ? 'ИИ Промо-пост' : 'AI Promo Post'}</h2>
-          
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
             <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
               {lang === 'ru' ? 'Сгенерированный ИИ продающий пост:' : 'AI-generated high-converting promo post:'}
             </p>
-            
+
             <div style={{
               background: 'var(--tg-secondary-bg)',
               border: '1px solid var(--tg-border)',
@@ -1878,15 +1895,15 @@ export const ProductListScreen = memo(function ProductListScreen({
             </div>
 
             {!isGeneratingPromo && promoText && (
-              <button 
+              <button
                 onClick={handleCopyPromo}
-                className="btn-primary" 
-                style={{ 
+                className="btn-primary"
+                style={{
                   background: promoCopied ? 'var(--tg-green)' : 'var(--tg-button)',
                   color: 'var(--tg-button-text)'
                 }}
               >
-                {promoCopied 
+                {promoCopied
                   ? (lang === 'ru' ? '✓ Скопировано!' : '✓ Copied!')
                   : (lang === 'ru' ? '📋 Скопировать пост' : '📋 Copy Post')}
               </button>

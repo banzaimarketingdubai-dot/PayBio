@@ -1,0 +1,40 @@
+2416:         }
+2417:       })
+2418:       .catch(err => console.error('Failed to pre-fetch admin wallets:', err));
+2419:   }, []);
+2420: 
+2421:   const handleBuyPremium = useCallback(() => {
+2422:     setIsPremiumOpen(false);
+2423:     
+2424:     // Construct virtual premium product configuration
+2425:     const premiumProd: Product = {
+2426:       id: 'premium_virtual',
+2427:       creator_id: 'admin_system',
+2428:       title: lang === 'ru' ? 'Подписка PayBio Premium' : 'PayBio Premium Subscription',
+2429:       description: lang === 'ru' ? 'Разблокировка всех функций витрины на 30 дней.' : 'Unlock all storefront tools for 30 days.',
+2430:       price_fiat: 10.00,
+2431:       price_stars: 500,
+2432:       content_url: 'PREMIUM_SUBSCRIPTION',
+2433:       cover_url: '',
+2434:       product_type: 'DIGITAL',
+2435:       creator: {
+2436:         id: 'admin_system',
+2437:         telegram_id: 999999999,
+2438:         username: 'PayBioAdmin',
+2439:         is_premium: true,
+2440:         payment_details: adminWallets || { ton: '', p2p: '', p2p_list: [], usdt_trc20: '', usdt_bep20: '', other: '' }
+2441:       }
+2442:     };
+2443:     
+2444:     setProduct(premiumProd);
+2445:     setBookingDate('');
+2446:     setBookingTime('');
+2447:     setIsPaymentSheetOpen(true);
+2448:     setCheckoutMethod(null);
+2449:     setFile(null);
+2450:     setVerifyError(null);
+2451:     setVerifySuccess(false);
+2452:     setExtractedData(null);
+2453:     setVerifying(false);
+2454:     setActiveOrderId(null);
+2455:   }, [adminWallets, lang]);

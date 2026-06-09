@@ -302,7 +302,7 @@ export default function SettingsView({
   };
 
   const formatPremiumDate = (dateStr?: string | null) => {
-    if (!dateStr) return '';
+    if (!dateStr) return lang === 'ru' ? '♾️ Пожизненная' : '♾️ Lifetime';
     const d = new Date(dateStr);
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -351,7 +351,9 @@ export default function SettingsView({
               <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--tg-hint)' }}>
                 {isCreatorPremium ? (
                   <span>
-                    👑 {lang === 'ru' ? `Премиум активен до: ${formatPremiumDate(creator?.premium_until)}` : `Premium active until: ${formatPremiumDate(creator?.premium_until)}`}
+                    {creator?.premium_until
+                      ? (lang === 'ru' ? `👑 Премиум активен до: ${formatPremiumDate(creator.premium_until)}` : `👑 Premium active until: ${formatPremiumDate(creator.premium_until)}`)
+                      : (lang === 'ru' ? '♾️ Пожизненный Premium' : '♾️ Lifetime Premium')}
                   </span>
                 ) : (
                   <span>{lang === 'ru' ? 'Подписка неактивна ❌' : 'Subscription inactive ❌'}</span>
@@ -395,10 +397,10 @@ export default function SettingsView({
             }}>
               <div>
                 <p style={{ margin: 0, fontSize: '13.5px', fontWeight: 600, color: 'var(--tg-text)' }}>
-                  {lang === 'ru' ? 'Обучение и подсказки' : 'Tutorial & Hints'}
+                  {lang === 'ru' ? 'Обучение и онбординг' : 'Tutorial & Onboarding'}
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: '12.5px', color: 'var(--tg-hint)' }}>
-                  {lang === 'ru' ? 'Запустить интерактивный гид по приложению' : 'Launch interactive app guide'}
+                  {lang === 'ru' ? 'Запустить интерактивное обучение и гид по приложению' : 'Launch interactive app guide and onboarding'}
                 </p>
               </div>
               <button
@@ -1038,20 +1040,7 @@ export default function SettingsView({
                 )}
               </div>
 
-              {/* Keep Onboarding test button for convenience */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderTop: '1px solid var(--tg-border)', paddingTop: '10px', marginTop: '6px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--tg-hint)', flex: 1 }}>
-                  {lang === 'ru' ? 'Прочее тестирование:' : 'Other testing tools:'}
-                </span>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={onTriggerOnboarding}
-                  style={{ width: 'auto', padding: '6px 12px', fontSize: '11px', height: 'auto', borderRadius: '6px' }}
-                >
-                  🚀 {lang === 'ru' ? 'Тест: Запустить онбординг' : 'Test: Run Onboarding'}
-                </button>
-              </div>
+
             </div>
           )}
         </div>

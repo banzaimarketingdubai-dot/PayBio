@@ -689,8 +689,8 @@ export async function POST(request: Request) {
         await tgApi('sendMessage', {
           chat_id: chatId,
           text: lang === 'ru'
-            ? `Файл/ссылка привязаны.\n\nШаг 5 из 5 (Необязательно): Отправьте изображение/фотографию для обложки карточки товара, или отправьте \`/skip\` для стандартной обложки.`
-            : `File/link saved.\n\nStep 5 of 5 (Optional): Send a photo for the product cover, or send \`/skip\` to finish with a default cover.`,
+            ? `Файл/ссылка привязаны.\n\nШаг 5 из 5 (Необязательно): Отправьте изображение/фотографию для обложки карточки товара, отправьте \`/skip\` для стандартной обложки или \`/ai\` для автогенерации профессиональной обложки.`
+            : `File/link saved.\n\nStep 5 of 5 (Optional): Send a photo for the product cover, send \`/skip\` to finish with a default cover, or send \`/ai\` to auto-generate a professional cover.`,
         });
         return NextResponse.json({ ok: true });
       }
@@ -701,17 +701,49 @@ export async function POST(request: Request) {
           const photoArray = message.photo;
           const largestPhoto = photoArray[photoArray.length - 1];
           coverUrl = `/api/telegram/file?file_id=${largestPhoto.file_id}`;
+        } else if (text === '/ai') {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: lang === 'ru'
+              ? '🎨 Генерирую профессиональную обложку по технике Layout-First... Пожалуйста, подождите.'
+              : '🎨 Generating professional product banner using Layout-First prompting... Please wait.',
+          });
+          try {
+            const { generateLayoutFirstPrompt } = await import('@/lib/gemini');
+            const { generateImage } = await import('@/lib/runware');
+            
+            const calculatedPrice = botState.data.price_fiat 
+              ? `$${botState.data.price_fiat}` 
+              : (botState.data.price_stars ? `${botState.data.price_stars} Stars` : 'Free');
+              
+            const aiPrompt = await generateLayoutFirstPrompt(
+              botState.data.title,
+              botState.data.description || '',
+              calculatedPrice
+            );
+            
+            coverUrl = await generateImage(aiPrompt);
+          } catch (err: any) {
+            console.error('Failed to generate bot AI cover:', err);
+            await tgApi('sendMessage', {
+              chat_id: chatId,
+              text: lang === 'ru'
+                ? '⚠️ Ошибка при создании AI-обложки. Будет установлена стандартная.'
+                : '⚠️ Failed to create AI cover. Using default placeholder.',
+            });
+          }
         } else if (text !== '/skip') {
           await tgApi('sendMessage', {
             chat_id: chatId,
             text: lang === 'ru'
-              ? 'Пожалуйста, отправьте фотографию или \`/skip\`.'
-              : 'Please send a photo or \`/skip\`.',
+              ? 'Пожалуйста, отправьте фотографию, \`/skip\` или \`/ai\`.'
+              : 'Please send a photo, \`/skip\` or \`/ai\`.',
           });
           return NextResponse.json({ ok: true });
         }
 
         await tgApi('sendChatAction', { chat_id: chatId, action: 'typing' });
+
 
         let description = botState.data.description;
         if (description === 'AI_GENERATE') {
@@ -739,7 +771,7 @@ export async function POST(request: Request) {
 
         const getMe = await tgApi('getMe', {});
         const botUser = getMe?.result?.username || 'PaybioBot';
-        const deepLink = `https://t.me/${botUser}/app?startapp=${product.id}`;
+        const deepLink = `https://t.me/${botUser}/app?startapp=p_${product.id}_ref_${creator.telegram_id}`;
 
         const responseText = (lang === 'ru'
           ? `🏪 *Карточка товара успешно создана!* \n\n🏷️ *Название:* {title}\n📝 *Описание:* {description}\n💵 *Цена:* \${priceFiat} (~{priceStars} Stars)\n\n🔗 *Ссылка на ваш товар:* \n{deepLink}`
@@ -795,10 +827,31 @@ export async function POST(request: Request) {
     // 2. Handle commands
     if (text?.startsWith('/start')) {
       const parts = text.split(' ');
-      if (parts.length > 1 && parts[1].startsWith('ref_')) {
-        const partnerRef = parts[1].substring(4);
-        await db.attributeReferral(userId, partnerRef);
+      if (parts.length > 1) {
+        const startParam = parts[1];
+        let partnerRef = '';
+        if (startParam.startsWith('ref_')) {
+          partnerRef = startParam.substring(4);
+        } else if (startParam.includes('_ref_')) {
+          partnerRef = startParam.split('_ref_')[1];
+        }
+        if (partnerRef) {
+          await db.attributeReferral(userId, partnerRef);
+        }
       }
+
+      // Register bot commands list with Telegram Bot Menu
+      await tgApi('setMyCommands', {
+        commands: [
+          { command: 'start', description: lang === 'ru' ? 'Запустить приложение 🏪' : 'Start storefront app 🏪' },
+          { command: 'my_store', description: lang === 'ru' ? 'Мои товары (просмотр и ссылки) 📦' : 'My products list & links 📦' },
+          { command: 'new_product', description: lang === 'ru' ? 'Создать товар ＋' : 'Create new product ＋' },
+          { command: 'links', description: lang === 'ru' ? 'Мои ссылки (партнерка) 🤝' : 'My referral links (partner program) 🤝' },
+          { command: 'carts', description: lang === 'ru' ? 'Брошенные корзины 🛒' : 'Abandoned carts 🛒' },
+          { command: 'channel_desc', description: lang === 'ru' ? 'ИИ описание канала 📢' : 'AI Channel description 📢' },
+          { command: 'cancel', description: lang === 'ru' ? 'Отмена действия ✕' : 'Cancel current action ✕' }
+        ]
+      });
 
       const getMe = await tgApi('getMe', {});
       const botUser = getMe?.result?.username || 'PaybioBot';
@@ -847,13 +900,45 @@ export async function POST(request: Request) {
       let storeText = t.your_products;
       products.forEach((p: any, idx: number) => {
         storeText += `${idx + 1}. *${p.title}* - $${p.price_fiat} (${p.price_stars} Stars)\n`;
-        storeText += `👉 Link: https://t.me/${botUser}/app?startapp=${p.id}\n\n`;
+        storeText += `👉 Link: https://t.me/${botUser}/app?startapp=p_${p.id}_ref_${creator.telegram_id}\n\n`;
       });
 
       await tgApi('sendMessage', {
         chat_id: chatId,
         text: storeText,
         parse_mode: 'Markdown',
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === '/links' || text === '/partner') {
+      const getMe = await tgApi('getMe', {});
+      const botUser = getMe?.result?.username || 'PaybioBot';
+      const affiliateLink = `https://t.me/${botUser}/app?startapp=ref_${creator.telegram_id}`;
+      
+      const linksText = lang === 'ru'
+        ? `🤝 *Партнерская программа PayBio*\n\n` +
+          `Приглашайте других авторов и получайте до *30% комиссии* от всех оплат подписок Premium ваших рефералов пожизненно!\n\n` +
+          `🔗 *Ваша партнерская ссылка:*\n\`${affiliateLink}\`\n\n` +
+          `📝 *Рекомендуемый текст для приглашения:*\n` +
+          `_"🚀 Создай свой ИИ-магазин цифровых товаров за 1 минуту в Telegram с помощью PayBio!_"`
+        : `🤝 *PayBio Partner Program*\n\n` +
+          `Invite other creators to PayBio and earn up to *30% recurring commission* on all their Premium upgrades lifetime!\n\n` +
+          `🔗 *Your referral link:*\n\`${affiliateLink}\`\n\n` +
+          `📝 *Suggested invitation text:*\n` +
+          `_"🚀 Build your AI-powered Telegram storefront for digital products in 1 minute with PayBio!"_`;
+
+      await tgApi('sendMessage', {
+        chat_id: chatId,
+        text: linksText,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: lang === 'ru' ? '📢 Поделиться ссылкой' : '📢 Share link', url: `https://t.me/share/url?url=${encodeURIComponent(affiliateLink)}&text=${encodeURIComponent(lang === 'ru' ? '🚀 Создай свой ИИ-магазин цифровых товаров за 1 минуту в Telegram с помощью PayBio!' : '🚀 Build your AI-powered Telegram storefront for digital products in 1 minute with PayBio!')}` }
+            ]
+          ]
+        }
       });
       return NextResponse.json({ ok: true });
     }

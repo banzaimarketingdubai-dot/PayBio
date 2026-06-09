@@ -1,0 +1,4 @@
+Total lines in file: 5
+Line 5 length: 52408
+--- Context around position 12938 in line 5 ---
+,children:[(0,t.jsxs)("p",{style:{margin:0,fontSize:"14.5px",fontWeight:800,color:"var(--tg-text)"},children:["$",c.price_fiat]}),(0,t.jsxs)("p",{style:{margin:"1px 0 0",fontSize:"9.5px",color:"var(--tg-hint)"},children:[c.price_stars," ⭐ / ~",tW," TON"]})]})]}),!ev&&(0,t.jsxs)("div",{style:{display:"flex",flexDirection:"column",gap:"12px"},className:"animate-fade-in",children:[(0,t.jsx)("p",{className:"section-header",style:{margin:0},children:"ru"===C?"Выберите способ оплаты":"Select payment m
