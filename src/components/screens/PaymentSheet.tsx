@@ -374,12 +374,17 @@ export default function PaymentSheet({
             {/* Payment Method Selector Grid */}
             {!checkoutMethod && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} className="animate-fade-in">
-                <p className="section-header" style={{ margin: 0 }}>{lang === 'ru' ? 'Выберите способ оплаты' : 'Select payment method'}</p>
+                <p className="section-header" style={{ margin: 0 }}>
+                  {lang === 'ru'
+                    ? (product.creator_id === 'demo-welcome-store' ? 'Выберите способ оплаты (доступны Stars в демо)' : 'Выберите способ оплаты')
+                    : (product.creator_id === 'demo-welcome-store' ? 'Select payment method (Stars active in demo)' : 'Select payment method')}
+                </p>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                   {/* 1. Card */}
                   {(() => {
-                    const hasCards = p2pList.length > 0 || !!product.creator?.payment_details?.p2p;
+                    const isDemoProduct = product.creator_id === 'demo-welcome-store';
+                    const hasCards = !isDemoProduct && (p2pList.length > 0 || !!product.creator?.payment_details?.p2p);
                     return (
                       <button
                         onClick={() => {
@@ -426,7 +431,8 @@ export default function PaymentSheet({
 
                   {/* 3. Crypto */}
                   {(() => {
-                    const hasCrypto = !!(product.creator?.payment_details?.ton || product.creator?.payment_details?.usdt_trc20 || product.creator?.payment_details?.usdt_bep20);
+                    const isDemoProduct = product.creator_id === 'demo-welcome-store';
+                    const hasCrypto = !isDemoProduct && !!(product.creator?.payment_details?.ton || product.creator?.payment_details?.usdt_trc20 || product.creator?.payment_details?.usdt_bep20);
                     return (
                       <button
                         onClick={() => {
@@ -458,7 +464,8 @@ export default function PaymentSheet({
 
                   {/* 4. Other Options */}
                   {(() => {
-                    const hasOther = !!(product.creator?.payment_details?.other || product.creator?.username);
+                    const isDemoProduct = product.creator_id === 'demo-welcome-store';
+                    const hasOther = !isDemoProduct && !!(product.creator?.payment_details?.other || product.creator?.username);
                     return (
                       <button
                         onClick={() => {

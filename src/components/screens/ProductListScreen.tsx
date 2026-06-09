@@ -21,6 +21,10 @@ const ReviewsDashboard = dynamic(() => import('@/components/ReviewsDashboard'), 
   loading: () => <div className="skeleton" style={{ height: 150, borderRadius: 14 }} />,
 });
 const PartnerDashboard = dynamic(() => import('@/components/PartnerDashboard'), { ssr: false });
+const CalendarSettingsView = dynamic(() => import('@/components/screens/CalendarSettingsView'), {
+  ssr: false,
+  loading: () => <div className="skeleton" style={{ height: 300, borderRadius: 14 }} />,
+});
 
 const getDaysWord = (days: number, lang: 'ru' | 'en') => {
   if (lang === 'en') return days === 1 ? 'day' : 'days';
@@ -60,8 +64,8 @@ interface ProductListScreenProps {
   onDeleteProduct: (id: string) => Promise<boolean>;
   onUpdateProduct: (id: string, title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<boolean>;
 
-  currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER';
-  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER') => void;
+  currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR';
+  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR') => void;
   starredIds: string[];
   setStarredIds: (ids: string[]) => void;
   sectionsList: string[];
@@ -77,6 +81,8 @@ interface ProductListScreenProps {
   buyerTgId: number;
   onTriggerOnboarding?: () => void;
   setCreator: (creator: Creator | null | ((prev: Creator | null) => Creator | null)) => void;
+  isDemoMode?: boolean;
+  onActivateRealStore?: () => void;
 }
 
 export const ProductListScreen = memo(function ProductListScreen({
@@ -98,7 +104,7 @@ export const ProductListScreen = memo(function ProductListScreen({
   onOpenPremium,
   lang,
   setLang,
-  isOwner,
+  isOwner: rawIsOwner,
   onDeleteProduct,
   onUpdateProduct,
 
@@ -117,8 +123,12 @@ export const ProductListScreen = memo(function ProductListScreen({
   dbBookings,
   fetchBusySlotsForProduct,
   buyerTgId,
-  onTriggerOnboarding
+  onTriggerOnboarding,
+  isDemoMode = false,
+  onActivateRealStore
 }: ProductListScreenProps) {
+  // In demo mode, treat as buyer for header controls, but owner can preview catalog items.
+  const isOwner = isDemoMode ? false : rawIsOwner;
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isEditSocialsOpen, setIsEditSocialsOpen] = useState(false);
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
@@ -791,8 +801,83 @@ export const ProductListScreen = memo(function ProductListScreen({
     );
   }
 
+  if (currentScreen === 'CALENDAR') {
+    return (
+      <CalendarSettingsView
+        creator={creator}
+        lang={lang}
+        t={t}
+        currentScreen={currentScreen}
+        setCurrentScreen={setCurrentScreen}
+        products={products}
+        onSaveSettings={onSaveSettings}
+        onUpdateProduct={onUpdateProduct}
+        busySlots={busySlots}
+        dbBookings={dbBookings}
+        fetchBusySlotsForProduct={fetchBusySlotsForProduct}
+        buyerTgId={buyerTgId}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px))' }} className="animate-fade-in">
+
+      {/* Demo Mode Welcome Banner */}
+      {isDemoMode && (
+        <div style={{
+          background: 'linear-gradient(135deg, #0088CC 0%, #005580 100%)',
+          color: '#fff',
+          padding: '16px 20px',
+          textAlign: 'center',
+          fontSize: '14px',
+          fontWeight: 600,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '10px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+          position: 'relative',
+          zIndex: 101,
+          borderBottom: '1px solid rgba(255,255,255,0.1)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '20px' }}>🚀</span>
+            <div style={{ textAlign: 'left', lineHeight: 1.3 }}>
+              <div style={{ fontWeight: 800, fontSize: '15px' }}>
+                {lang === 'ru' ? 'Вы в демо-магазине PayBio' : 'You are in PayBio Demo Store'}
+              </div>
+              <div style={{ fontWeight: 400, fontSize: '12px', opacity: 0.9 }}>
+                {lang === 'ru'
+                  ? 'Попробуйте купить любой товар. Весь интерфейс активен!'
+                  : 'Try to purchase any product. The entire interface is active!'}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onActivateRealStore}
+            style={{
+              background: '#fff',
+              color: '#0088CC',
+              border: 'none',
+              borderRadius: '24px',
+              padding: '8px 18px',
+              fontWeight: 800,
+              fontSize: '13px',
+              cursor: 'pointer',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'transform 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+          >
+            ✨ {lang === 'ru' ? 'Создать свой магазин' : 'Create My Store'}
+          </button>
+        </div>
+      )}
 
       {isOwner && !isCreatorPremium && (
         <div style={{
@@ -955,6 +1040,17 @@ export const ProductListScreen = memo(function ProductListScreen({
               title={lang === 'ru' ? 'Настройки' : 'Settings'}
             >
               ⚙️ {lang === 'ru' ? 'Настройки' : 'Settings'}
+            </button>
+            <button
+              onClick={() => setCurrentScreen('CALENDAR')}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
+                height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
+                cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--tg-text)'
+              }}
+              title={lang === 'ru' ? 'Расписание и Календарь' : 'Schedule & Calendar'}
+            >
+              📅 {lang === 'ru' ? 'Календарь' : 'Calendar'}
             </button>
             <button
               onClick={handleScanTicket}
@@ -1751,6 +1847,11 @@ export const ProductListScreen = memo(function ProductListScreen({
                     value={prodCalendarIcsUrl}
                     onChange={(e) => setProdCalendarIcsUrl(e.target.value)}
                   />
+                  <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                    {lang === 'ru'
+                      ? '💡 Вы можете настроить расписание, часы приема и привязать календари на отдельном экране "Календарь" в меню быстрого доступа.'
+                      : '💡 You can configure working hours, schedule and connect calendars on the separate "Calendar" screen in the Quick Actions menu.'}
+                  </p>
                 </div>
               )}
 
@@ -1923,6 +2024,51 @@ export const ProductListScreen = memo(function ProductListScreen({
           }}
           onClose={() => setCropperOpen(false)}
         />
+      )}
+
+      {/* Floating demo CTA button */}
+      {isDemoMode && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 32px)',
+          maxWidth: '360px',
+          zIndex: 9999,
+          pointerEvents: 'auto'
+        }}>
+          <button
+            onClick={onActivateRealStore}
+            style={{
+              width: '100%',
+              background: 'linear-gradient(135deg, #0088CC, #00A6FF)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '16px',
+              padding: '16px 20px',
+              fontSize: '15px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 12px 24px rgba(0,136,204,0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.03)';
+              e.currentTarget.style.boxShadow = '0 16px 28px rgba(0,136,204,0.5)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,136,204,0.4)';
+            }}
+          >
+            <span>Создать свой магазин ✨</span>
+          </button>
+        </div>
       )}
 
     </div>

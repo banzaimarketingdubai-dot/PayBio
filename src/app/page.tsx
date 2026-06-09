@@ -108,6 +108,77 @@ export default function Storefront() {
           isApplyingPromo={store.isApplyingPromo}
           onBuyPremium={store.handleBuyPremium}
         />
+
+        {/* Demo Mode Payment Success Custom Overlay */}
+        {store.isDemoPaymentSuccessOpen && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+          }} className="animate-fade-in">
+            <div style={{
+              background: 'var(--tg-bg)',
+              color: 'var(--tg-text)',
+              borderRadius: '24px',
+              padding: '32px 24px',
+              width: '100%',
+              maxWidth: '340px',
+              textAlign: 'center',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
+              border: '1px solid rgba(255,255,255,0.08)'
+            }} className="animate-scale-in">
+              <div style={{
+                width: '72px',
+                height: '72px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #FF9500, #FFCC00)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '36px',
+                margin: '0 auto 24px auto',
+                boxShadow: '0 8px 16px rgba(255,149,0,0.3)'
+              }}>
+                ⭐
+              </div>
+              <h3 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '12px' }}>
+                {store.lang === 'ru' ? 'Тестовая покупка успешна!' : 'Test Payment Successful!'}
+              </h3>
+              <p style={{ fontSize: '14px', color: 'var(--tg-hint)', lineHeight: 1.5, marginBottom: '28px' }}>
+                {store.lang === 'ru'
+                  ? 'Вы симулировали оплату через Telegram Stars. В реальном магазине клиент мгновенно получает доступ к цифровому товару, билету или слоту записи.'
+                  : 'You simulated a Telegram Stars purchase. In a real store, the client instantly gets access to their digital file, ticket, or calendar booking.'}
+              </p>
+              <button
+                className="btn-primary"
+                onClick={async () => {
+                  store.setIsDemoPaymentSuccessOpen(false);
+                  store.handleSelectProduct(null);
+                  await store.handleActivateRealStore();
+                }}
+                style={{
+                  width: '100%',
+                  background: 'linear-gradient(135deg, #0088CC, #00A6FF)',
+                  border: 'none',
+                  color: '#fff',
+                  padding: '14px',
+                  borderRadius: '12px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(0,136,204,0.3)'
+                }}
+              >
+                {store.lang === 'ru' ? 'Создать свой магазин ✨' : 'Create My Store ✨'}
+              </button>
+            </div>
+          </div>
+        )}
       </>
     );
   };
@@ -177,13 +248,16 @@ export default function Storefront() {
         </p>
         <button
           className="btn-primary"
-          onClick={() => {
+          onClick={async () => {
             store.setShippingSubmitted(false);
             store.handleSelectProduct(null);
+            if (store.isDemoMode) {
+              await store.handleActivateRealStore();
+            }
           }}
           style={{ width: '100%', maxWidth: '240px' }}
         >
-          {store.lang === 'ru' ? 'Вернуться в магазин' : 'Back to Shop'}
+          {store.lang === 'ru' ? (store.isDemoMode ? 'Создать свой магазин ✨' : 'Вернуться в магазин') : (store.isDemoMode ? 'Create My Store ✨' : 'Back to Shop')}
         </button>
       </div>
     );
@@ -242,6 +316,8 @@ export default function Storefront() {
             store.setForceShowOnboarding(true);
             store.setCurrentScreen('CATALOG');
           }}
+          isDemoMode={store.isDemoMode}
+          onActivateRealStore={store.handleActivateRealStore}
         />
       </div>
 

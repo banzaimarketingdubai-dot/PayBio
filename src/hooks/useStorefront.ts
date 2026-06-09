@@ -5,6 +5,86 @@ import { Product, Creator } from '@/types/store';
 import { getTWA, showAlert, cleanProductId, handleOpenLink } from '@/utils/telegram';
 import { TRANSLATIONS } from '@/lib/translations';
 
+// --- DEMO MODE DATA AND CONSTANTS ---
+export const DEMO_CREATOR: Creator = {
+  id: 'demo-welcome-store',
+  telegram_id: 0,
+  username: 'PayBioDemo',
+  is_premium: true, // show all premium features
+  payment_details: {
+    ton: 'EQC2...demo_address',
+    p2p: '4276 0000 0000 0000',
+    p2p_list: [
+      { id: 'p2p-demo', label: 'Тестовая Карта', card: '4276 0000 0000 0000' }
+    ],
+    ton_list: [
+      { id: 'ton-demo', label: 'Тестовый TON', address: 'EQC2...demo_address' }
+    ]
+  },
+  profile_customization: {
+    store_name: '🚀 Мой Демо-Магазин',
+    store_description: 'Попробуй купить любой тестовый товар за 1 Telegram Star, чтобы увидеть процесс оплаты и моментальную выдачу товара!',
+    avatar_url: '',
+    banner_url: '',
+    onboarding_completed: true
+  }
+};
+
+export const DEMO_PRODUCTS: Product[] = [
+  {
+    id: 'demo-product-1',
+    creator_id: 'demo-welcome-store',
+    title: 'Физический мерч TMZ 👕',
+    description: 'Лимитированная футболка PayBio. Демонстрирует доставку физических товаров с заполнением формы СДЭК.',
+    price_fiat: 1.00,
+    price_stars: 1,
+    content_url: 'https://paybio.link/merch_template.pdf',
+    cover_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&auto=format&fit=crop&q=60',
+    product_type: 'DIGITAL',
+    sub_type: 'PHYSICAL',
+    creator: DEMO_CREATOR
+  },
+  {
+    id: 'demo-product-2',
+    creator_id: 'demo-welcome-store',
+    title: 'Гайд: Запуск за 60 секунд 📖',
+    description: 'Пошаговое руководство с секретами вирусного маркетинга. Моментально выдается после оплаты.',
+    price_fiat: 1.00,
+    price_stars: 1,
+    content_url: 'https://paybio.link/guide_demo.pdf',
+    cover_url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60',
+    product_type: 'DIGITAL',
+    sub_type: null,
+    creator: DEMO_CREATOR
+  },
+  {
+    id: 'demo-product-3',
+    creator_id: 'demo-welcome-store',
+    title: 'Воркаут-интенсив: Билет 🎟️',
+    description: 'Входной билет на онлайн-интенсив. Генерирует уникальный QR-код для контроля посещаемости на входе.',
+    price_fiat: 1.00,
+    price_stars: 1,
+    content_url: 'TICKET_VOUCHER_DEMO',
+    cover_url: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=500&auto=format&fit=crop&q=60',
+    product_type: 'VOUCHER',
+    sub_type: null,
+    creator: DEMO_CREATOR
+  },
+  {
+    id: 'demo-product-4',
+    creator_id: 'demo-welcome-store',
+    title: 'Консультация: Разбор магазина 📅',
+    description: 'Личная 30-минутная ZOOM-сессия с экспертом PayBio. Включает выбор даты и времени на встроенном календаре.',
+    price_fiat: 1.00,
+    price_stars: 1,
+    content_url: 'BOOKING_DEMO_MEETING',
+    cover_url: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=500&auto=format&fit=crop&q=60',
+    product_type: 'BOOKING',
+    sub_type: null,
+    creator: DEMO_CREATOR
+  }
+];
+
 export function useCopy() {
   const [copied, setCopied] = useState(false);
   const copy = useCallback((text: string) => {
@@ -26,6 +106,10 @@ export function useStorefront() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Demo mode state
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isDemoPaymentSuccessOpen, setIsDemoPaymentSuccessOpen] = useState(false);
+
   // Language state
   const [lang, setLang] = useState<'en' | 'ru'>('en');
 
@@ -42,7 +126,7 @@ export function useStorefront() {
   const [sectionsList, setSectionsList] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [sectionOrder, setSectionOrder] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [productSections, setProductSections] = useState<Record<string, string>>({});
-  const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS' | 'PARTNER'>('CATALOG');
+  const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR'>('CATALOG');
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
@@ -259,6 +343,15 @@ export function useStorefront() {
     let detectedPid: string | null = null;
     let detectedCreatorTgId: number | null = null;
 
+    if (rawPid === 'welcome_demo') {
+      setIsDemoMode(true);
+      setLoading(false);
+      setCreator(DEMO_CREATOR);
+      setCreatorTgId(0);
+      setProductsList(DEMO_PRODUCTS);
+      return;
+    }
+
     if (rawPid) {
       if (rawPid.startsWith('ref_')) {
         const refIdStr = rawPid.substring(4);
@@ -346,7 +439,14 @@ export function useStorefront() {
       let activeCreatorTgId = detectedCreatorTgId;
       const startParam = webapp.initDataUnsafe?.start_param;
       if (startParam) {
-        if (startParam.startsWith('ref_')) {
+        if (startParam === 'welcome_demo') {
+          setIsDemoMode(true);
+          setLoading(false);
+          setCreator(DEMO_CREATOR);
+          setCreatorTgId(0);
+          setProductsList(DEMO_PRODUCTS);
+          return;
+        } else if (startParam.startsWith('ref_')) {
           const refIdStr = startParam.substring(4);
           if (typeof window !== 'undefined') {
             localStorage.setItem('paybio_referrer_tg_id', refIdStr);
@@ -483,6 +583,10 @@ export function useStorefront() {
     const { signal } = controller;
 
     async function loadData() {
+      if (isDemoMode) {
+        setLoading(false);
+        return;
+      }
       const currentProductsList = productsListRef.current;
       const currentProduct = productRef.current;
       const needsLoader = productId 
@@ -557,7 +661,7 @@ export function useStorefront() {
     }
     loadData();
     return () => controller.abort();
-  }, [productId, creatorTgId, buyerTgId, fetchBusySlotsForProduct]);
+  }, [productId, creatorTgId, buyerTgId, fetchBusySlotsForProduct, isDemoMode]);
 
   // Load custom shop customization settings
   useEffect(() => {
@@ -1234,6 +1338,64 @@ export function useStorefront() {
     }
   }, [paidOrderId, shipFullName, shipPhone, shipMethod, shipAddress, lang]);
 
+  const handleActivateRealStore = useCallback(async () => {
+    let tgId = buyerTgId;
+    let username = '';
+    let firstName = '';
+    
+    if (typeof window !== 'undefined') {
+      const WebApp = (window as any).Telegram?.WebApp;
+      const user = WebApp?.initDataUnsafe?.user;
+      if (user) {
+        if (user.id) tgId = Number(user.id);
+        username = user.username || '';
+        firstName = user.first_name || '';
+      }
+    }
+    
+    if (!tgId) {
+      showAlert(lang === 'ru' ? 'Ошибка: Telegram ID не найден. Откройте приложение внутри Telegram!' : 'Error: Telegram ID not found. Open the app inside Telegram!');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/store/demo-activate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: tgId,
+          username: username,
+          store_name: lang === 'ru' ? `Магазин ${firstName || username || tgId}` : `${firstName || username || tgId}'s Store`
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showAlert(
+          lang === 'ru'
+            ? '🎉 Ваш личный магазин успешно создан! Перезапуск...'
+            : '🎉 Your personal storefront has been created successfully! Reloading...'
+        );
+        setIsDemoMode(false);
+        if (data.creator) {
+          setCreator(data.creator);
+          setCreatorTgId(data.creator.telegram_id);
+        }
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('startapp');
+          url.searchParams.delete('tgWebAppStartParam');
+          url.searchParams.set('creator_tg_id', String(tgId));
+          window.location.href = url.toString();
+        }
+      } else {
+        showAlert(data.error || 'Failed to create storefront.');
+      }
+    } catch (e: any) {
+      console.error(e);
+      showAlert(e.message || 'Error creating storefront.');
+    }
+  }, [buyerTgId, lang]);
+
   const isOwner = useMemo(() => {
     return !!(creator && Number(buyerTgId) === Number(creator.telegram_id));
   }, [creator, buyerTgId]);
@@ -1345,6 +1507,9 @@ export function useStorefront() {
     setSelectedP2pIdx,
     copied,
     copy,
+    isDemoMode,
+    isDemoPaymentSuccessOpen,
+    setIsDemoPaymentSuccessOpen,
 
     // Memoized / Calculated values
     t,
@@ -1375,6 +1540,7 @@ export function useStorefront() {
     handleBuyDirect,
     handleSelectPaymentMethod,
     handleClaimPayment,
-    handleShippingSubmit
+    handleShippingSubmit,
+    handleActivateRealStore
   };
 }

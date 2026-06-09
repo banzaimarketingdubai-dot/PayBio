@@ -9,8 +9,8 @@ interface SettingsViewProps {
   creator: Creator | null;
   lang: 'en' | 'ru';
   t: any;
-  currentScreen: 'CATALOG' | 'SETTINGS';
-  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS') => void;
+  currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR';
+  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR') => void;
   storeName: string;
   storeDescription: string;
   storeAvatar: string;
@@ -803,92 +803,31 @@ export default function SettingsView({
           </div>
         </div>
 
-        {/* Section 4: Calendar Sync & Schedule */}
-        <div className="tg-card tour-settings-calendar" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>📅</span> {lang === 'ru' ? 'Интеграция календаря' : 'Calendar Integration'}
-          </h3>
-          
-          <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0 }}>
-            {lang === 'ru' ? 'Выберите провайдер для синхронизации занятых слотов:' : 'Choose a provider to sync busy slots:'}
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-            {['none', 'google', 'apple'].map((prov) => (
-              <button
-                key={prov}
-                type="button"
-                onClick={() => setTempCalProvider(prov)}
-                style={{
-                  padding: '8px',
-                  borderRadius: '8px',
-                  border: tempCalProvider === prov ? '2px solid var(--tg-accent)' : '1px solid var(--tg-border)',
-                  background: tempCalProvider === prov ? 'rgba(82,158,255,0.08)' : 'transparent',
-                  color: 'var(--tg-text)',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  textTransform: 'capitalize'
-                }}
-              >
-                {prov === 'none' ? 'None' : prov}
-              </button>
-            ))}
+        {/* Section 4: Calendar Sync & Schedule (Moved to separate screen) */}
+        {bookingProductsList.length > 0 && (
+          <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>📅</span> {lang === 'ru' ? 'Синхронизация календаря и расписание' : 'Calendar & Schedule'}
+            </h3>
+            <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0, lineHeight: 1.4 }}>
+              {lang === 'ru' 
+                ? 'Настройка часов приема, блокировка дат и привязка Google/Apple календарей перенесены в отдельный раздел меню "Календарь" на главном экране.' 
+                : 'Working hours, date blocking, and Google/Apple calendar integration have been moved to the dedicated "Calendar" screen accessible from the Quick Actions row.'}
+            </p>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setCurrentScreen('CALENDAR')}
+              style={{ marginTop: '4px', height: '32px', fontSize: '11px', fontWeight: 700 }}
+            >
+              {lang === 'ru' ? 'Перейти в Календарь' : 'Go to Calendar'}
+            </button>
           </div>
-
-          {tempCalProvider !== 'none' && (
-            <div className="bottom-sheet-form-group">
-              <label className="bottom-sheet-label">{lang === 'ru' ? 'Ссылка на ICS календарь' : 'Calendar ICS Link'}</label>
-              <input type="url" className="tg-input" placeholder="webcal://... or https://..." value={tempCalIcsUrl} onChange={(e) => setTempCalIcsUrl(e.target.value)} />
-            </div>
-          )}
-
-          {/* Local DB Booking Calendar */}
-          <div style={{ borderTop: '1px solid var(--tg-border)', paddingTop: '14px', marginTop: '6px' }}>
-            <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: 800 }}>
-              ⚙️ {lang === 'ru' ? 'Управление бронированиями' : 'Manage Bookings'}
-            </h4>
-            {bookingProductsList.length > 0 ? (
-              <>
-                <div className="bottom-sheet-form-group" style={{ marginBottom: '12px' }}>
-                  <label className="bottom-sheet-label">{lang === 'ru' ? 'Выберите товар-запись' : 'Select Booking Product'}</label>
-                  <select
-                    className="tg-input"
-                    value={selectedSettingsBookingProdId}
-                    onChange={(e) => setSelectedSettingsBookingProdId(e.target.value)}
-                    style={{ background: 'var(--tg-secondary-bg)', color: 'var(--tg-text)', border: '1px solid var(--tg-border)' }}
-                  >
-                    {bookingProductsList.map((bp) => (
-                      <option key={bp.id} value={bp.id}>{bp.title}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <BookingCalendar
-                  slotsText={bookingProductsList.find(bp => bp.id === selectedSettingsBookingProdId)?.content_url || ''}
-                  busySlots={busySlots}
-                  bookings={dbBookings}
-                  bookingDate={settingsBookingDate}
-                  setBookingDate={setSettingsBookingDate}
-                  bookingTime={settingsBookingTime}
-                  setBookingTime={setSettingsBookingTime}
-                  lang={lang}
-                  isOwner={true}
-                  productId={selectedSettingsBookingProdId}
-                  userTgId={buyerTgId}
-                  onRefreshBusySlots={() => fetchBusySlotsForProduct(selectedSettingsBookingProdId)}
-                />
-              </>
-            ) : (
-              <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0, fontStyle: 'italic' }}>
-                {lang === 'ru' ? 'У вас нет услуг по бронированию времени.' : 'You have no booking-type services.'}
-              </p>
-            )}
-          </div>
+        )}
 
           {/* Administrator Settings (Developer Mode) */}
           {isAdmin && (
-            <div style={{ borderTop: '2px dashed #ffd700', paddingTop: '14px', marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '2px dashed #ffd700' }}>
               <h4 style={{ margin: '0', fontSize: '13.5px', fontWeight: 800, color: '#ffd700', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 👑 {lang === 'ru' ? 'АДМИНИСТРАТОР: Прием оплат за Premium' : 'ADMINISTRATOR: Receive Premium Payments'}
               </h4>
@@ -1043,7 +982,6 @@ export default function SettingsView({
 
             </div>
           )}
-        </div>
 
         {/* Section 5: Orders & Shipping */}
         <div className="tg-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
