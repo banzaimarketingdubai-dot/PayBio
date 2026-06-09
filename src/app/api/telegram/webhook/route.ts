@@ -382,7 +382,7 @@ export async function POST(request: Request) {
           // Activate Premium for the buyer
           const buyer = await db.getUserByTelegramId(order.buyer_tg_id);
           if (buyer) {
-            await db.activatePremium(buyer.id, 30);
+            await db.activatePremium(buyer.id, 30, 'paid'); // admin approved card payment → full premium
             
             // Notify buyer
             const buyerMsg = lang === 'ru'
@@ -514,7 +514,7 @@ export async function POST(request: Request) {
 
       if (payload.startsWith('premium_user_id:') || payload.startsWith('premium_subscription_user_id:')) {
         const premiumUserId = payload.split(':')[1];
-        await db.activatePremium(premiumUserId, 30);
+        await db.activatePremium(premiumUserId, 30, 'paid'); // real Stars payment → full premium
         
         const isSubscription = payload.startsWith('premium_subscription_user_id:');
         const user = await db.getUserById(premiumUserId);
@@ -702,6 +702,18 @@ export async function POST(request: Request) {
           const largestPhoto = photoArray[photoArray.length - 1];
           coverUrl = `/api/telegram/file?file_id=${largestPhoto.file_id}`;
         } else if (text === '/ai') {
+          // ── AI cover generation is PAID-only (trial users are blocked) ──
+          const { canUseAI } = await import('@/lib/supabase');
+          if (!canUseAI(creator)) {
+            await tgApi('sendMessage', {
+              chat_id: chatId,
+              text: lang === 'ru'
+                ? '🔒 *Генерация AI-обложек доступна только для пользователей с полным Premium.*\n\nВаш 7-дневный пробный период не включает эту функцию. Оформите Premium-подписку, чтобы разблокировать её.'
+                : '🔒 *AI cover generation is available for full Premium subscribers only.*\n\nYour 7-day trial does not include this feature. Upgrade to Premium to unlock it.',
+              parse_mode: 'Markdown',
+            });
+            return NextResponse.json({ ok: true });
+          }
           await tgApi('sendMessage', {
             chat_id: chatId,
             text: lang === 'ru'

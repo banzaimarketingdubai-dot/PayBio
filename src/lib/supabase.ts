@@ -29,12 +29,30 @@ export interface User {
   username: string | null;
   is_premium: boolean;
   premium_until?: string | null;
+  /** How the user got premium: 'trial' = 7-day free trial, 'paid' = real payment, 'promo' = promo code */
+  premium_source?: 'trial' | 'paid' | 'promo' | null;
   payment_details?: any;
   profile_customization?: any;
   created_at: string;
   referred_by?: string | null;
   partner_tier?: number;
   ton_withdrawal_address?: string | null;
+}
+
+/**
+ * Returns true only if the user has PAID or PROMO premium (not a 7-day trial).
+ * Use this to gate AI-powered features like Reve image generation.
+ */
+export function canUseAI(user: User | null | undefined): boolean {
+  if (!user) return false;
+  if (!user.is_premium) return false;
+  // Must be paid or promo — trial is blocked
+  if (user.premium_source === 'trial') return false;
+  // Lifetime premium (premium_until === null) is always allowed
+  if (user.premium_until === null && user.is_premium) return true;
+  // Check expiry
+  if (user.premium_until && new Date(user.premium_until).getTime() < Date.now()) return false;
+  return user.premium_source === 'paid' || user.premium_source === 'promo';
 }
 
 export interface ReferralCommission {
@@ -307,6 +325,10 @@ export const db = {
     const premiumUntil = existing 
       ? existing.premium_until 
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // New users get 'trial'; existing users keep their source
+    const premiumSource: 'trial' | 'paid' | 'promo' | null = existing
+      ? (existing.premium_source ?? 'trial')
+      : 'trial';
     const customization = existing ? existing.profile_customization : null;
 
     if (isRealSupabaseConfigured) {
@@ -318,6 +340,7 @@ export const db = {
           payment_details: defaultPayment,
           is_premium: isPremium,
           premium_until: premiumUntil,
+          premium_source: premiumSource,
           profile_customization: customization
         }, { onConflict: 'telegram_id' })
         .select()
@@ -337,6 +360,7 @@ export const db = {
           username,
           is_premium: isPremium,
           premium_until: premiumUntil,
+          premium_source: premiumSource,
           payment_details: defaultPayment,
           profile_customization: customization,
           created_at: new Date().toISOString(),
@@ -351,10 +375,13 @@ export const db = {
     }
   },
 
-  async updateUserPremium(userId: string, isPremium: boolean, premiumUntil?: string | null) {
+  async updateUserPremium(userId: string, isPremium: boolean, premiumUntil?: string | null, premiumSource?: 'trial' | 'paid' | 'promo' | null) {
     const updatePayload: any = { is_premium: isPremium };
     if (premiumUntil !== undefined) {
       updatePayload.premium_until = premiumUntil;
+    }
+    if (premiumSource !== undefined) {
+      updatePayload.premium_source = isPremium ? premiumSource : null;
     }
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
@@ -370,22 +397,21 @@ export const db = {
       const user = mockDb.users.find(u => u.id === userId);
       if (user) {
         user.is_premium = isPremium;
-        if (premiumUntil !== undefined) {
-          user.premium_until = premiumUntil;
-        }
+        if (premiumUntil !== undefined) user.premium_until = premiumUntil;
+        if (premiumSource !== undefined) user.premium_source = isPremium ? premiumSource : null;
         writeMockDb(mockDb);
       }
       return user;
     }
   },
 
-  async activatePremium(userId: string, durationDays: number) {
+  async activatePremium(userId: string, durationDays: number, source: 'paid' | 'promo' = 'promo') {
     const user = await this.getUserById(userId);
     if (!user) return null;
 
     // -1 = lifetime premium (no expiry date)
     if (durationDays === -1) {
-      return await this.updateUserPremium(userId, true, null);
+      return await this.updateUserPremium(userId, true, null, source);
     }
 
     let currentPremiumUntil = user.premium_until ? new Date(user.premium_until) : new Date();
@@ -398,7 +424,7 @@ export const db = {
     currentPremiumUntil.setDate(currentPremiumUntil.getDate() + durationDays);
     const newPremiumUntilStr = currentPremiumUntil.toISOString();
     
-    return await this.updateUserPremium(userId, true, newPremiumUntilStr);
+    return await this.updateUserPremium(userId, true, newPremiumUntilStr, source);
   },
 
   async verifyAndApplyPromoCode(userId: string, code: string) {
