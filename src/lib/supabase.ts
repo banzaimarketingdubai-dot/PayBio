@@ -87,6 +87,7 @@ export interface Product {
   price_stars: number;
   content_url: string;
   cover_url: string | null;
+  banner_url?: string | null;
   product_type: string;
   sub_type?: string | null;
   created_at: string;
@@ -639,6 +640,7 @@ export const db = {
         price_stars: priceStars,
         content_url: contentUrl,
         cover_url: coverUrl || null,
+        banner_url: null,
         product_type: productType,
         sub_type: subType,
         created_at: new Date().toISOString()
@@ -698,6 +700,27 @@ export const db = {
         product.sub_type = subType;
       }
       writeMockDb(mockDb);
+      return product;
+    }
+  },
+
+  async updateProductBanner(id: string, bannerUrl: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('products')
+        .update({ banner_url: bannerUrl })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      const product = mockDb.products.find(p => p.id === id);
+      if (product) {
+        product.banner_url = bannerUrl;
+        writeMockDb(mockDb);
+      }
       return product;
     }
   },

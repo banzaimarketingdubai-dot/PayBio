@@ -145,13 +145,18 @@ export async function POST(request: Request) {
       const chatId = cb.message.chat.id;
       const data = cb.data;
       const userId = cb.from.id;
-      const langCode = cb.from.language_code?.toLowerCase() || 'en';
-      const lang = langCode.startsWith('ru') ? 'ru' : 'en';
+      const langCode = cb.from.language_code?.toLowerCase() || 'ru';
+      const lang = langCode.startsWith('en') ? 'en' : 'ru';
       const t = TRANSLATIONS[lang];
 
       let creator = await db.getUserByTelegramId(userId);
       if (!creator) {
-        creator = await db.upsertUser(userId, cb.from.username || null);
+        const initialPaymentDetails = {
+          type: 'p2p',
+          value: '1234-5678-9012-3456 (John Doe)',
+          lang: lang
+        };
+        creator = await db.upsertUser(userId, cb.from.username || null, initialPaymentDetails);
       }
 
       if (data === 'set_ton') {
@@ -248,9 +253,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true });
           }
 
-          // Update order status to PAID
-          await db.updateOrderStatus(orderId, 'PAID');
-
           // Execute legacy delivery logic
           const { fulfillOrder } = await import('@/lib/fulfillment');
           const success = await fulfillOrder(orderId);
@@ -297,9 +299,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true });
           }
 
-          // Update order status to DISPUTE
-          await db.updateOrderStatus(orderId, 'DISPUTE');
-
           // Resolve buyer username or handle
           let buyerUsername = '';
           const buyerTgId = order.buyer_tg_id;
@@ -318,46 +317,121 @@ export async function POST(request: Request) {
             console.error('Error resolving buyer username for dispute:', e);
           }
 
-          const buyerContactStr = buyerUsername ? `@${buyerUsername}` : `ID: ${buyerTgId}`;
+          const buyerChatUrl = buyerUsername 
+            ? `https://t.me/${buyerUsername}` 
+            : `tg://user?id=${buyerTgId}`;
 
-          // Reply to Creator with manual resolution instructions
-          const creatorMsg = lang === 'ru'
-            ? `⚠️ *Спор запущен.* Мы не имеем доступа к вашему личному банковскому счету. Пожалуйста, напишите покупателю напрямую, чтобы запросить чек или скриншот: ${buyerContactStr}.`
-            : `⚠️ *Dispute started.* We cannot access your personal bank account. Please message the buyer directly to request a screenshot or payment receipt: ${buyerContactStr}.`;
-
-          await tgApi('sendMessage', {
-            chat_id: chatId,
-            text: creatorMsg,
-            parse_mode: 'Markdown'
-          });
-
-          // Send a polite update to the Buyer via the bot
-          const buyerMsg = lang === 'ru'
-            ? `Автор проверяет ваш платеж вручную. Если возникнут вопросы или потребуется уточнить детали, автор свяжется с вами напрямую.`
-            : `The creator is checking your payment manually. If there are any updates or missing details, they will contact you directly.`;
-
-          await tgApi('sendMessage', {
-            chat_id: buyerTgId,
-            text: buyerMsg
-          });
-
-          // Remove buttons and update creator's message
           const oldText = cb.message?.text || cb.message?.caption || '';
-          const newText = oldText + (lang === 'ru' ? '\n\n[ ❌ Возникла проблема с оплатой ]' : '\n\n[ ❌ Payment Problem Marked ]');
-          
+          const newText = oldText + (lang === 'ru' 
+            ? '\n\n⚠️ *Выберите действие для решения проблемы:*' 
+            : '\n\n⚠️ *Select action to resolve the issue:*');
+
+          const inlineKeyboard = [
+            [
+              { 
+                text: lang === 'ru' ? '📸 Попросить скриншот' : '📸 Ask for screenshot', 
+                callback_data: `ask_receipt_${orderId}` 
+              },
+              { 
+                text: lang === 'ru' ? '💬 Написать покупателю' : '💬 Message buyer', 
+                url: buyerChatUrl 
+              }
+            ]
+          ];
+
           if (cb.message?.document || cb.message?.photo) {
             await tgApi('editMessageCaption', {
               chat_id: chatId,
               message_id: cb.message.message_id,
               caption: newText,
-              reply_markup: { inline_keyboard: [] }
+              parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: inlineKeyboard }
             });
           } else {
             await tgApi('editMessageText', {
               chat_id: chatId,
               message_id: cb.message.message_id,
               text: newText,
-              reply_markup: { inline_keyboard: [] }
+              parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: inlineKeyboard }
+            });
+          }
+        } catch (err: any) {
+          await tgApi('sendMessage', {
+            chat_id: chatId,
+            text: `❌ Error: ${err.message}`,
+          });
+        }
+      } else if (data.startsWith('ask_receipt_')) {
+        const orderId = data.substring(12); // "ask_receipt_".length === 12
+        try {
+          const order = await db.getOrderById(orderId);
+          if (!order) {
+            await tgApi('sendMessage', { chat_id: chatId, text: '❌ Order not found.' });
+            await tgApi('answerCallbackQuery', { callback_query_id: cb.id });
+            return NextResponse.json({ ok: true });
+          }
+
+          // 1. Update order status to DISPUTE
+          await db.updateOrderStatus(orderId, 'DISPUTE');
+
+          const productTitle = order.product?.title || 'Product';
+
+          // 2. Notify Buyer
+          const buyerMsg = lang === 'ru'
+            ? `⚠️ *Продавец просит прислать скриншот или чек об оплате* для подтверждения вашего заказа *"${productTitle}"*.\n\nПожалуйста, отправьте скриншот/изображение чека ответным сообщением прямо в этот чат бота.`
+            : `⚠️ *The seller is requesting a screenshot or receipt of payment* to confirm your order *"${productTitle}"*.\n\nPlease reply by sending the image/screenshot directly to this bot chat.`;
+
+          await tgApi('sendMessage', {
+            chat_id: order.buyer_tg_id,
+            text: buyerMsg,
+            parse_mode: 'Markdown'
+          });
+
+          // Resolve buyer username
+          let buyerUsername = '';
+          const buyerTgId = order.buyer_tg_id;
+          try {
+            const buyerUser = await db.getUserByTelegramId(Number(buyerTgId));
+            if (buyerUser && buyerUser.username) {
+              buyerUsername = buyerUser.username;
+            }
+          } catch (e) {}
+          const buyerChatUrl = buyerUsername 
+            ? `https://t.me/${buyerUsername}` 
+            : `tg://user?id=${buyerTgId}`;
+
+          // 3. Update Creator's message caption/text to show screenshot requested
+          const oldText = cb.message?.text || cb.message?.caption || '';
+          const cleanText = oldText.split('⚠️ *Выберите действие для решения проблемы:*')[0].split('⚠️ *Select action to resolve the issue:*')[0].trim();
+          const newText = cleanText + (lang === 'ru'
+            ? '\n\n📨 *Запрос на скриншот оплаты успешно отправлен покупателю.* Ожидаем скриншот.'
+            : '\n\n📨 *Screenshot request successfully sent to the buyer.* Waiting for receipt.');
+
+          const inlineKeyboard = [
+            [
+              { 
+                text: lang === 'ru' ? '💬 Написать покупателю' : '💬 Message buyer', 
+                url: buyerChatUrl 
+              }
+            ]
+          ];
+
+          if (cb.message?.document || cb.message?.photo) {
+            await tgApi('editMessageCaption', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              caption: newText,
+              parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: inlineKeyboard }
+            });
+          } else {
+            await tgApi('editMessageText', {
+              chat_id: chatId,
+              message_id: cb.message.message_id,
+              text: newText,
+              parse_mode: 'Markdown',
+              reply_markup: { inline_keyboard: inlineKeyboard }
             });
           }
         } catch (err: any) {
@@ -502,8 +576,8 @@ export async function POST(request: Request) {
     const userId = message.from.id;
     const username = message.from.username || null;
     const text = message.text;
-    const langCode = message.from.language_code?.toLowerCase() || 'en';
-    const lang = langCode.startsWith('ru') ? 'ru' : 'en';
+    const langCode = message.from.language_code?.toLowerCase() || 'ru';
+    const lang = langCode.startsWith('en') ? 'en' : 'ru';
     const t = TRANSLATIONS[lang];
 
     // Handle Successful Payment
@@ -569,7 +643,12 @@ export async function POST(request: Request) {
     // Check if user exists, or create them
     let creator = await db.getUserByTelegramId(userId);
     if (!creator) {
-      creator = await db.upsertUser(userId, username);
+      const initialPaymentDetails = {
+        type: 'p2p',
+        value: '1234-5678-9012-3456 (John Doe)',
+        lang: lang
+      };
+      creator = await db.upsertUser(userId, username, initialPaymentDetails);
     } else if (username && creator.username !== username) {
       // Sync username
       creator = await db.upsertUser(userId, username, creator.payment_details);

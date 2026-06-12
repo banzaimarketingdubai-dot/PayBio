@@ -179,7 +179,7 @@ export default function PartnerDashboard({
 
   return (
     <div style={{
-      padding: '16px 20px 40px',
+      padding: 'calc(var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px)) + 12px) 20px 40px',
       color: 'var(--tg-text)',
       minHeight: '100vh',
       display: 'flex',
@@ -189,14 +189,11 @@ export default function PartnerDashboard({
     }}>
       
       {/* HEADER */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>{dt.title}</h2>
-          <span style={{ fontSize: '11px', color: 'var(--tg-hint)', opacity: 0.8 }}>PayBio Affiliate Program</span>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <button 
           onClick={() => setCurrentScreen('CATALOG')}
           style={{
+            alignSelf: 'flex-start',
             background: 'rgba(255,255,255,0.06)',
             border: '1px solid rgba(255,255,255,0.05)',
             borderRadius: '12px',
@@ -219,6 +216,11 @@ export default function PartnerDashboard({
           </svg>
           {dt.back}
         </button>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>{dt.title}</h2>
+          <span style={{ fontSize: '11px', color: 'var(--tg-hint)', opacity: 0.8 }}>PayBio Affiliate Program</span>
+        </div>
       </div>
 
       {loading ? (

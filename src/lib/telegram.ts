@@ -26,18 +26,43 @@ export async function sendTelegramNotification(chatId: number | string, text: st
 export async function sendTelegramPhoto(chatId: number | string, photo: string, caption?: string, replyMarkup?: any) {
   if (!TELEGRAM_BOT_TOKEN) return null;
   try {
-    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        photo,
-        caption,
-        parse_mode: 'Markdown',
-        reply_markup: replyMarkup,
-      }),
-    });
-    return await res.json();
+    if (photo.startsWith('data:image')) {
+      const mimeMatch = photo.match(/^data:([^;]+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+      const base64Data = photo.replace(/^data:[^;]+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const fileBlob = new Blob([buffer], { type: mimeType });
+
+      const formData = new FormData();
+      formData.append('chat_id', String(chatId));
+      formData.append('photo', fileBlob, 'receipt.png');
+      if (caption) {
+        formData.append('caption', caption);
+      }
+      formData.append('parse_mode', 'Markdown');
+      if (replyMarkup) {
+        formData.append('reply_markup', typeof replyMarkup === 'string' ? replyMarkup : JSON.stringify(replyMarkup));
+      }
+
+      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+        method: 'POST',
+        body: formData,
+      });
+      return await res.json();
+    } else {
+      const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo,
+          caption,
+          parse_mode: 'Markdown',
+          reply_markup: replyMarkup,
+        }),
+      });
+      return await res.json();
+    }
   } catch (err) {
     console.error(`Error sending Telegram photo to ${chatId}:`, err);
     return null;

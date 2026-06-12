@@ -60,6 +60,24 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       second: '2-digit'
     }) + ' MSK';
 
+    const paymentMethod = order.payment_method || 'p2p';
+    const tonAmount = (product.price_fiat / 7.0).toFixed(2);
+    const creatorWallet = creator?.payment_details?.ton || 'No TON wallet configured';
+
+    let buyerReceiptText = '';
+    let creatorReceiptText = '';
+
+    if (paymentMethod.startsWith('ton')) {
+      buyerReceiptText = `✅ *Платеж получен на кошелек.*`;
+      creatorReceiptText = `Вы получили ${tonAmount} TON от ${buyerName} за продукт "${product.title}" на Ваш кошелек "${creatorWallet}"`;
+    } else if (paymentMethod.startsWith('stars')) {
+      buyerReceiptText = `✅ *Платеж получен на баланс Telegram.*`;
+      creatorReceiptText = `Вы получили ${product.price_stars} Stars от ${buyerName} за продукт "${product.title}" на Ваш баланс Telegram`;
+    } else {
+      buyerReceiptText = `🎉 *Спасибо за покупку!*`;
+      creatorReceiptText = `💰 *Продажа цифрового товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat}\n📅 *Дата и время:* ${formattedDateTime}`;
+    }
+
     const productType = product.product_type || 'DIGITAL';
     const isRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
     const promoMarkup = {
@@ -83,13 +101,13 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
         await sendTelegramDocument(
           buyerTgId,
           fileId,
-          `🎉 *Спасибо за покупку!* \n\nВы успешно приобрели книгу/файл: *"${product.title}"*.`,
+          `${buyerReceiptText} \n\nВы успешно приобрели книгу/файл: *"${product.title}"*.`,
           promoMarkup
         );
       } else {
         await sendTelegramNotification(
           buyerTgId,
-          `🎉 *Спасибо за покупку!* \n\nВы успешно приобрели товар *"${product.title}"*.\n\n🔗 *Ссылка для скачивания:* ${contentUrl}`,
+          `${buyerReceiptText} \n\nВы успешно приобрели товар *"${product.title}"*.\n\n🔗 *Ссылка для скачивания:* ${contentUrl}`,
           promoMarkup
         );
       }
@@ -98,47 +116,116 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       if (creator) {
         await sendTelegramNotification(
           creator.telegram_id,
-          `💰 *Продажа цифрового товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}`
+          creatorReceiptText
         );
       }
     } else if (productType === 'VOUCHER') {
-      // Offline tickets & vouchers or Physical Goods
-      const qrData = `pb_v_${Math.random().toString(36).substring(2, 15)}_${orderId.substring(0, 8)}`;
-      await db.createVoucher(orderId, String(buyerTgId), qrData);
-
       const isPhysical = product.sub_type === 'PHYSICAL';
 
       if (isPhysical) {
+        // Offline tickets & vouchers or Physical Goods
+        const qrData = `pb_v_${Math.random().toString(36).substring(2, 15)}_${orderId.substring(0, 8)}`;
+        await db.createVoucher(orderId, String(buyerTgId), qrData);
+
         // Notify buyer to fill delivery details
         await sendTelegramNotification(
           buyerTgId,
-          `🎉 *Спасибо за оплату!* \n\nВы успешно оплатили товар *"${product.title}"*.\n\nПожалуйста, откройте магазин в Telegram и заполните ваши адресные данные доставки, чтобы продавец мог отправить ваш заказ.`,
+          `${buyerReceiptText} \n\nВы успешно оплатили товар *"${product.title}"*.\n\nПожалуйста, откройте магазин в Telegram и заполните ваши адресные данные доставки, чтобы продавец мог отправить ваш заказ.`,
           promoMarkup
         );
 
         // Notify Creator
         if (creator) {
+          const creatorVoucherText = paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+            ? creatorReceiptText
+            : `📦 *Оплата физического товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nПокупатель сейчас заполняет адресные данные доставки в приложении.`;
+
           await sendTelegramNotification(
             creator.telegram_id,
-            `📦 *Оплата физического товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nПокупатель сейчас заполняет адресные данные доставки в приложении.`
+            creatorVoucherText
           );
         }
       } else {
-        // Generate public QR code link
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}`;
+        // Retrieve ticket details
+        const approvedCount = await db.getApprovedOrderCount(product.id);
+        const ticketNumber = approvedCount;
+
+        let maxQuantity: number | null = null;
+        try {
+          if (product.content_url) {
+            const parsed = JSON.parse(product.content_url);
+            if (parsed && typeof parsed.max_quantity === 'number') {
+              maxQuantity = parsed.max_quantity;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        const sellerName = creator 
+          ? (creator.username ? `@${creator.username}` : creator.profile_customization?.store_name || `ID: ${creator.telegram_id}`) 
+          : 'Unknown';
+
+        const qrPayloadObj = {
+          seller: sellerName,
+          ticket_no: ticketNumber,
+          product: product.title,
+          order_id: orderId,
+          date: formattedDateTime
+        };
+        const qrData = JSON.stringify(qrPayloadObj);
+        
+        await db.createVoucher(orderId, String(buyerTgId), qrData);
+
+        // Generate public QR code link with encoded QR payload
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+
+        let ticketDetailsText = isRussian
+          ? `🎟️ *Ваш билет на событие/услугу* \n\n` +
+            `📦 *Событие:* "${product.title}"\n` +
+            `👤 *Организатор:* ${sellerName}\n` +
+            `📅 *Дата и время покупки:* ${formattedDateTime}\n`
+          : `🎟️ *Your Event/Service Ticket* \n\n` +
+            `📦 *Event:* "${product.title}"\n` +
+            `👤 *Organizer:* ${sellerName}\n` +
+            `📅 *Purchase Date & Time:* ${formattedDateTime}\n`;
+
+        if (maxQuantity !== null) {
+          ticketDetailsText += isRussian
+            ? `🔢 *Порядковый номер билета:* №${ticketNumber} (из ${maxQuantity})\n`
+            : `🔢 *Ticket Number:* No. ${ticketNumber} (out of ${maxQuantity})\n`;
+        }
+
+        ticketDetailsText += isRussian
+          ? `\nПредъявите QR-код выше организатору для сканирования и подтверждения входа.`
+          : `\nPresent the QR code above to the organizer for scanning and entry confirmation.`;
 
         await sendTelegramPhoto(
           buyerTgId,
           qrUrl,
-          `🎟️ *Ваш билет готов!*\n\nВы успешно приобрели билет на услугу/событие: *"${product.title}"*.\n\nПредъявите этот QR-код организатору для сканирования и подтверждения входа.`,
+          ticketDetailsText,
           promoMarkup
         );
 
         // Notify Creator
         if (creator) {
+          let creatorVoucherTicketText = paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+            ? creatorReceiptText
+            : `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`;
+
+          if (maxQuantity !== null) {
+            creatorVoucherTicketText += isRussian
+              ? `🔢 *Порядковый номер билета:* №${ticketNumber} (из ${maxQuantity})\n\n`
+              : `🔢 *Ticket Number:* No. ${ticketNumber} (out of ${maxQuantity})\n\n`;
+          }
+
+          creatorVoucherTicketText += isRussian
+            ? `Ваучер успешно сгенерирован и отправлен покупателю.`
+            : `Voucher successfully generated and sent to the buyer.`;
+
           await sendTelegramNotification(
             creator.telegram_id,
-            `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nВаучер успешно сгенерирован и отправлен покупателю.`
+            creatorVoucherTicketText
           );
         }
       }
@@ -174,14 +261,18 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
         await sendTelegramNotification(
           buyerTgId,
-          `📅 *Запись подтверждена!*\n\nВы успешно записались на консультацию: *"${product.title}"*.\n\n⏰ *Время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})\n\nОрганизатор свяжется с вами или предоставит ссылку на звонок ближе к назначенному времени.`,
+          `${buyerReceiptText}\n\nВы успешно записались на консультацию: *"${product.title}"*.\n\n⏰ *Время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})\n\nОрганизатор свяжется с вами или предоставит ссылку на звонок ближе к назначенному времени.`,
           promoMarkup
         );
 
         if (creator) {
+          const creatorBookingText = paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+            ? creatorReceiptText + `\n⏰ *Забронированное время:* ${formattedTime}`
+            : `📅 *Новая запись на консультацию!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Услуга:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n⏰ *Забронированное время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`;
+
           await sendTelegramNotification(
             creator.telegram_id,
-            `📅 *Новая запись на консультацию!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Услуга:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n⏰ *Забронированное время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`
+            creatorBookingText
           );
         }
       }

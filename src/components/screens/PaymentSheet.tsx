@@ -32,7 +32,8 @@ export interface PaymentSheetProps {
   verifyError: string | null;
   setVerifyError: (error: string | null) => void;
   isProcessingPayment: boolean;
-  handleClaimPayment: () => void;
+  handleClaimPayment: (receiptUrl?: string) => void;
+  activeOrderId: string | null;
 }
 
 export default function PaymentSheet({
@@ -63,15 +64,34 @@ export default function PaymentSheet({
   verifyError,
   setVerifyError,
   isProcessingPayment,
-  handleClaimPayment
+  handleClaimPayment,
+  activeOrderId
 }: PaymentSheetProps) {
   const [showInstructions, setShowInstructions] = React.useState(true);
+  const [screenshot, setScreenshot] = React.useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (isOpen) {
       setShowInstructions(true);
+      setScreenshot(null);
     }
   }, [isOpen]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setScreenshot(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
 
   if (!isOpen) return null;
 
@@ -80,19 +100,96 @@ export default function PaymentSheet({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '4px' }}>
         {!verifying && !verifySuccess && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <button
-              onClick={handleClaimPayment}
-              className="btn-primary"
-              disabled={hasBookingConflict}
+            {/* Upload Zone */}
+            <div 
+              className={`upload-zone ${screenshot ? 'has-file' : ''}`}
+              onClick={triggerFileInput}
               style={{
-                background: !hasBookingConflict ? 'var(--tg-accent)' : undefined,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '20px',
+                minHeight: '120px'
+              }}
+            >
+              <input 
+                type="file" 
+                accept="image/*" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                style={{ display: 'none' }} 
+              />
+              
+              {screenshot ? (
+                <>
+                  <div style={{ position: 'relative', width: '100%', maxHeight: '180px', display: 'flex', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <img 
+                      src={screenshot} 
+                      style={{ maxHeight: '150px', borderRadius: '8px', objectFit: 'contain' }} 
+                      alt="Payment screenshot" 
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setScreenshot(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      style={{
+                        position: 'absolute',
+                        top: '-8px',
+                        right: '0px',
+                        background: 'var(--tg-red)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '24px',
+                        height: '24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '12px',
+                        zIndex: 10
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--tg-green)', fontWeight: 600 }}>
+                    {lang === 'ru' ? '✓ Скриншот загружен' : '✓ Screenshot uploaded'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: '32px' }}>📸</span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tg-text)' }}>
+                    {lang === 'ru' ? 'Загрузить скриншот платежа' : 'Upload payment screenshot'}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>
+                    {lang === 'ru' ? 'Нажмите, чтобы выбрать файл (JPEG, PNG)' : 'Tap to select file (JPEG, PNG)'}
+                  </span>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => handleClaimPayment(screenshot || undefined)}
+              className="btn-primary"
+              disabled={hasBookingConflict || !screenshot}
+              style={{
+                background: !hasBookingConflict && screenshot ? 'var(--tg-accent)' : 'var(--tg-hint)',
                 height: '44px',
                 fontSize: '14px',
                 fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '8px'
+                gap: '8px',
+                cursor: !hasBookingConflict && screenshot ? 'pointer' : 'not-allowed'
               }}
             >
               <span>⚡️</span>
@@ -115,7 +212,7 @@ export default function PaymentSheet({
                 ❌ {verifyError}
                 <button
                   type="button"
-                  onClick={handleClaimPayment}
+                  onClick={() => handleClaimPayment(screenshot || undefined)}
                   style={{ marginLeft: '8px', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '12px' }}
                 >
                   {lang === 'ru' ? 'Повторить' : 'Retry'}
@@ -813,6 +910,25 @@ export default function PaymentSheet({
                             </button>
                           </div>
                         </div>
+
+                        {activeOrderId && (
+                          <div style={{ background: 'var(--tg-secondary-bg)', padding: '12px', borderRadius: '12px', border: '1px solid var(--tg-border)' }}>
+                            <p style={{ fontSize: '11px', color: 'var(--tg-hint)', textTransform: 'uppercase', fontWeight: 600, margin: '0 0 6px 0' }}>
+                              {lang === 'ru' ? 'Комментарий к переводу (Обязательно):' : 'Payment Comment / Memo (Required):'}
+                            </p>
+                            <div className="copy-block" style={{ background: 'var(--tg-bg)' }}>
+                              <span className="copy-value" style={{ fontSize: '11px', fontFamily: 'monospace' }}>{activeOrderId}</span>
+                              <button className={`copy-btn ${copied ? 'copied' : ''}`} onClick={() => copy(activeOrderId)}>
+                                {copied ? '✓' : (lang === 'ru' ? 'Коп.' : 'Copy')}
+                              </button>
+                            </div>
+                            <p style={{ fontSize: '10px', color: 'var(--tg-red)', margin: '6px 0 0 0', fontWeight: 600 }}>
+                              ⚠️ {lang === 'ru' 
+                                ? 'Вставьте этот комментарий при переводе в кошельке, иначе платеж не зачислится автоматически!' 
+                                : 'You MUST paste this comment when sending in your wallet, or the payment won\'t credit automatically!'}
+                            </p>
+                          </div>
+                        )}
 
                         <div style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',

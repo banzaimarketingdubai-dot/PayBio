@@ -56,7 +56,7 @@ interface ProductListScreenProps {
   setStoreBanner: (banner: string) => void;
   socialLinks: { youtube?: string; instagram?: string; tiktok?: string; vk?: string; max?: string; };
   setSocialLinks: (links: any) => void;
-  onAddProduct: (title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<boolean>;
+  onAddProduct: (title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<any>;
   onOpenPremium: () => void;
   lang: 'en' | 'ru';
   setLang: (lang: 'en' | 'ru') => void;
@@ -83,6 +83,8 @@ interface ProductListScreenProps {
   setCreator: (creator: Creator | null | ((prev: Creator | null) => Creator | null)) => void;
   isDemoMode?: boolean;
   onActivateRealStore?: () => void;
+  buyerHasStore?: boolean;
+  botUsername?: string;
 }
 
 export const ProductListScreen = memo(function ProductListScreen({
@@ -125,7 +127,9 @@ export const ProductListScreen = memo(function ProductListScreen({
   buyerTgId,
   onTriggerOnboarding,
   isDemoMode = false,
-  onActivateRealStore
+  onActivateRealStore,
+  buyerHasStore = false,
+  botUsername
 }: ProductListScreenProps) {
   // In demo mode, treat as buyer for header controls, but owner can preview catalog items.
   const isOwner = isDemoMode ? false : rawIsOwner;
@@ -427,6 +431,10 @@ export const ProductListScreen = memo(function ProductListScreen({
   const [isGeneratingPromo, setIsGeneratingPromo] = useState(false);
   const [selectedPromoProduct, setSelectedPromoProduct] = useState<any>(null);
   const [promoCopied, setPromoCopied] = useState(false);
+  const [promoNiche, setPromoNiche] = useState('General');
+  const [isGeneratingStoryCover, setIsGeneratingStoryCover] = useState(false);
+  const [storyCoverUrl, setStoryCoverUrl] = useState('');
+  const [storyPrompt, setStoryPrompt] = useState('');
 
   // States for Advanced Promo Banner Editor
   const [promoBgUrl, setPromoBgUrl] = useState('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80');
@@ -479,11 +487,63 @@ export const ProductListScreen = memo(function ProductListScreen({
     }
   };
 
+  const getNichePromptTemplate = (nicheName: string, product: any) => {
+    if (!product) return '';
+    const title = product.title;
+    const desc = product.description || '';
+    const priceStr = product.price_fiat
+      ? `$${product.price_fiat}`
+      : product.price_stars
+      ? `${product.price_stars} Stars`
+      : 'Free';
+    
+    let style = 'Minimalist, clean, high-contrast, studio lighting';
+    let textColor = 'White';
+    
+    if (nicheName === 'Psychology') {
+      style = 'soft pastel tones, deep focus, warm ambient light, minimalist, clean';
+      textColor = 'Black';
+    } else if (nicheName === 'Crypto') {
+      style = 'dark mode sleek neon accents, ultra modern, tech, high-contrast';
+      textColor = 'White';
+    } else if (nicheName === 'Fitness') {
+      style = 'aggressive contrast, high energy, bold shadows, dramatic studio lighting';
+      textColor = 'White';
+    } else if (nicheName === 'Finance') {
+      style = 'professional corporate design, deep navy background, gold accents, clean lines';
+      textColor = 'White';
+    } else if (nicheName === 'Tech') {
+      style = 'ultramodern gadget photography background, cool white led studio lights';
+      textColor = 'White';
+    } else if (nicheName === 'Art') {
+      style = 'avant-garde abstract design, vibrant color splashes, creative typography focus';
+      textColor = 'Black';
+    }
+
+    return `A professional, high-end commercial product banner for Telegram. 
+Subject: ${desc || title} (Niche: ${nicheName}). 
+Style: ${style}, high-contrast. 
+Background: Soft-focus, relevant to the product niche to ensure text readability.
+
+TEXT_OVERLAY_INSTRUCTIONS:
+- Headline: '${title}' (Position: Center, Font: Bold Sans-Serif, Color: ${textColor})
+- Subline: 'Price: ${priceStr}' (Position: Bottom-Right, Font: Medium Sans-Serif, Color: ${textColor === 'White' ? 'White with subtle shadow' : 'Dark Gray'} for readability)
+
+CONSTRAINTS:
+- No text blurring.
+- Sharp edges for typography.
+- Maximum readability score.
+- Aspect ratio: 16:9.`;
+  };
+
   const handleGeneratePromo = async (p: any) => {
     setSelectedPromoProduct(p);
     setIsPromoOpen(true);
     setIsGeneratingPromo(true);
     setPromoText('');
+    setStoryCoverUrl(p.banner_url || '');
+    setPromoNiche('General');
+    setStoryPrompt(getNichePromptTemplate('General', p));
 
     if (p.cover_url) {
       setPromoBgUrl(p.cover_url);
@@ -504,6 +564,129 @@ export const ProductListScreen = memo(function ProductListScreen({
     } finally {
       setIsGeneratingPromo(false);
     }
+  };
+
+  const handleGenerateStoryCover = async () => {
+    if (!selectedPromoProduct || !creator) return;
+    setIsGeneratingStoryCover(true);
+    try {
+      const res = await fetch('/api/generate-product-banner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: selectedPromoProduct.id,
+          niche: promoNiche,
+          user_tg_id: creator.telegram_id,
+          custom_prompt: storyPrompt
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.banner_url) {
+        setStoryCoverUrl(data.banner_url);
+        // Update product reference banner_url directly
+        selectedPromoProduct.banner_url = data.banner_url;
+        showAlert(lang === 'ru' ? '✓ Обложка сторис сгенерирована!' : '✓ Story cover generated!');
+      } else {
+        const errText = data.error || '';
+        const isPremiumError = res.status === 403 || errText.includes('Premium') || errText.includes('premium') || errText.includes('Trial') || errText.includes('trial');
+        
+        if (isPremiumError) {
+          if (typeof window !== 'undefined') {
+            const WebApp = (window as any).Telegram?.WebApp;
+            if (WebApp?.showPopup) {
+              WebApp.showPopup({
+                title: lang === 'ru' ? 'Требуется Premium' : 'Premium Required',
+                message: lang === 'ru' 
+                  ? 'Генерация обложек доступна только на Premium тарифе. Хотите активировать Premium?'
+                  : 'AI banner generation is exclusive to Premium tier. Would you like to activate Premium?',
+                buttons: [
+                  { id: 'buy', type: 'default', text: lang === 'ru' ? 'Купить Premium' : 'Buy Premium' },
+                  { id: 'cancel', type: 'cancel', text: lang === 'ru' ? 'Закрыть' : 'Close' }
+                ]
+              }, (buttonId: string) => {
+                if (buttonId === 'buy') {
+                  onOpenPremium();
+                }
+              });
+              return;
+            }
+          }
+          const confirmMsg = lang === 'ru'
+            ? 'Генерация обложек доступна только на Premium тарифе. Перейти к покупке Premium?'
+            : 'AI banner generation is exclusive to Premium tier. Go to Buy Premium?';
+          if (window.confirm(confirmMsg)) {
+            onOpenPremium();
+          }
+        } else {
+          showAlert(errText || 'Failed to generate story cover.');
+        }
+      }
+    } catch (err: any) {
+      showAlert(err.message || 'Error generating cover.');
+    } finally {
+      setIsGeneratingStoryCover(false);
+    }
+  };
+
+  const handleShareToStories = () => {
+    if (!storyCoverUrl) {
+      showAlert(lang === 'ru' ? 'Сначала сгенерируйте обложку!' : 'Please generate the cover first!');
+      return;
+    }
+    if (!creator || !selectedPromoProduct) return;
+
+    const bot = botUsername || 'PaybioBot';
+    const storefrontUrl = `https://t.me/${bot}/app?startapp=p_${selectedPromoProduct.id}_ref_${creator.telegram_id}`;
+
+    if (typeof window !== 'undefined') {
+      const WebApp = (window as any).Telegram?.WebApp;
+      if (WebApp?.shareToStory) {
+        try {
+          WebApp.shareToStory(storyCoverUrl, {
+            text: promoText,
+            widget_link: {
+              url: storefrontUrl,
+              name: lang === 'ru' ? 'Купить' : 'Buy'
+            }
+          });
+          return;
+        } catch (e) {
+          console.error('Failed to call shareToStory', e);
+        }
+      }
+    }
+
+    // Fallback if not inside Telegram
+    if (navigator.share) {
+      navigator.share({
+        title: selectedPromoProduct.title,
+        text: `${promoText}\n\n${storefrontUrl}`,
+        url: storefrontUrl
+      }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(`${promoText}\n\n${storefrontUrl}`).then(() => {
+        showAlert(lang === 'ru' ? '✓ Текст и ссылка скопированы в буфер!' : '✓ Text and link copied to clipboard!');
+      });
+    }
+  };
+
+  const handleCopyProductLink = () => {
+    if (!selectedPromoProduct || !creator) return;
+    const bot = botUsername || 'PaybioBot';
+    const storefrontUrl = `https://t.me/${bot}/app?startapp=p_${selectedPromoProduct.id}_ref_${creator.telegram_id}`;
+    navigator.clipboard.writeText(storefrontUrl).then(() => {
+      showAlert(lang === 'ru' ? '✓ Ссылка на товар скопирована!' : '✓ Product link copied!');
+    });
+  };
+
+  const handleDownloadBanner = () => {
+    if (!storyCoverUrl) return;
+    const a = document.createElement('a');
+    a.href = storyCoverUrl;
+    a.download = `story_${selectedPromoProduct?.title || 'banner'}.png`;
+    a.target = '_blank';
+    a.click();
+    showAlert(lang === 'ru' ? '✓ Загрузка началась!' : '✓ Download started!');
   };
 
   const handleCopyPromo = () => {
@@ -708,7 +891,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         });
       }
 
-      let success = false;
+      let success: any = false;
       if (editingProduct) {
         success = await onUpdateProduct(
           editingProduct.id,
@@ -737,6 +920,8 @@ export const ProductListScreen = memo(function ProductListScreen({
       }
 
       if (success) {
+        const addedProduct = editingProduct ? null : success;
+
         setProdTitle('');
         setProdDesc('');
         setProdPriceUSD('');
@@ -750,6 +935,39 @@ export const ProductListScreen = memo(function ProductListScreen({
         setProdType('DIGITAL');
         setEditingProduct(null);
         setIsAddProductOpen(false);
+
+        if (addedProduct) {
+          setTimeout(() => {
+            const titleMsg = lang === 'ru' ? 'Продвижение в Stories 🚀' : 'Promote in Stories 🚀';
+            const textMsg = lang === 'ru'
+              ? 'Telegram Stories — это отличный способ привлечь покупателей! У нас есть встроенный редактор историй с автогенерацией обложки и ИИ-копирайтингом. Хотите создать сторис сейчас?'
+              : 'Telegram Stories are a great way to attract customers! We have a built-in stories editor with auto cover design and AI copywriting. Would you like to create a story now?';
+            
+            if (typeof window !== 'undefined') {
+              const WebApp = (window as any).Telegram?.WebApp;
+              if (WebApp?.showPopup) {
+                WebApp.showPopup({
+                  title: titleMsg,
+                  message: textMsg,
+                  buttons: [
+                    { id: 'go', type: 'default', text: lang === 'ru' ? 'Перейти' : 'Go to Editor' },
+                    { id: 'cancel', type: 'cancel', text: lang === 'ru' ? 'Позже' : 'Later' }
+                  ]
+                }, (buttonId: string) => {
+                  if (buttonId === 'go') {
+                    handleGeneratePromo(addedProduct);
+                  }
+                });
+                return;
+              }
+            }
+
+            const ok = window.confirm(`${titleMsg}\n\n${textMsg}`);
+            if (ok) {
+              handleGeneratePromo(addedProduct);
+            }
+          }, 350);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -968,6 +1186,55 @@ export const ProductListScreen = memo(function ProductListScreen({
         }
         return null;
       })()}
+
+      {/* Ticker Orange Marquee for buyers who do not have a store */}
+      {!isOwner && !buyerHasStore && (
+        <div 
+          onClick={() => {
+            const actualBotUsername = botUsername || 'PaybioBot';
+            handleOpenLink(`https://t.me/${actualBotUsername}`);
+          }}
+          style={{
+            background: 'var(--tg-orange, #ff9500)',
+            color: '#fff',
+            fontSize: '13px',
+            fontWeight: 700,
+            padding: '8px 0',
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            position: 'relative',
+            zIndex: 102,
+            boxShadow: '0 2px 8px rgba(255,149,0,0.2)',
+            display: 'flex',
+            alignItems: 'center'
+          }}
+        >
+          <div style={{
+            display: 'inline-block',
+            whiteSpace: 'nowrap',
+            animation: 'marquee 25s linear infinite',
+            willChange: 'transform'
+          }}>
+            <span style={{ paddingRight: '2rem' }}>
+              {lang === 'ru' 
+                ? '🚀 Создайте свой магазин за 1 минуту! Продавайте файлы, билеты и бронируйте время напрямую в Telegram. Без комиссий с моментальными выплатами! Нажмите, чтобы запустить бота ✨' 
+                : '🚀 Create your own storefront in 1 minute! Sell files, tickets, and book time directly in Telegram. Zero commissions with instant payouts! Click to launch bot ✨'}
+            </span>
+            <span style={{ paddingRight: '2rem' }}>
+              {lang === 'ru' 
+                ? '🚀 Создайте свой магазин за 1 минуту! Продавайте файлы, билеты и бронируйте время напрямую в Telegram. Без комиссий с моментальными выплатами! Нажмите, чтобы запустить бота ✨' 
+                : '🚀 Create your own storefront in 1 minute! Sell files, tickets, and book time directly in Telegram. Zero commissions with instant payouts! Click to launch bot ✨'}
+            </span>
+          </div>
+          <style>{`
+            @keyframes marquee {
+              0% { transform: translate3d(0, 0, 0); }
+              100% { transform: translate3d(-50%, 0, 0); }
+            }
+          `}</style>
+        </div>
+      )}
 
       {/* ─── BANNER ─── */}
       <div
@@ -1211,76 +1478,6 @@ export const ProductListScreen = memo(function ProductListScreen({
 
       {/* Catalog items container */}
       <div style={{ padding: '0 16px 80px' }}>
-        {/* Buyer Storefront Conversion Banner */}
-        {!isOwner && (
-          <div style={{
-            background: 'linear-gradient(135deg, #2b8cf3 0%, #0056b3 100%)',
-            color: '#fff',
-            borderRadius: '16px',
-            padding: '20px',
-            marginBottom: '24px',
-            boxShadow: '0 6px 20px rgba(43, 140, 243, 0.25)',
-            position: 'relative',
-            overflow: 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px'
-          }} className="animate-scale-in">
-            <div style={{
-              position: 'absolute', right: '-20px', top: '-20px',
-              width: '100px', height: '100px', borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)', pointerEvents: 'none'
-            }} />
-            <div style={{
-              position: 'absolute', right: '40px', bottom: '-30px',
-              width: '80px', height: '80px', borderRadius: '50%',
-              background: 'rgba(255,255,255,0.05)', pointerEvents: 'none'
-            }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '24px' }}>🚀</span>
-              <h4 style={{ fontSize: '15px', fontWeight: 800, margin: 0, letterSpacing: '-0.3px' }}>
-                {lang === 'ru' ? 'Создайте свой магазин за 1 минуту!' : 'Create your own storefront in 1 minute!'}
-              </h4>
-            </div>
-            <p style={{ fontSize: '12.5px', opacity: 0.9, lineHeight: 1.45, margin: 0 }}>
-              {lang === 'ru'
-                ? 'Продавайте файлы, билеты и бронируйте время напрямую в Telegram. Без комиссий с моментальными выплатами на ваш TON-кошелек или карту!'
-                : 'Sell files, tickets, and book time directly in Telegram. Zero commissions with instant payouts to your TON wallet or card!'}
-            </p>
-            <button
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  const botUsername = 'PaybioBot';
-                  const WebApp = (window as any).Telegram?.WebApp;
-                  if (WebApp?.openTelegramLink) {
-                    WebApp.openTelegramLink(`https://t.me/${botUsername}`);
-                  } else {
-                    window.open(`https://t.me/${botUsername}`, '_blank');
-                  }
-                }
-              }}
-              style={{
-                alignSelf: 'flex-start',
-                background: '#fff',
-                color: '#0056b3',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '8px 14px',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
-              }}
-            >
-              <span>✨</span>
-              <span>{lang === 'ru' ? 'Запустить бота' : 'Launch Bot'}</span>
-            </button>
-          </div>
-        )}
-
         <p className="section-header" style={{ marginBottom: '14px' }}>{t.storeCatalog}</p>
 
         {/* Promoted / Starred horizontal gallery */}
@@ -1951,9 +2148,9 @@ export const ProductListScreen = memo(function ProductListScreen({
         </div>
       </div>
 
-      {/* ─── BOTTOM SHEET: AI PROMO GENERATOR ─── */}
+      {/* ─── BOTTOM SHEET: AI PROMO GENERATOR (STORIES WORKSTATION) ─── */}
       <div className={`bottom-sheet-overlay ${isPromoOpen ? 'active' : ''}`} onClick={() => setIsPromoOpen(false)}>
-        <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="bottom-sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflowY: 'auto' }}>
           <div className="bottom-sheet-handle" />
           <button
             type="button"
@@ -1967,48 +2164,270 @@ export const ProductListScreen = memo(function ProductListScreen({
           >
             ✕
           </button>
-          <h2 className="bottom-sheet-title">📢 {lang === 'ru' ? 'ИИ Промо-пост' : 'AI Promo Post'}</h2>
+          <h2 className="bottom-sheet-title">📢 {lang === 'ru' ? 'Рабочая станция Stories' : 'Telegram Stories Workstation'}</h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-            <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
-              {lang === 'ru' ? 'Сгенерированный ИИ продающий пост:' : 'AI-generated high-converting promo post:'}
-            </p>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px', paddingBottom: '24px' }}>
+            
+            {/* 1. Stories Preview phone mockup */}
             <div style={{
-              background: 'var(--tg-secondary-bg)',
-              border: '1px solid var(--tg-border)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '14px',
-              minHeight: '80px',
-              fontSize: '14.5px',
-              color: 'var(--tg-text)',
-              lineHeight: 1.5,
-              position: 'relative'
+              width: '140px',
+              height: '248px',
+              borderRadius: '18px',
+              border: '2px solid var(--tg-border)',
+              background: '#131920',
+              margin: '0 auto',
+              position: 'relative',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+              borderImage: 'linear-gradient(135deg, var(--tg-accent) 0%, rgba(255,255,255,0.1) 100%) 1'
             }}>
-              {isGeneratingPromo ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', justifyContent: 'center', height: '80px' }}>
-                  <div className="spinner" style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.1)', borderTop: '2px solid var(--tg-button)' }} />
-                  <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Генерация...' : 'Generating...'}</span>
+              {isGeneratingStoryCover ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', textAlign: 'center', padding: '10px' }}>
+                  <div className="spinner" style={{ width: '24px', height: '24px', border: '2px solid rgba(255,255,255,0.1)', borderTop: '2px solid var(--tg-accent)' }} />
+                  <span style={{ fontSize: '9px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Отрисовка...' : 'Designing...'}</span>
+                </div>
+              ) : storyCoverUrl ? (
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                  <img
+                    src={storyCoverUrl}
+                    alt="Story Banner"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  {/* Dark overlay for top and bottom shadows */}
+                  <div style={{
+                    position: 'absolute', top: 0, left: 0, right: 0, height: '40px',
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.4), transparent)', zIndex: 1
+                  }} />
+                  <div style={{
+                    position: 'absolute', bottom: 0, left: 0, right: 0, height: '50px',
+                    background: 'linear-gradient(to top, rgba(0,0,0,0.5), transparent)', zIndex: 1
+                  }} />
+                  
+                  {/* Badge: Reve 2.0 */}
+                  <span style={{
+                    position: 'absolute', top: '8px', right: '8px',
+                    background: 'rgba(0, 0, 0, 0.6)', color: '#ffc107',
+                    fontSize: '6.5px', fontWeight: 'bold', padding: '2px 5px',
+                    borderRadius: '4px', letterSpacing: '0.5px', zIndex: 2
+                  }}>
+                    REVE 2.0
+                  </span>
+
+                  {/* Simulated story interactive link widget */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '16px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    color: '#0088cc',
+                    padding: '4px 10px',
+                    borderRadius: '12px',
+                    fontSize: '9px',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '3px',
+                    whiteSpace: 'nowrap',
+                    zIndex: 2
+                  }}>
+                    🔗 {lang === 'ru' ? 'Купить' : 'Buy'}
+                  </div>
                 </div>
               ) : (
-                <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{promoText}</p>
+                <div style={{ padding: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--tg-hint)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '24px' }}>🎨</span>
+                  <span>{lang === 'ru' ? 'Обложка не сгенерирована' : 'No Cover Generated'}</span>
+                </div>
               )}
             </div>
 
-            {!isGeneratingPromo && promoText && (
-              <button
-                onClick={handleCopyPromo}
-                className="btn-primary"
-                style={{
-                  background: promoCopied ? 'var(--tg-green)' : 'var(--tg-button)',
-                  color: 'var(--tg-button-text)'
-                }}
-              >
-                {promoCopied
-                  ? (lang === 'ru' ? '✓ Скопировано!' : '✓ Copied!')
-                  : (lang === 'ru' ? '📋 Скопировать пост' : '📋 Copy Post')}
-              </button>
+            {/* 2. Premium Check Alert */}
+            {!isCreatorPremium && (
+              <div style={{
+                padding: '10px 12px',
+                background: 'rgba(255,215,0,0.08)',
+                border: '1px solid rgba(255,215,0,0.2)',
+                borderRadius: '8px',
+                fontSize: '11px',
+                lineHeight: '1.4',
+                color: 'var(--tg-text)',
+                textAlign: 'center'
+              }}>
+                👑 {lang === 'ru' ? 'Генерация обложек Reve 2.0 доступна только Premium авторам. Подключите Premium в профиле!' : 'Reve 2.0 Cover Generation is exclusive to Premium creators. Activate Premium in your settings!'}
+              </div>
             )}
+
+            {/* 3. Niche & Generator Panel */}
+            {isCreatorPremium && (
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--tg-border)', borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--tg-hint)' }}>
+                    {lang === 'ru' ? 'Стиль обложки (Ниша):' : 'Cover Style (Niche):'}
+                  </label>
+                  <select
+                    className="tg-input"
+                    value={promoNiche}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setPromoNiche(val);
+                      setStoryPrompt(getNichePromptTemplate(val, selectedPromoProduct));
+                    }}
+                    style={{ background: 'var(--tg-bg)', color: 'var(--tg-text)', padding: '6px', fontSize: '12.5px', borderRadius: '6px' }}
+                  >
+                    <option value="General">{lang === 'ru' ? 'Общий / Минимализм' : 'General / Minimalist'}</option>
+                    <option value="Psychology">{lang === 'ru' ? 'Психология (Пастель)' : 'Psychology (Pastel)'}</option>
+                    <option value="Crypto">{lang === 'ru' ? 'Крипта / Технологии (Неон)' : 'Crypto / Tech (Neon)'}</option>
+                    <option value="Fitness">{lang === 'ru' ? 'Фитнес / Спорт (Контраст)' : 'Fitness / Sport (Contrast)'}</option>
+                    <option value="Finance">{lang === 'ru' ? 'Финансы / Бизнес (Строгий)' : 'Finance / Business (Corporate)'}</option>
+                    <option value="Tech">{lang === 'ru' ? 'Гаджеты / ИТ (Ультрамодерн)' : 'Gadgets / IT (Ultramodern)'}</option>
+                    <option value="Art">{lang === 'ru' ? 'Искусство / Дизайн (Авангард)' : 'Art / Design (Avant-garde)'}</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--tg-hint)' }}>
+                    {lang === 'ru' ? 'Промпт для ИИ-обложки (Редактируемый):' : 'Cover Image Prompt (Editable):'}
+                  </label>
+                  <textarea
+                    className="tg-input"
+                    value={storyPrompt}
+                    onChange={(e) => setStoryPrompt(e.target.value)}
+                    rows={4}
+                    style={{ resize: 'none', width: '100%', fontSize: '11px', lineHeight: 1.35, padding: '8px', borderRadius: '6px', background: 'var(--tg-bg)' }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateStoryCover}
+                  disabled={isGeneratingStoryCover}
+                  className="btn-primary"
+                  style={{
+                    background: 'linear-gradient(135deg, #ffd700 0%, #ffa500 100%)',
+                    color: '#000',
+                    fontWeight: 700,
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    height: '34px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    border: 'none',
+                    borderRadius: '6px'
+                  }}
+                >
+                  {isGeneratingStoryCover ? (
+                    <>
+                      <div className="spinner-mini" style={{ width: '12px', height: '12px', border: '2px solid rgba(0,0,0,0.3)', borderTopColor: '#000', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      <span>{lang === 'ru' ? 'Генерация...' : 'Generating...'}</span>
+                    </>
+                  ) : (
+                    <>🎨 {storyCoverUrl ? (lang === 'ru' ? 'Обновить обложку' : 'Regenerate Cover') : (lang === 'ru' ? 'Создать обложку' : 'Create Cover')}</>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* 4. AI Promo Post Caption Box */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--tg-hint)' }}>
+                {lang === 'ru' ? 'Рекламный текст (Подпись к истории):' : 'Promo Copy (Story Caption):'}
+              </label>
+              <div style={{ position: 'relative' }}>
+                {isGeneratingPromo ? (
+                  <div style={{ background: 'var(--tg-secondary-bg)', border: '1px solid var(--tg-border)', borderRadius: '8px', padding: '14px', height: '80px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="spinner" style={{ width: '18px', height: '18px', border: '2px solid rgba(255,255,255,0.1)', borderTop: '2px solid var(--tg-button)' }} />
+                    <span style={{ fontSize: '11px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Пишем текст...' : 'Writing copy...'}</span>
+                  </div>
+                ) : (
+                  <textarea
+                    className="tg-input"
+                    value={promoText}
+                    onChange={(e) => setPromoText(e.target.value)}
+                    rows={3}
+                    placeholder={lang === 'ru' ? 'Введите текст...' : 'Enter text...'}
+                    style={{ resize: 'none', width: '100%', fontSize: '13px', lineHeight: 1.4, padding: '10px', borderRadius: '8px', background: 'var(--tg-secondary-bg)' }}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* 5. Primary Share Action */}
+            <button
+              onClick={handleShareToStories}
+              disabled={!storyCoverUrl}
+              className="btn-primary"
+              style={{
+                background: storyCoverUrl ? 'linear-gradient(135deg, #0088CC 0%, #00A6FF 100%)' : 'var(--tg-hint)',
+                color: '#fff',
+                opacity: storyCoverUrl ? 1 : 0.6,
+                cursor: storyCoverUrl ? 'pointer' : 'not-allowed',
+                padding: '12px',
+                fontSize: '13.5px',
+                fontWeight: 700,
+                border: 'none',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: storyCoverUrl ? '0 4px 12px rgba(0,136,204,0.3)' : 'none',
+                marginTop: '6px'
+              }}
+            >
+              🚀 {lang === 'ru' ? 'Опубликовать в Telegram Stories' : 'Share to Telegram Stories'}
+            </button>
+
+            {/* 6. Secondary Action Utility Buttons */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={handleDownloadBanner}
+                disabled={!storyCoverUrl}
+                className="btn-secondary"
+                style={{ fontSize: '11.5px', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+              >
+                📥 {lang === 'ru' ? 'Скачать картинку' : 'Download Cover'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopyProductLink}
+                className="btn-secondary"
+                style={{ fontSize: '11.5px', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+              >
+                🔗 {lang === 'ru' ? 'Ссылка товара' : 'Product Link'}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCopyPromo}
+              disabled={!promoText}
+              className="btn-secondary"
+              style={{
+                fontSize: '11.5px',
+                padding: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                background: promoCopied ? 'var(--tg-green)' : 'rgba(255,255,255,0.03)',
+                color: promoCopied ? '#fff' : 'var(--tg-text)'
+              }}
+            >
+              {promoCopied
+                ? (lang === 'ru' ? '✓ Текст скопирован!' : '✓ Text Copied!')
+                : (lang === 'ru' ? '📋 Скопировать текст поста' : '📋 Copy Promo Post')}
+            </button>
+
           </div>
         </div>
       </div>

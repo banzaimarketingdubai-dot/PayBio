@@ -4,7 +4,7 @@
 // Docs: https://api.reve.com/v1/image/create
 // ---------------------------------------------------------------------------
 
-const REVE_API_KEY = process.env.REVE_API_KEY || '';
+
 
 const FALLBACK_URL =
   'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80';
@@ -17,7 +17,8 @@ const FALLBACK_URL =
  * @returns A publicly accessible image URL (data-URL or Reve CDN URL), or a fallback on error.
  */
 export async function generateImage(prompt: string): Promise<string> {
-  if (!REVE_API_KEY) {
+  const reveKey = process.env.REVE_API_KEY || '';
+  if (!reveKey) {
     console.warn('[Reve] REVE_API_KEY is not set. Using fallback placeholder.');
     return FALLBACK_URL;
   }
@@ -26,7 +27,7 @@ export async function generateImage(prompt: string): Promise<string> {
     const response = await fetch('https://api.reve.com/v1/image/create', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${REVE_API_KEY}`,
+        'Authorization': `Bearer ${reveKey}`,
         'Content-Type': 'application/json',
         // Request a direct URL instead of base64 blob
         'Accept': 'application/json',
@@ -71,5 +72,73 @@ export async function generateImage(prompt: string): Promise<string> {
   } catch (error) {
     console.error('[Reve] Image generation failed:', error);
     return FALLBACK_URL;
+  }
+}
+
+/**
+ * Modifies an existing banner image using the Reve 2.0 Edit API.
+ * Preserves the visual style of the source image while applying updates.
+ *
+ * @param existingImageUrl - The URL of the current banner image to edit.
+ * @param prompt - The new Layout-First prompt.
+ * @returns The updated banner image URL.
+ */
+export async function editImage(existingImageUrl: string, prompt: string): Promise<string> {
+  const reveKey = process.env.REVE_API_KEY || '';
+  if (!reveKey) {
+    console.warn('[Reve] REVE_API_KEY is not set. Using fallback placeholder.');
+    return FALLBACK_URL;
+  }
+
+  // If the existing URL is the default fallback, do a clean generate instead of edit
+  if (existingImageUrl === FALLBACK_URL || existingImageUrl.startsWith('data:')) {
+    return generateImage(prompt);
+  }
+
+  try {
+    const response = await fetch('https://api.reve.com/v1/image/edit', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${reveKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        image: existingImageUrl,
+        prompt,
+        aspect_ratio: '16:9',
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(`Reve Edit API error ${response.status}: ${errText}`);
+    }
+
+    const result = await response.json();
+
+    if (result?.url && typeof result.url === 'string') {
+      return result.url;
+    }
+
+    if (Array.isArray(result?.data) && result.data[0]?.url) {
+      return result.data[0].url as string;
+    }
+
+    const b64 =
+      result?.b64_json ||
+      result?.data?.[0]?.b64_json ||
+      result?.image;
+
+    if (b64 && typeof b64 === 'string') {
+      const mime = b64.startsWith('/9j/') ? 'image/jpeg' : 'image/png';
+      return `data:${mime};base64,${b64}`;
+    }
+
+    // If edit endpoint fails or structure is unrecognized, fallback to generating fresh
+    return generateImage(prompt);
+  } catch (error) {
+    console.error('[Reve] Image edit failed, falling back to generate:', error);
+    return generateImage(prompt);
   }
 }

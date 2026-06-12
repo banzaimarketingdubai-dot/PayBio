@@ -1,4 +1,3 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = 'gemini-2.5-flash';
 
 interface ExtractProductResponse {
@@ -21,11 +20,12 @@ interface VerifyReceiptResponse {
  * Call the Gemini API with text contents and optional image inline data.
  */
 async function callGemini(contents: any[], responseJson: boolean = false): Promise<string> {
-  if (!GEMINI_API_KEY) {
+  const apiKey = process.env.GEMINI_API_KEY || '';
+  if (!apiKey) {
     throw new Error('GEMINI_API_KEY is not set in environment variables.');
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`;
   
   const payload = {
     contents,
@@ -224,7 +224,8 @@ export async function generateChannelDescription(topics: string): Promise<string
 export async function generateLayoutFirstPrompt(
   title: string,
   description: string,
-  price: string
+  price: string,
+  selectedNiche?: string
 ): Promise<string> {
   const analysisPrompt = `
     Ты — AI-дизайнер системы Paybio. Твоя задача: на основе данных о товаре (Название, Описание, Цена) составить структуру запроса для API Reve 2.0.
@@ -239,8 +240,9 @@ export async function generateLayoutFirstPrompt(
     - Title: "${title.replace(/"/g, '\\"')}"
     - Description: "${description.replace(/"/g, '\\"')}"
     - Price: "${price.replace(/"/g, '\\"')}"
+    ${selectedNiche ? `- Selected Niche: "${selectedNiche}"` : ''}
     
-    1. Identify the Niche (e.g., "Psychology", "Finance", "Crypto", "Fitness", "Education", "Art", "Tech", "General").
+    1. Identify the Niche (e.g., "Psychology", "Finance", "Crypto", "Fitness", "Education", "Art", "Tech", "General"). If Selected Niche is provided, use it.
     2. Choose a style preset for the background and text contrast (e.g., "soft pastel tones, deep focus, warm ambient light" for Psychology, "dark mode sleek neon accents, ultra modern, tech" for Crypto, "aggressive contrast, high energy, bold shadows" for Fitness, etc.).
     3. Determine the best high-contrast text color based on the chosen background style (e.g. "White" or "Black").
     
@@ -267,9 +269,9 @@ export async function generateLayoutFirstPrompt(
     const cleanedText = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(cleanedText);
     
-    const niche = parsed.niche || 'General';
+    const niche = selectedNiche || parsed.niche || 'General';
     const stylePreset = parsed.stylePreset || 'Minimalist, clean, studio lighting';
-    const textColor = parsed.textColor || 'High-Contrast';
+    const textColor = parsed.textColor || 'White';
     
     // Package into layout-first prompt contract
     return `A professional, high-end commercial product banner for Telegram. 

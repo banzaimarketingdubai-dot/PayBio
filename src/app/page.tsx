@@ -88,6 +88,7 @@ export default function Storefront() {
             setVerifyError={store.setVerifyError}
             isProcessingPayment={store.isProcessingPayment}
             handleClaimPayment={store.handleClaimPayment}
+            activeOrderId={store.activeOrderId}
           />
         )}
 
@@ -242,7 +243,7 @@ export default function Storefront() {
           {store.lang === 'ru' ? 'Доставка оформлена!' : 'Delivery Scheduled!'}
         </h2>
         <p style={{ fontSize: '14px', color: 'var(--tg-hint)', marginBottom: '32px', lineHeight: 1.5, maxWidth: '300px' }}>
-          {store.lang === 'ru' 
+          {store.lang === 'ru'
             ? 'Данные доставки успешно отправлены продавцу. Вы получите уведомление с трек-номером после отправки.'
             : 'Your delivery coordinates have been sent. You will be notified with a tracking number once shipped.'}
         </p>
@@ -318,6 +319,8 @@ export default function Storefront() {
           }}
           isDemoMode={store.isDemoMode}
           onActivateRealStore={store.handleActivateRealStore}
+          buyerHasStore={store.buyerHasStore}
+          botUsername={store.botUsername}
         />
       </div>
 

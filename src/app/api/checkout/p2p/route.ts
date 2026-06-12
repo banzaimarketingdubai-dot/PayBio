@@ -123,7 +123,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Create a pending order
-    const method = payment_method === 'crypto' ? 'crypto' : 'p2p';
+    const method = payment_method || 'p2p';
     const order = await db.createOrder(
       isPremiumVirtual ? null : product_id,
       buyer_tg_id,

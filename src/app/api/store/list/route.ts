@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
 import { sendTelegramNotification } from '@/lib/telegram';
 
+let cachedBotUsername: string | null = null;
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -21,6 +23,41 @@ export async function GET(request: Request) {
           await db.attributeReferral(buyerTgId, referrerTgIdParam);
         } catch (err) {
           console.error('Failed to attribute referral in store/list API:', err);
+        }
+      }
+    }
+
+    let buyerHasStore = false;
+    if (buyerTgIdParam) {
+      const buyerTgId = Number(buyerTgIdParam);
+      if (buyerTgId > 0) {
+        const buyerUser = await db.getUserByTelegramId(buyerTgId);
+        if (buyerUser) {
+          const hasName = !!buyerUser.profile_customization?.store_name;
+          const buyerProds = await db.getProductsByCreatorId(buyerUser.id);
+          if (hasName || (buyerProds && buyerProds.length > 0)) {
+            buyerHasStore = true;
+          }
+        }
+      }
+    }
+
+    let botUsername = 'PaybioBot';
+    if (process.env.TELEGRAM_BOT_TOKEN) {
+      if (cachedBotUsername) {
+        botUsername = cachedBotUsername;
+      } else {
+        try {
+          const getMeRes = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getMe`);
+          if (getMeRes.ok) {
+            const data = await getMeRes.json();
+            if (data.ok && data.result?.username) {
+              cachedBotUsername = data.result.username;
+              botUsername = data.result.username;
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch bot username in API:', err);
         }
       }
     }
@@ -67,7 +104,9 @@ export async function GET(request: Request) {
           ...product, 
           sold_count: soldCount,
           has_bought: hasBought
-        } 
+        },
+        buyer_has_store: buyerHasStore,
+        bot_username: botUsername
       });
     }
 
@@ -84,13 +123,13 @@ export async function GET(request: Request) {
 
       const products = await db.getProductsByCreatorId(creator.id);
       return NextResponse.json(
-        { success: true, creator, products: products || [] }
+        { success: true, creator, products: products || [], buyer_has_store: buyerHasStore, bot_username: botUsername }
       );
     }
 
     // List all products
     const products = await db.getAllProducts();
-    return NextResponse.json({ success: true, products: products || [] });
+    return NextResponse.json({ success: true, products: products || [], buyer_has_store: buyerHasStore, bot_username: botUsername });
   } catch (error: any) {
     console.error('List products error:', error);
     return NextResponse.json(

@@ -1,11 +1,50 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/supabase';
-import { sendTelegramNotification } from '@/lib/telegram';
+import { sendTelegramNotification, sendTelegramPhoto } from '@/lib/telegram';
+
+async function verifyTonTransaction(walletAddress: string, orderId: string, expectedNanotons: number): Promise<boolean> {
+  try {
+    const response = await fetch(`https://toncenter.com/api/v2/getTransactions?address=${encodeURIComponent(walletAddress)}&limit=20`);
+    if (!response.ok) {
+      console.warn(`TON API returned status ${response.status}`);
+      return false;
+    }
+    const data = await response.json();
+    if (!data.ok || !Array.isArray(data.result)) {
+      console.warn('Invalid TON API response:', data);
+      return false;
+    }
+
+    const txs = data.result;
+    for (const tx of txs) {
+      const inMsg = tx.in_msg;
+      if (!inMsg) continue;
+
+      if (inMsg.destination !== walletAddress) continue;
+
+      let comment = inMsg.message || '';
+      if (!comment && inMsg.msg_data?.text) {
+        comment = inMsg.msg_data.text;
+      }
+
+      if (comment.trim() === orderId.trim()) {
+        const val = Number(inMsg.value || 0);
+        if (val >= expectedNanotons * 0.9) {
+          return true;
+        }
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('Error fetching TON transactions:', error);
+    return false;
+  }
+}
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { order_id } = body;
+    const { order_id, receipt_url } = body;
 
     if (!order_id) {
       return NextResponse.json(
@@ -46,15 +85,59 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Creator or administrator not found.' }, { status: 404 });
     }
 
+    const buyer = await db.getUserByTelegramId(order.buyer_tg_id);
+
+    const isTon = order.payment_method && order.payment_method.startsWith('ton');
+    if (isTon) {
+      const walletAddress = creator.payment_details?.ton;
+      if (!walletAddress) {
+        return NextResponse.json({ error: 'Seller TON wallet address is not configured.' }, { status: 400 });
+      }
+
+      const expectedTon = order.product ? (order.product.price_fiat / 7.0) : 0;
+      const expectedNanotons = Math.round(expectedTon * 1e9);
+
+      const isDemo = walletAddress.includes('demo') || walletAddress === 'No TON wallet configured' || db.isMock;
+      let verified = false;
+
+      if (isDemo) {
+        verified = true;
+      } else {
+        verified = await verifyTonTransaction(walletAddress, order.id, expectedNanotons);
+      }
+
+      if (verified) {
+        const { fulfillOrder } = await import('@/lib/fulfillment');
+        await fulfillOrder(order_id);
+
+        return NextResponse.json({
+          success: true,
+          status: 'PAID',
+          message: 'TON transaction verified and order fulfilled.'
+        });
+      } else {
+        const langCode = (buyer?.payment_details as any)?.lang || 'ru';
+        return NextResponse.json({
+          success: false,
+          reason: langCode === 'en'
+            ? 'Transaction not found on the blockchain yet. Please make sure you sent the transfer with the correct order ID comment.'
+            : 'Транзакция пока не найдена в блокчейне. Пожалуйста, убедитесь, что вы отправили перевод с правильным комментарием (ID заказа).'
+        });
+      }
+    }
+
     // 2. Update order status to PAYMENT_CLAIMED
-    await db.updateOrderStatus(order_id, 'PAYMENT_CLAIMED');
+    if (receipt_url) {
+      await db.updateOrderReceiptAndStatus(order_id, receipt_url, 'PAYMENT_CLAIMED');
+    } else {
+      await db.updateOrderStatus(order_id, 'PAYMENT_CLAIMED');
+    }
 
     // 3. Notify Creator/Admin via Telegram Bot
-    const buyer = await db.getUserByTelegramId(order.buyer_tg_id);
     const buyerName = buyer ? `@${buyer.username || 'user'}` : `ID: ${order.buyer_tg_id}`;
     
     // Simple language detection based on buyer language if available
-    const isRussian = buyer?.username ? /[а-яА-Я]/.test(buyer.username) : true;
+    const isRussian = (buyer?.payment_details as any)?.lang === 'en' ? false : true;
 
     let messageText = '';
     let replyMarkup = {};
@@ -93,7 +176,11 @@ export async function POST(request: Request) {
       };
     }
 
-    await sendTelegramNotification(creator.telegram_id, messageText, replyMarkup);
+    if (receipt_url && receipt_url.startsWith('data:image')) {
+      await sendTelegramPhoto(creator.telegram_id, receipt_url, messageText, replyMarkup);
+    } else {
+      await sendTelegramNotification(creator.telegram_id, messageText, replyMarkup);
+    }
 
     return NextResponse.json({
       success: true,

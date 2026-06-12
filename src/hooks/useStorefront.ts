@@ -24,8 +24,8 @@ export const DEMO_CREATOR: Creator = {
   profile_customization: {
     store_name: '🚀 Мой Демо-Магазин',
     store_description: 'Попробуй купить любой тестовый товар за 1 Telegram Star, чтобы увидеть процесс оплаты и моментальную выдачу товара!',
-    avatar_url: '',
-    banner_url: '',
+    avatar_url: 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=150&auto=format&fit=crop&q=80',
+    banner_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80',
     onboarding_completed: true
   }
 };
@@ -111,7 +111,24 @@ export function useStorefront() {
   const [isDemoPaymentSuccessOpen, setIsDemoPaymentSuccessOpen] = useState(false);
 
   // Language state
-  const [lang, setLang] = useState<'en' | 'ru'>('en');
+  const [lang, setLang] = useState<'en' | 'ru'>('ru');
+
+  // Load saved language on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem('paybio_lang');
+      if (savedLang === 'en' || savedLang === 'ru') {
+        setLang(savedLang);
+      }
+    }
+  }, []);
+
+  // Save language to localStorage on change
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('paybio_lang', lang);
+    }
+  }, [lang]);
 
   // Custom shop customization state
   const [creator, setCreator] = useState<Creator | null>(null);
@@ -161,6 +178,9 @@ export function useStorefront() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [hasBoughtInSession, setHasBoughtInSession] = useState(false);
 
+  const [buyerHasStore, setBuyerHasStore] = useState(false);
+  const [botUsername, setBotUsername] = useState('PaybioBot');
+
   // Buyer shipping form states
   const [paidOrderId, setPaidOrderId] = useState<string | null>(null);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
@@ -194,7 +214,18 @@ export function useStorefront() {
     productRef.current = product;
   }, [product]);
 
-  const t = useMemo(() => TRANSLATIONS[lang], [lang]);
+  // Try to use creator's language preference if no localStorage preference is set
+  useEffect(() => {
+    const creatorLang = (creator?.payment_details as any)?.lang;
+    if (creatorLang === 'en' || creatorLang === 'ru') {
+      const savedLang = typeof window !== 'undefined' ? localStorage.getItem('paybio_lang') : null;
+      if (!savedLang) {
+        setLang(creatorLang);
+      }
+    }
+  }, [creator]);
+
+  const t = useMemo(() => (lang === 'ru' ? TRANSLATIONS.ru : TRANSLATIONS.en), [lang]);
 
   // Top-level, TDZ-safe variable definitions for product/creator state
   const isStorePremium = useMemo(() => {
@@ -210,15 +241,15 @@ export function useStorefront() {
   }, [product, creator]);
 
   const tonDetails = useMemo(() => {
-    return tonList.length > 0 && selectedTonIdx < tonList.length
-      ? tonList[selectedTonIdx].address 
-      : (product?.creator?.payment_details?.ton || creator?.payment_details?.ton || 'No TON wallet configured');
+    return (tonList.length > 0 && selectedTonIdx < tonList.length
+      ? tonList.at(selectedTonIdx)?.address 
+      : (product?.creator?.payment_details?.ton || creator?.payment_details?.ton || 'No TON wallet configured')) ?? 'No TON wallet configured';
   }, [tonList, selectedTonIdx, product, creator]);
 
   const p2pDetails = useMemo(() => {
-    return p2pList.length > 0 && selectedP2pIdx < p2pList.length
-      ? p2pList[selectedP2pIdx].card 
-      : (product?.creator?.payment_details?.p2p || creator?.payment_details?.p2p || 'No card details configured');
+    return (p2pList.length > 0 && selectedP2pIdx < p2pList.length
+      ? p2pList.at(selectedP2pIdx)?.card 
+      : (product?.creator?.payment_details?.p2p || creator?.payment_details?.p2p || 'No card details configured')) ?? 'No card details configured';
   }, [p2pList, selectedP2pIdx, product, creator]);
 
   const tonAmount = useMemo(() => {
@@ -264,6 +295,16 @@ export function useStorefront() {
       }
     }
   }, [productsList]);
+
+  // Sync with browser back/forward buttons
+  useEffect(() => {
+    if (isDemoMode) {
+      const welcomeMsg = lang === 'ru'
+        ? '🚀 Вы находитесь в демо-режиме PayBio! Попробуйте купить любой тестовый товар, чтобы увидеть процесс оплаты и моментальную выдачу.'
+        : '🚀 You are in PayBio demo mode! Try buying any test product to see the checkout process and instant delivery.';
+      showAlert(welcomeMsg);
+    }
+  }, [isDemoMode, lang]);
 
   // Viewport Zoom Lock
   useEffect(() => {
@@ -429,11 +470,14 @@ export function useStorefront() {
         console.error('Failed to disable vertical swipes:', e);
       }
       
-      const tgLang = webapp.initDataUnsafe?.user?.language_code;
-      if (tgLang && tgLang.toLowerCase().startsWith('ru')) {
-        setLang('ru');
-      } else {
-        setLang('en');
+      const savedLang = typeof window !== 'undefined' ? localStorage.getItem('paybio_lang') : null;
+      if (!savedLang) {
+        const tgLang = webapp.initDataUnsafe?.user?.language_code;
+        if (tgLang && tgLang.toLowerCase().startsWith('en')) {
+          setLang('en');
+        } else {
+          setLang('ru');
+        }
       }
 
       let activeCreatorTgId = detectedCreatorTgId;
@@ -624,6 +668,12 @@ export function useStorefront() {
             if (data.product.creator) {
               setCreator(data.product.creator);
             }
+            if (data.buyer_has_store !== undefined) {
+              setBuyerHasStore(data.buyer_has_store);
+            }
+            if (data.bot_username) {
+              setBotUsername(data.bot_username);
+            }
             if (data.product.product_type === 'BOOKING') {
               fetchBusySlotsForProduct(data.product.id);
             }
@@ -648,6 +698,12 @@ export function useStorefront() {
           if (data.success) {
             setProductsList(data.products || []);
             if (data.creator) setCreator(data.creator);
+            if (data.buyer_has_store !== undefined) {
+              setBuyerHasStore(data.buyer_has_store);
+            }
+            if (data.bot_username) {
+              setBotUsername(data.bot_username);
+            }
           } else {
             setError(data.error || 'Failed to load products.');
           }
@@ -922,7 +978,8 @@ export function useStorefront() {
         ics_url: icsUrl,
         usdt_trc20: usdtTrc20 || '',
         usdt_bep20: usdtBep20 || '',
-        other: other || ''
+        other: other || '',
+        lang: lang
       };
       
       const res = await fetch('/api/store/profile', {
@@ -963,7 +1020,7 @@ export function useStorefront() {
     productType = 'DIGITAL',
     section = 'DIGITAL',
     subType: string | null = null
-  ): Promise<boolean> => {
+  ): Promise<any> => {
     let activeCreator = creator;
     if (!activeCreator && creatorTgId) {
       try {
@@ -1016,14 +1073,14 @@ export function useStorefront() {
         }
 
         showAlert(lang === 'ru' ? '🎉 Товар успешно добавлен!' : '🎉 Product added successfully!');
-        return true;
+        return newProd;
       } else {
         showAlert(data.error || 'Failed to add product.');
-        return false;
+        return null;
       }
     } catch (err: any) {
       showAlert(err.message || 'Error creating product.');
-      return false;
+      return null;
     }
   }, [creator, creatorTgId, productSections, lang]);
 
@@ -1114,6 +1171,18 @@ export function useStorefront() {
         return;
       }
     }
+
+    if (isDemoMode) {
+      setIsPaymentSheetOpen(false);
+      if (product.sub_type === 'PHYSICAL') {
+        setPaidOrderId('demo-order-id');
+        setShowDeliveryForm(true);
+      } else {
+        setIsDemoPaymentSuccessOpen(true);
+      }
+      return;
+    }
+
     setIsProcessingPayment(true);
     try {
       const bookingSlot = product.product_type === 'BOOKING' ? {
@@ -1157,7 +1226,7 @@ export function useStorefront() {
       showAlert('Error initiating payment.');
       setIsProcessingPayment(false);
     }
-  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered]);
+  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered, isDemoMode]);
 
   const handleBuyDirect = useCallback(async () => {
     if (!product) return;
@@ -1223,7 +1292,7 @@ export function useStorefront() {
           product_id: product.id,
           buyer_tg_id: buyerTgId,
           booking_slot: bookingSlot,
-          payment_method: method === 'crypto' ? 'crypto' : 'p2p'
+          payment_method: method === 'crypto' ? cryptoSubMethod : 'p2p'
         }),
       });
       const data = await res.json();
@@ -1235,9 +1304,9 @@ export function useStorefront() {
     } catch (err: any) {
       setVerifyError(err.message || 'Error initializing order.');
     }
-  }, [product, bookingDate, bookingTime, buyerTgId]);
+  }, [product, bookingDate, bookingTime, buyerTgId, cryptoSubMethod]);
 
-  const handleClaimPayment = useCallback(async () => {
+  const handleClaimPayment = useCallback(async (receiptUrl?: string) => {
     if (!product) return;
     if (product.product_type === 'BOOKING') {
       if (!bookingDate || !bookingTime) {
@@ -1265,7 +1334,7 @@ export function useStorefront() {
             product_id: product.id,
             buyer_tg_id: buyerTgId,
             booking_slot: bookingSlot,
-            payment_method: checkoutMethod === 'crypto' ? 'crypto' : 'p2p'
+            payment_method: checkoutMethod === 'crypto' ? cryptoSubMethod : 'p2p'
           }),
         });
         const orderData = await orderRes.json();
@@ -1279,7 +1348,10 @@ export function useStorefront() {
       const res = await fetch('/api/checkout/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: currentOrderId }),
+        body: JSON.stringify({ 
+          order_id: currentOrderId,
+          receipt_url: receiptUrl
+        }),
       });
       const result = await res.json();
       if (res.ok && result.success) {
@@ -1297,7 +1369,7 @@ export function useStorefront() {
     } finally {
       setVerifying(false);
     }
-  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang]);
+  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang, cryptoSubMethod]);
 
   const handleShippingSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1306,6 +1378,18 @@ export function useStorefront() {
       return;
     }
     setIsSubmittingShipping(true);
+
+    if (isDemoMode) {
+      setShippingSubmitted(true);
+      setShowDeliveryForm(false);
+      setShipFullName('');
+      setShipPhone('');
+      setShipMethod('SDEK');
+      setShipAddress('');
+      setIsSubmittingShipping(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/vouchers/shipping', {
         method: 'POST',
@@ -1336,7 +1420,7 @@ export function useStorefront() {
     } finally {
       setIsSubmittingShipping(false);
     }
-  }, [paidOrderId, shipFullName, shipPhone, shipMethod, shipAddress, lang]);
+  }, [paidOrderId, shipFullName, shipPhone, shipMethod, shipAddress, lang, isDemoMode]);
 
   const handleActivateRealStore = useCallback(async () => {
     let tgId = buyerTgId;
@@ -1507,6 +1591,8 @@ export function useStorefront() {
     setSelectedP2pIdx,
     copied,
     copy,
+    buyerHasStore,
+    botUsername,
     isDemoMode,
     isDemoPaymentSuccessOpen,
     setIsDemoPaymentSuccessOpen,
