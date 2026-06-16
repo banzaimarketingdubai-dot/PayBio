@@ -451,6 +451,7 @@ export const ProductListScreen = memo(function ProductListScreen({
   const [isGeneratingPromoBg, setIsGeneratingPromoBg] = useState(false);
   const [isDownloadingPromo, setIsDownloadingPromo] = useState(false);
   const promoContainerRef = useRef<HTMLDivElement>(null);
+  const storiesCoverInputRef = useRef<HTMLInputElement>(null);
 
   const handleConfirmDelete = (productId: string, productTitle: string) => {
     const confirmMsg = lang === 'ru'
@@ -2191,22 +2192,52 @@ export const ProductListScreen = memo(function ProductListScreen({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '10px', paddingBottom: '24px' }}>
             
             {/* 1. Stories Preview phone mockup */}
-            <div style={{
-              width: '140px',
-              height: '248px',
-              borderRadius: '18px',
-              border: '2px solid var(--tg-border)',
-              background: '#131920',
-              margin: '0 auto',
-              position: 'relative',
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-              borderImage: 'linear-gradient(135deg, var(--tg-accent) 0%, rgba(255,255,255,0.1) 100%) 1'
-            }}>
+            <div 
+              onClick={() => storiesCoverInputRef.current?.click()}
+              style={{
+                width: '140px',
+                height: '248px',
+                borderRadius: '18px',
+                border: '2px solid var(--tg-border)',
+                background: '#131920',
+                margin: '0 auto',
+                position: 'relative',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                borderImage: 'linear-gradient(135deg, var(--tg-accent) 0%, rgba(255,255,255,0.1) 100%) 1',
+                cursor: 'pointer',
+                transition: 'transform 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              {/* Edit Pencil Icon (top-right) */}
+              {!isGeneratingStoryCover && (
+                <div style={{
+                  position: 'absolute',
+                  top: '8px',
+                  right: '8px',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  background: 'rgba(0, 0, 0, 0.75)',
+                  backdropFilter: 'blur(4px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: '9px',
+                  zIndex: 10,
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.3)'
+                }}>
+                  ✏️
+                </div>
+              )}
               {isGeneratingStoryCover ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center', textAlign: 'center', padding: '10px' }}>
                   <div className="spinner" style={{ width: '24px', height: '24px', border: '2px solid rgba(255,255,255,0.1)', borderTop: '2px solid var(--tg-accent)' }} />
@@ -2231,7 +2262,7 @@ export const ProductListScreen = memo(function ProductListScreen({
                   
                   {/* Badge: Reve 2.0 */}
                   <span style={{
-                    position: 'absolute', top: '8px', right: '8px',
+                    position: 'absolute', top: '8px', left: '8px',
                     background: 'rgba(0, 0, 0, 0.6)', color: '#ffc107',
                     fontSize: '6.5px', fontWeight: 'bold', padding: '2px 5px',
                     borderRadius: '4px', letterSpacing: '0.5px', zIndex: 2
@@ -2294,6 +2325,7 @@ export const ProductListScreen = memo(function ProductListScreen({
                 <input
                   type="file"
                   accept="image/*"
+                  ref={storiesCoverInputRef}
                   onChange={handleStoriesCoverUpload}
                   style={{ display: 'none' }}
                 />
