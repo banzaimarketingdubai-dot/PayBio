@@ -179,7 +179,7 @@ export default function PartnerDashboard({
 
   return (
     <div style={{
-      padding: 'calc(var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px)) + 12px) 20px 40px',
+      padding: 'calc(max(60px, env(safe-area-inset-top, 60px)) + 8px) 20px 40px',
       color: 'var(--tg-text)',
       minHeight: '100vh',
       display: 'flex',
