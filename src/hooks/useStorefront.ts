@@ -96,11 +96,51 @@ export function useCopy() {
   return { copied, copy };
 }
 
+// ─── Eagerly read URL params so data loading starts on the first render tick,
+// without waiting for the async getTWA() polling (saves ~300–500ms). ─────────
+function getInitialIdsFromUrl(): { productId: string | null; creatorTgId: number | null } {
+  if (typeof window === 'undefined') return { productId: null, creatorTgId: null };
+
+  const isUuid = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+  const isNumeric = (s: string) => /^\d+$/.test(s);
+
+  const params = new URLSearchParams(window.location.search);
+  const rawPid = params.get('startapp') || params.get('product_id') || params.get('tgWebAppStartParam')
+    || localStorage.getItem('paybio_current_product_id');
+
+  if (!rawPid || rawPid === 'welcome_demo') return { productId: null, creatorTgId: null };
+
+  if (rawPid.startsWith('ref_')) {
+    const refId = rawPid.substring(4);
+    if (isNumeric(refId)) return { productId: null, creatorTgId: Number(refId) };
+    return { productId: null, creatorTgId: null };
+  }
+  if (rawPid.includes('_ref_')) {
+    const parts = rawPid.split('_ref_');
+    let prodPart = parts[0];
+    if (prodPart.startsWith('p_')) prodPart = prodPart.substring(2);
+    else if (prodPart.startsWith('prod_')) prodPart = prodPart.substring(5);
+    if (isUuid(prodPart)) return { productId: prodPart, creatorTgId: null };
+    return { productId: null, creatorTgId: null };
+  }
+  if (isUuid(rawPid)) return { productId: rawPid, creatorTgId: null };
+  if (isNumeric(rawPid)) return { productId: null, creatorTgId: Number(rawPid) };
+
+  return { productId: null, creatorTgId: null };
+}
+
 export function useStorefront() {
-  const [productId, setProductId] = useState<string | null>(null);
+  // Eagerly pre-compute from URL so that data fetching starts immediately
+  const [productId, setProductId] = useState<string | null>(() => getInitialIdsFromUrl().productId);
   const [buyerTgId, setBuyerTgId] = useState<number>(0);
-  // null = SDK not yet resolved, number = resolved (0 = no TG user)
-  const [creatorTgId, setCreatorTgId] = useState<number | null>(null);
+  // Initialize from URL synchronously — getTWA() will refine later if needed
+  const [creatorTgId, setCreatorTgId] = useState<number | null>(() => {
+    const { productId: pid, creatorTgId: cid } = getInitialIdsFromUrl();
+    // If we have a product ID but no creator, set to 0 to unblock loadData()
+    if (pid) return 0;
+    return cid;
+  });
   const [product, setProduct] = useState<Product | null>(null);
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -556,21 +596,27 @@ export function useStorefront() {
     });
   }, []);
 
-  // Fetch administrator's payment wallets on mount for Premium checkout
-  useEffect(() => {
-    fetch('/api/admin/wallets')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.wallets) {
-          setAdminWallets(data.wallets);
-        }
-      })
-      .catch(err => console.error('Failed to pre-fetch admin wallets:', err));
-  }, []);
+  // Admin wallets are now fetched lazily inside handleBuyPremium (see below)
+  // to avoid competing with the main data fetch on startup.
 
-  const handleBuyPremium = useCallback(() => {
+  const handleBuyPremium = useCallback(async () => {
     setIsPremiumOpen(false);
-    
+
+    // Lazy-fetch wallets only when the user actually triggers Premium purchase
+    let wallets = adminWallets;
+    if (!wallets) {
+      try {
+        const res = await fetch('/api/admin/wallets');
+        const data = await res.json();
+        if (data.success && data.wallets) {
+          wallets = data.wallets;
+          setAdminWallets(wallets);
+        }
+      } catch (err) {
+        console.error('Failed to fetch admin wallets:', err);
+      }
+    }
+
     const premiumProd: Product = {
       id: 'premium_virtual',
       creator_id: 'admin_system',
@@ -586,10 +632,10 @@ export function useStorefront() {
         telegram_id: 999999999,
         username: 'PayBioAdmin',
         is_premium: true,
-        payment_details: adminWallets || { ton: '', p2p: '', p2p_list: [], usdt_trc20: '', usdt_bep20: '', other: '' }
+        payment_details: wallets || { ton: '', p2p: '', p2p_list: [], usdt_trc20: '', usdt_bep20: '', other: '' }
       }
     };
-    
+
     setProduct(premiumProd);
     setBookingDate('');
     setBookingTime('');
@@ -602,6 +648,7 @@ export function useStorefront() {
     setVerifying(false);
     setActiveOrderId(null);
   }, [adminWallets, lang]);
+
 
   const fetchBusySlotsForProduct = useCallback(async (prodId: string) => {
     setIsLoadingBusySlots(true);

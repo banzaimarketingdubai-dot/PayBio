@@ -1,0 +1,99 @@
+--- Line 123 ---
+119:     removeBrandingLogoDesc: 'Hides the "Powered by PayBio" watermarks from your catalog and product pages.',
+120:     unlimitedTransactions: 'Unlimited Transactions',
+121:     unlimitedTransactionsDesc: 'Remove all platform verification limits on card (P2P) & Stars sales.',
+122:     advancedInsights: 'Advanced Insights & Support',
+123:     advancedInsightsDesc: 'Get complete traffic logs, customer metrics, and priority developer support.',
+124:     activatePremiumFor: 'Activate Premium for 299 Stars ⭐',
+125:     activating: 'Activating...',
+126:     premiumUnlocked: '👑 Congratulations! PayBio Premium activated successfully. The watermark has been removed, and premium badges are unlocked!',
+127:     premiumTitle: 'PayBio Premium',
+
+--- Line 624 ---
+620:   const [prodDesc, setProdDesc] = useState('');
+621:   const [prodPriceUSD, setProdPriceUSD] = useState('');
+622:   const [prodPriceStars, setProdPriceStars] = useState('');
+623:   const [prodUrl, setProdUrl] = useState('');
+624:   const [prodCalendarIcsUrl, setProdCalendarIcsUrl] = useState('');
+625:   const [prodMaxQuantity, setProdMaxQuantity] = useState('');
+626:   const [isAdding, setIsAdding] = useState(false);
+627: 
+628:   // Product cover visual state
+
+--- Line 840 ---
+836:       let finalContentUrl = prodUrl || '';
+837:       if (prodType === 'BOOKING') {
+838:         finalContentUrl = JSON.stringify({
+839:           slots: prodUrl,
+840:           ics_url: prodCalendarIcsUrl
+841:         });
+842:       } else if (prodType === 'VOUCHER') {
+843:         finalContentUrl = JSON.stringify({
+844:           fulfillment_url: prodUrl,
+
+--- Line 864 ---
+860:         setProdDesc('');
+861:         setProdPriceUSD('');
+862:         setProdPriceStars('');
+863:         setProdUrl('');
+864:         setProdCalendarIcsUrl('');
+865:         setProdMaxQuantity('');
+866:         setProdCoverUrl('');
+867:         setAiPrompt('');
+868:         setProdType('DIGITAL');
+
+--- Line 1565 ---
+1561: 
+1562:             {prodType === 'BOOKING' && (
+1563:               <div className="bottom-sheet-form-group animate-fade-in">
+1564:                 <label className="bottom-sheet-label">
+1565:                   {lang === 'ru' ? 'Ссылка на Google/Apple Календарь (.ics) [Опционально]' : 'Google/Apple Calendar Link (.ics) [Optional]'}
+1566:                 </label>
+1567:                 <input 
+1568:                   type="text" 
+1569:                   className="tg-input" 
+
+--- Line 1570 ---
+1566:                 </label>
+1567:                 <input 
+1568:                   type="text" 
+1569:                   className="tg-input" 
+1570:                   placeholder="webcal://... or https://...ics"
+1571:                   value={prodCalendarIcsUrl} 
+1572:                   onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+1573:                 />
+1574:               </div>
+
+--- Line 1571 ---
+1567:                 <input 
+1568:                   type="text" 
+1569:                   className="tg-input" 
+1570:                   placeholder="webcal://... or https://...ics"
+1571:                   value={prodCalendarIcsUrl} 
+1572:                   onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+1573:                 />
+1574:               </div>
+1575:             )}
+
+--- Line 1572 ---
+1568:                   type="text" 
+1569:                   className="tg-input" 
+1570:                   placeholder="webcal://... or https://...ics"
+1571:                   value={prodCalendarIcsUrl} 
+1572:                   onChange={(e) => setProdCalendarIcsUrl(e.target.value)} 
+1573:                 />
+1574:               </div>
+1575:             )}
+1576: 
+
+--- Line 2127 ---
+2123: 
+2124:   const fetchBusySlotsForProduct = async (prodId: string) => {
+2125:     setIsLoadingBusySlots(true);
+2126:     try {
+2127:       const res = await fetch(`/api/calendar/busy?product_id=${prodId}`);
+2128:       const data = await res.json();
+2129:       if (data.success && data.busySlots) {
+2130:         setBusySlots(data.busySlots);
+2131:       }
+
