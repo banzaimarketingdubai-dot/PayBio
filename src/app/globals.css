@@ -1430,19 +1430,19 @@ body {
 }
 
 .onboarding-slide-title {
-  font-size: 23px;
+  font-size: 27px;
   font-weight: 850;
   color: #fff;
-  margin: 0 0 12px 0;
+  margin: 0 0 14px 0;
   line-height: 1.25;
-  letter-spacing: -0.3px;
+  letter-spacing: -0.4px;
 }
 
 .onboarding-slide-desc {
-  font-size: 14.5px;
-  color: rgba(255, 255, 255, 0.65);
+  font-size: 15.5px;
+  color: rgba(255, 255, 255, 0.7);
   margin: 0;
-  line-height: 1.55;
+  line-height: 1.6;
   font-weight: 500;
 }
 
@@ -1624,17 +1624,17 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 24px 140px;
+  padding: 80px 24px 160px;
   box-sizing: border-box;
   position: relative;
 }
 
 .onboarding-slide-graphic {
-  height: 180px;
+  height: 260px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 30px;
+  margin-bottom: 36px;
   width: 100%;
   position: relative;
 }
@@ -1711,7 +1711,7 @@ body {
 /* ─── Graphics & Mockup Elements ─── */
 .chat-mockup {
   width: 85%;
-  max-width: 280px;
+  max-width: 320px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
@@ -1778,7 +1778,7 @@ body {
 /* AI Mockup style */
 .ai-mockup {
   width: 80%;
-  max-width: 240px;
+  max-width: 280px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1839,7 +1839,7 @@ body {
   justify-content: center;
   gap: 12px;
   width: 90%;
-  max-width: 280px;
+  max-width: 320px;
 }
 
 .payment-badge-item {
@@ -1876,7 +1876,7 @@ body {
 /* CRM Dashboard Mockup */
 .dashboard-mockup {
   width: 85%;
-  max-width: 280px;
+  max-width: 320px;
   background: #181b22;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;

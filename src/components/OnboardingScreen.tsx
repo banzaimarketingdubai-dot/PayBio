@@ -125,7 +125,7 @@ export default function OnboardingScreen({ lang, onComplete }: OnboardingScreenP
 
         {/* Slide 4: Conversion (Funnel Visual) */}
         <div className="onboarding-slide">
-          <div className="onboarding-slide-graphic" style={{ height: '170px' }}>
+          <div className="onboarding-slide-graphic" style={{ height: '220px' }}>
             {/* Funnel Scheme */}
             <div className="funnel-container">
               <div className="funnel-column funnel-left">
@@ -150,13 +150,13 @@ export default function OnboardingScreen({ lang, onComplete }: OnboardingScreenP
               </div>
             </div>
           </div>
-          <h2 className="onboarding-slide-title" style={{ fontSize: '20px' }}>
+          <h2 className="onboarding-slide-title" style={{ fontSize: '24px' }}>
             {lang === 'ru' ? 'Перестаньте терять 37% клиентов' : 'Stop Losing 37% of Customers'}
           </h2>
           <div className="onboarding-accent-callout">
             {lang === 'ru' ? 'С PayBio вы продаете прямо в Telegram Stories!' : 'With PayBio you sell directly in Telegram Stories!'}
           </div>
-          <p className="onboarding-slide-desc" style={{ fontSize: '12.5px' }}>
+          <p className="onboarding-slide-desc" style={{ fontSize: '14px' }}>
             {lang === 'ru'
               ? 'Каждый клик «Перейти на сайт» — это «долина смерти» для вашей прибыли. 37% пользователей отваливаются из-за долгой загрузки и лишних переходов.'
               : 'Every click to an external website is a dead end for profits. 37% of users drop off due to slow loading and extra steps.'}

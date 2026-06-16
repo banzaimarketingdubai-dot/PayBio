@@ -487,53 +487,25 @@ export const ProductListScreen = memo(function ProductListScreen({
     }
   };
 
-  const getNichePromptTemplate = (nicheName: string, product: any) => {
+  const getNicheVisualPrompt = (nicheName: string, product: any) => {
     if (!product) return '';
     const title = product.title;
-    const desc = product.description || '';
-    const priceStr = product.price_fiat
-      ? `$${product.price_fiat}`
-      : product.price_stars
-      ? `${product.price_stars} Stars`
-      : 'Free';
-    
-    let style = 'Minimalist, clean, high-contrast, studio lighting';
-    let textColor = 'White';
     
     if (nicheName === 'Psychology') {
-      style = 'soft pastel tones, deep focus, warm ambient light, minimalist, clean';
-      textColor = 'Black';
+      return `soft pastel tones, deep focus, warm ambient light, minimalist psychology concept illustration representing mental health and self-care`;
     } else if (nicheName === 'Crypto') {
-      style = 'dark mode sleek neon accents, ultra modern, tech, high-contrast';
-      textColor = 'White';
+      return `dark mode sleek neon accents, ultra modern tech background representing cryptocurrency and finance, 3d rendering`;
     } else if (nicheName === 'Fitness') {
-      style = 'aggressive contrast, high energy, bold shadows, dramatic studio lighting';
-      textColor = 'White';
+      return `aggressive contrast, high energy, bold shadows, dramatic studio lighting fitness gym equipment representation`;
     } else if (nicheName === 'Finance') {
-      style = 'professional corporate design, deep navy background, gold accents, clean lines';
-      textColor = 'White';
+      return `professional corporate design, deep navy background, gold accents, clean lines, wealth and finance illustration`;
     } else if (nicheName === 'Tech') {
-      style = 'ultramodern gadget photography background, cool white led studio lights';
-      textColor = 'White';
+      return `ultramodern gadget photography background, cool white led studio lights, high-tech vibes`;
     } else if (nicheName === 'Art') {
-      style = 'avant-garde abstract design, vibrant color splashes, creative typography focus';
-      textColor = 'Black';
+      return `avant-garde abstract design, vibrant color splashes, creative artistic layout`;
     }
 
-    return `A professional, high-end commercial product banner for Telegram. 
-Subject: ${desc || title} (Niche: ${nicheName}). 
-Style: ${style}, high-contrast. 
-Background: Soft-focus, relevant to the product niche to ensure text readability.
-
-TEXT_OVERLAY_INSTRUCTIONS:
-- Headline: '${title}' (Position: Center, Font: Bold Sans-Serif, Color: ${textColor})
-- Subline: 'Price: ${priceStr}' (Position: Bottom-Right, Font: Medium Sans-Serif, Color: ${textColor === 'White' ? 'White with subtle shadow' : 'Dark Gray'} for readability)
-
-CONSTRAINTS:
-- No text blurring.
-- Sharp edges for typography.
-- Maximum readability score.
-- Aspect ratio: 16:9.`;
+    return `Minimalist, clean, high-contrast, professional studio background showing an aesthetic representation of ${title}`;
   };
 
   const handleGeneratePromo = async (p: any) => {
@@ -543,7 +515,7 @@ CONSTRAINTS:
     setPromoText('');
     setStoryCoverUrl(p.banner_url || '');
     setPromoNiche('General');
-    setStoryPrompt(getNichePromptTemplate('General', p));
+    setStoryPrompt(getNicheVisualPrompt('General', p));
 
     if (p.cover_url) {
       setPromoBgUrl(p.cover_url);
@@ -641,8 +613,15 @@ CONSTRAINTS:
     if (typeof window !== 'undefined') {
       const WebApp = (window as any).Telegram?.WebApp;
       if (WebApp?.shareToStory) {
+        let absoluteImageUrl = storyCoverUrl;
+        if (storyCoverUrl.startsWith('data:')) {
+          absoluteImageUrl = `${window.location.origin}/api/promo/image?product_id=${selectedPromoProduct.id}&t=${Date.now()}`;
+        } else if (storyCoverUrl.startsWith('/')) {
+          absoluteImageUrl = `${window.location.origin}${storyCoverUrl}`;
+        }
+
         try {
-          WebApp.shareToStory(storyCoverUrl, {
+          WebApp.shareToStory(absoluteImageUrl, {
             text: promoText,
             widget_link: {
               url: storefrontUrl,
@@ -652,6 +631,7 @@ CONSTRAINTS:
           return;
         } catch (e) {
           console.error('Failed to call shareToStory', e);
+          return; // Do not fall back to browser share menu inside Telegram WebApp
         }
       }
     }
@@ -779,6 +759,48 @@ CONSTRAINTS:
         setCropperCircular(false);
         setOnCropComplete(() => (cropped: string) => {
           setProdCoverUrl(cropped);
+        });
+        setCropperOpen(true);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    }
+  };
+
+  const handleStoriesCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && selectedPromoProduct && creator) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCropperSrc(reader.result as string);
+        setCropperAspect(9 / 16);
+        setCropperCircular(false);
+        setOnCropComplete(() => async (cropped: string) => {
+          setIsGeneratingStoryCover(true);
+          try {
+            const res = await fetch('/api/generate-product-banner', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                product_id: selectedPromoProduct.id,
+                niche: promoNiche,
+                user_tg_id: creator.telegram_id,
+                banner_url: cropped
+              })
+            });
+            const data = await res.json();
+            if (res.ok && data.success && data.banner_url) {
+              setStoryCoverUrl(data.banner_url);
+              selectedPromoProduct.banner_url = data.banner_url;
+              showAlert(lang === 'ru' ? '✓ Собственная обложка загружена!' : '✓ Custom cover uploaded!');
+            } else {
+              showAlert(lang === 'ru' ? 'Не удалось сохранить обложку' : 'Failed to save cover.');
+            }
+          } catch (err: any) {
+            showAlert(err.message || 'Error saving cover.');
+          } finally {
+            setIsGeneratingStoryCover(false);
+          }
         });
         setCropperOpen(true);
       };
@@ -1290,45 +1312,45 @@ CONSTRAINTS:
               className="tour-partner-btn"
               style={{
                 background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
-                height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--tg-text)'
+                height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: '15px', color: 'var(--tg-text)'
               }}
               title={lang === 'ru' ? 'Кабинет партнера' : 'Partner Dashboard'}
             >
-              🤝 {lang === 'ru' ? 'Кабинет' : 'Partner'}
+              🤝
             </button>
             <button
               onClick={() => setCurrentScreen('SETTINGS')}
               style={{
                 background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
-                height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--tg-text)'
+                height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: '15px', color: 'var(--tg-text)'
               }}
               title={lang === 'ru' ? 'Настройки' : 'Settings'}
             >
-              ⚙️ {lang === 'ru' ? 'Настройки' : 'Settings'}
+              ⚙️
             </button>
             <button
               onClick={() => setCurrentScreen('CALENDAR')}
               style={{
                 background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
-                height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--tg-text)'
+                height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: '15px', color: 'var(--tg-text)'
               }}
               title={lang === 'ru' ? 'Расписание и Календарь' : 'Schedule & Calendar'}
             >
-              📅 {lang === 'ru' ? 'Календарь' : 'Calendar'}
+              📅
             </button>
             <button
               onClick={handleScanTicket}
               style={{
                 background: 'rgba(77,202,90,0.12)', border: '1px solid rgba(77,202,90,0.2)', borderRadius: '12px',
-                height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
-                cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#4dca5a'
+                height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', fontSize: '15px', color: '#4dca5a'
               }}
               title={lang === 'ru' ? 'Скан билета' : 'Scan Ticket'}
             >
-              📷 {lang === 'ru' ? 'Скан' : 'Scan'}
+              📷
             </button>
           </>
         )}
@@ -1338,12 +1360,12 @@ CONSTRAINTS:
           onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
           style={{
             background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)', borderRadius: '12px',
-            height: '32px', padding: '0 12px', display: 'flex', alignItems: 'center', gap: '6px',
-            cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: 'var(--tg-text)'
+            height: '32px', width: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: '15px', color: 'var(--tg-text)'
           }}
-          title="Change Language / Сменить язык"
+          title={lang === 'en' ? 'Switch to Russian' : 'Переключить на английский'}
         >
-          🌐 {lang === 'en' ? 'EN' : 'RU'}
+          🌐
         </button>
 
         {isOwner && !isCreatorPremium && (
@@ -2247,6 +2269,37 @@ CONSTRAINTS:
               )}
             </div>
 
+            {/* Upload Custom Cover Button */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '2px', marginBottom: '4px' }}>
+              <label
+                className="btn-secondary"
+                style={{
+                  textAlign: 'center',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  cursor: 'pointer',
+                  fontSize: '11.5px',
+                  height: '30px',
+                  padding: '0 14px',
+                  borderRadius: '15px',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid var(--tg-border)',
+                  color: 'var(--tg-text)',
+                  width: 'auto'
+                }}
+              >
+                📁 {lang === 'ru' ? 'Загрузить свою обложку' : 'Upload Custom Cover'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleStoriesCoverUpload}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+
             {/* 2. Premium Check Alert */}
             {!isCreatorPremium && (
               <div style={{
@@ -2276,7 +2329,7 @@ CONSTRAINTS:
                     onChange={(e) => {
                       const val = e.target.value;
                       setPromoNiche(val);
-                      setStoryPrompt(getNichePromptTemplate(val, selectedPromoProduct));
+                      setStoryPrompt(getNicheVisualPrompt(val, selectedPromoProduct));
                     }}
                     style={{ background: 'var(--tg-bg)', color: 'var(--tg-text)', padding: '6px', fontSize: '12.5px', borderRadius: '6px' }}
                   >
@@ -2292,7 +2345,7 @@ CONSTRAINTS:
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--tg-hint)' }}>
-                    {lang === 'ru' ? 'Промпт для ИИ-обложки (Редактируемый):' : 'Cover Image Prompt (Editable):'}
+                    {lang === 'ru' ? 'Идея для изображения (Редактируемая):' : 'Image Concept/Prompt (Editable):'}
                   </label>
                   <textarea
                     className="tg-input"

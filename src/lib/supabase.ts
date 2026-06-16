@@ -29,7 +29,7 @@ export interface User {
   username: string | null;
   is_premium: boolean;
   premium_until?: string | null;
-  /** How the user got premium: 'trial' = 7-day free trial, 'paid' = real payment, 'promo' = promo code */
+  /** How the user got premium: 'trial' = 1-day free trial, 'paid' = real payment, 'promo' = promo code */
   premium_source?: 'trial' | 'paid' | 'promo' | null;
   payment_details?: any;
   profile_customization?: any;
@@ -40,7 +40,7 @@ export interface User {
 }
 
 /**
- * Returns true only if the user has PAID or PROMO premium (not a 7-day trial).
+ * Returns true only if the user has PAID or PROMO premium (not a 1-day trial).
  * Use this to gate AI-powered features like Reve image generation.
  */
 export function canUseAI(user: User | null | undefined): boolean {
@@ -325,7 +325,7 @@ export const db = {
     const isPremium = existing ? existing.is_premium : true;
     const premiumUntil = existing 
       ? existing.premium_until 
-      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      : new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString();
     // New users get 'trial'; existing users keep their source
     const premiumSource: 'trial' | 'paid' | 'promo' | null = existing
       ? (existing.premium_source ?? 'trial')

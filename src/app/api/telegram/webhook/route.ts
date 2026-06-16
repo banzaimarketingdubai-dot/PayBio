@@ -787,8 +787,8 @@ export async function POST(request: Request) {
             await tgApi('sendMessage', {
               chat_id: chatId,
               text: lang === 'ru'
-                ? '🔒 *Генерация AI-обложек доступна только для пользователей с полным Premium.*\n\nВаш 7-дневный пробный период не включает эту функцию. Оформите Premium-подписку, чтобы разблокировать её.'
-                : '🔒 *AI cover generation is available for full Premium subscribers only.*\n\nYour 7-day trial does not include this feature. Upgrade to Premium to unlock it.',
+                ? '🔒 *Генерация AI-обложек доступна только для пользователей с полным Premium.*\n\nВаш 1-дневный пробный период не включает эту функцию. Оформите Premium-подписку, чтобы разблокировать её.'
+                : '🔒 *AI cover generation is available for full Premium subscribers only.*\n\nYour 1-day trial does not include this feature. Upgrade to Premium to unlock it.',
               parse_mode: 'Markdown',
             });
             return NextResponse.json({ ok: true });

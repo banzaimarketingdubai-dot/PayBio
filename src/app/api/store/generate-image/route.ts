@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       const user = await db.getUserByTelegramId(Number(user_tg_id));
       if (!canUseAI(user)) {
         return NextResponse.json(
-          { error: 'AI image generation requires a full Premium subscription. Your 7-day trial does not include this feature.' },
+          { error: 'AI image generation requires a full Premium subscription. Your 1-day trial does not include this feature.' },
           { status: 403 }
         );
       }

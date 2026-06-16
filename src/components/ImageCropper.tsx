@@ -106,22 +106,25 @@ export default function ImageCropper({ imageSrc, aspectRatio, circular, onCrop, 
     const imgLeft = (containerRect.width - baseWidth * zoom) / 2 + pan.x;
     const imgTop = (280 - baseHeight * zoom) / 2 + pan.y;
 
-    const offsetOnImageX = (viewX - imgLeft) / (fitScale * zoom);
-    const offsetOnImageY = (viewY - imgTop) / (fitScale * zoom);
+    const scaleFactor = targetWidth / viewWidth;
+    const dx = imgLeft - viewX;
+    const dy = imgTop - viewY;
 
-    const sWidth = viewWidth / (fitScale * zoom);
-    const sHeight = viewHeight / (fitScale * zoom);
+    const destX = dx * scaleFactor;
+    const destY = dy * scaleFactor;
+    const destWidth = baseWidth * zoom * scaleFactor;
+    const destHeight = baseHeight * zoom * scaleFactor;
 
     ctx.drawImage(
       img,
-      offsetOnImageX,
-      offsetOnImageY,
-      sWidth,
-      sHeight,
       0,
       0,
-      targetWidth,
-      targetHeight
+      imgWidth,
+      imgHeight,
+      destX,
+      destY,
+      destWidth,
+      destHeight
     );
 
     const croppedBase64 = canvas.toDataURL('image/jpeg', 0.85);
@@ -201,7 +204,7 @@ export default function ImageCropper({ imageSrc, aspectRatio, circular, onCrop, 
           </div>
           <input
             type="range"
-            min="1"
+            min="0.4"
             max="3"
             step="0.05"
             value={zoom}

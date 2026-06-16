@@ -67,12 +67,12 @@ export default function LoadingScreen({ lang = 'en' }: LoadingScreenProps) {
       {/* Top indicator progress bars */}
       <div style={{
         display: 'flex',
-        width: '100%',
-        maxWidth: '340px',
+        width: 'calc(100% - 32px)',
+        maxWidth: '480px',
         gap: '6px',
-        marginBottom: '28px',
         position: 'absolute',
         top: '28px',
+        zIndex: 10,
       }}>
         {slides.map((_, index) => (
           <div key={index} style={{
@@ -90,19 +90,16 @@ export default function LoadingScreen({ lang = 'en' }: LoadingScreenProps) {
       {/* Main Slide Card Container */}
       <div style={{
         width: '100%',
-        maxWidth: '360px',
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: '24px',
-        padding: '24px',
-        boxSizing: 'border-box',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        maxWidth: '480px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         textAlign: 'center',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+        flex: 1,
+        justifyContent: 'center',
+        paddingTop: '60px',
+        paddingBottom: '80px',
+        boxSizing: 'border-box',
       }}>
         {/* Animated Slide Transition wrapper */}
         <div 
@@ -118,14 +115,17 @@ export default function LoadingScreen({ lang = 'en' }: LoadingScreenProps) {
           {/* Illustration image */}
           <div style={{
             width: '100%',
-            height: '180px',
+            height: '280px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            marginBottom: '20px',
-            borderRadius: '16px',
+            marginBottom: '32px',
+            borderRadius: '20px',
             overflow: 'hidden',
-            background: 'rgba(0,0,0,0.15)',
+            background: 'rgba(255, 255, 255, 0.02)',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            padding: '16px',
+            boxSizing: 'border-box',
           }}>
             <img 
               src={slide.img} 
@@ -134,29 +134,31 @@ export default function LoadingScreen({ lang = 'en' }: LoadingScreenProps) {
                 maxWidth: '100%',
                 maxHeight: '100%',
                 objectFit: 'contain',
+                filter: 'drop-shadow(0 10px 20px rgba(0,0,0,0.3))',
               }} 
             />
           </div>
 
           <h2 style={{
-            fontSize: '19px',
-            fontWeight: 700,
-            margin: '0 0 10px 0',
+            fontSize: '26px',
+            fontWeight: 850,
+            margin: '0 0 16px 0',
             background: 'linear-gradient(90deg, #3b82f6 0%, #a855f7 100%)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
-            letterSpacing: '-0.3px',
+            letterSpacing: '-0.5px',
+            lineHeight: '1.25',
           }}>
             {title}
           </h2>
 
           <p style={{
-            fontSize: '13.5px',
-            color: 'rgba(255, 255, 255, 0.7)',
-            lineHeight: '1.5',
+            fontSize: '15.5px',
+            color: 'rgba(255, 255, 255, 0.75)',
+            lineHeight: '1.6',
             margin: 0,
-            minHeight: '60px',
-            padding: '0 8px',
+            minHeight: '80px',
+            padding: '0 16px',
           }}>
             {desc}
           </p>

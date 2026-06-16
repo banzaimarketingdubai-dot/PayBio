@@ -225,7 +225,8 @@ export async function generateLayoutFirstPrompt(
   title: string,
   description: string,
   price: string,
-  selectedNiche?: string
+  selectedNiche?: string,
+  aspectRatio: '16:9' | '9:16' = '16:9'
 ): Promise<string> {
   const analysisPrompt = `
     Ты — AI-дизайнер системы Paybio. Твоя задача: на основе данных о товаре (Название, Описание, Цена) составить структуру запроса для API Reve 2.0.
@@ -245,12 +246,14 @@ export async function generateLayoutFirstPrompt(
     1. Identify the Niche (e.g., "Psychology", "Finance", "Crypto", "Fitness", "Education", "Art", "Tech", "General"). If Selected Niche is provided, use it.
     2. Choose a style preset for the background and text contrast (e.g., "soft pastel tones, deep focus, warm ambient light" for Psychology, "dark mode sleek neon accents, ultra modern, tech" for Crypto, "aggressive contrast, high energy, bold shadows" for Fitness, etc.).
     3. Determine the best high-contrast text color based on the chosen background style (e.g. "White" or "Black").
+    4. Generate a short, highly-visual description of the background illustration/scene/objects suited for image generation, translated to English (e.g. if the product is about online finance, describe a clean desk with a laptop showing a chart, and golden highlights). Do not include text overlays or abstract non-visual phrases. If the Description looks like a custom image prompt already, preserve it and refine it slightly.
     
     Return ONLY a JSON object containing these keys:
     {
       "niche": "string",
       "stylePreset": "string",
-      "textColor": "string"
+      "textColor": "string",
+      "visualPrompt": "string"
     }
     
     Do not include markdown code block formatting.
@@ -272,10 +275,30 @@ export async function generateLayoutFirstPrompt(
     const niche = selectedNiche || parsed.niche || 'General';
     const stylePreset = parsed.stylePreset || 'Minimalist, clean, studio lighting';
     const textColor = parsed.textColor || 'White';
+    const visualPrompt = parsed.visualPrompt || title;
     
     // Package into layout-first prompt contract
+    if (aspectRatio === '9:16') {
+      return `A professional, high-end vertical commercial product banner for Telegram Stories. 
+Subject: ${visualPrompt} (Niche: ${niche}). 
+Style: ${stylePreset}, minimalist, clean, high-contrast, studio lighting. 
+Background: Soft-focus, relevant to the product niche to ensure text readability.
+
+TEXT_OVERLAY_INSTRUCTIONS:
+- Headline: '${title}' (Position: Upper-Center, Font: Bold Sans-Serif, Color: ${textColor}, wrapped to multiple short lines, with substantial left/right safe zone padding so it never cuts off)
+- Subline: 'Price: ${price}' (Position: Lower-Center, Font: Medium Sans-Serif, Color: ${textColor === 'White' ? 'White with subtle shadow' : 'Dark Gray'} for readability)
+
+CONSTRAINTS:
+- No text blurring.
+- Sharp edges for typography.
+- Maximum readability score.
+- Aspect ratio: 9:16.
+- Extreme side margins: Keep all text strictly within the middle 70% width of the image to prevent side clipping on mobile screens.
+- Keep top 15% and bottom 15% clear of text to prevent overlap with Stories UI.`;
+    }
+
     return `A professional, high-end commercial product banner for Telegram. 
-Subject: ${description || title} (Niche: ${niche}). 
+Subject: ${visualPrompt} (Niche: ${niche}). 
 Style: ${stylePreset}, minimalist, clean, high-contrast, studio lighting. 
 Background: Soft-focus, relevant to the product niche to ensure text readability.
 
@@ -292,6 +315,25 @@ CONSTRAINTS:
   } catch (error) {
     console.error('Error generating Layout-First prompt:', error);
     // Fallback prompt layout
+    if (aspectRatio === '9:16') {
+      return `A professional, high-end vertical commercial product banner for Telegram Stories. 
+Subject: ${description || title}. 
+Style: Minimalist, clean, high-contrast, studio lighting. 
+Background: Soft-focus, relevant to the product niche to ensure text readability.
+
+TEXT_OVERLAY_INSTRUCTIONS:
+- Headline: '${title}' (Position: Upper-Center, Font: Bold Sans-Serif, Color: High-Contrast, wrapped to multiple short lines, with substantial left/right safe zone padding so it never cuts off)
+- Subline: 'Price: ${price}' (Position: Lower-Center, Font: Medium Sans-Serif, Color: White with subtle shadow for readability)
+
+CONSTRAINTS:
+- No text blurring.
+- Sharp edges for typography.
+- Maximum readability score.
+- Aspect ratio: 9:16.
+- Extreme side margins: Keep all text strictly within the middle 70% width of the image to prevent side clipping on mobile screens.
+- Keep top 15% and bottom 15% clear of text to prevent overlap with Stories UI.`;
+    }
+
     return `A professional, high-end commercial product banner for Telegram. 
 Subject: ${description || title}. 
 Style: Minimalist, clean, high-contrast, studio lighting. 

@@ -69,6 +69,7 @@ export default function PaymentSheet({
 }: PaymentSheetProps) {
   const [showInstructions, setShowInstructions] = React.useState(true);
   const [screenshot, setScreenshot] = React.useState<string | null>(null);
+  const [isLightboxOpen, setIsLightboxOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -328,8 +329,9 @@ export default function PaymentSheet({
   };
 
   return (
-    <div 
-      className={`bottom-sheet-overlay ${isOpen ? 'active' : ''}`} 
+    <>
+      <div 
+        className={`bottom-sheet-overlay ${isOpen ? 'active' : ''}`} 
       style={isOpen ? { zIndex: 1100 } : undefined} 
       onClick={handleSheetOverlayClick}
     >
@@ -690,16 +692,30 @@ export default function PaymentSheet({
                               <p style={{ fontSize: '11.5px', color: 'var(--tg-hint)', margin: 0 }}>
                                 {lang === 'ru' ? 'Сканируйте QR-код в приложении банка:' : 'Scan QR code in your banking app:'}
                               </p>
-                              <div style={{
-                                padding: '10px',
-                                background: '#fff',
-                                borderRadius: '12px',
-                                display: 'inline-block',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                              }}>
-                                <img src={cardQr} style={{ width: '160px', height: '160px', objectFit: 'contain' }} alt="SBP QR code" />
+                              <div 
+                                onClick={() => setIsLightboxOpen(true)}
+                                style={{
+                                  padding: '10px',
+                                  background: '#fff',
+                                  borderRadius: '12px',
+                                  display: 'inline-block',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                  cursor: 'zoom-in',
+                                  transition: 'transform 0.2s',
+                                  userSelect: 'none'
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+                                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                              >
+                                <img src={cardQr} style={{ width: '160px', height: '160px', objectFit: 'contain', display: 'block' }} alt="SBP QR code" />
                               </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <p 
+                                onClick={() => setIsLightboxOpen(true)}
+                                style={{ fontSize: '10px', color: 'var(--tg-link)', margin: '4px 0 0 0', cursor: 'pointer', fontWeight: 600 }}
+                              >
+                                🔍 {lang === 'ru' ? 'Открыть во весь экран' : 'View Fullscreen'}
+                              </p>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '6px' }}>
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1069,5 +1085,143 @@ export default function PaymentSheet({
         )}
       </div>
     </div>
+
+    {isLightboxOpen && (
+      <div 
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.92)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}
+        onClick={() => setIsLightboxOpen(false)}
+      >
+        {/* Close button */}
+        <button
+          type="button"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(255, 255, 255, 0.15)',
+            border: 'none',
+            borderRadius: '50%',
+            width: '38px',
+            height: '38px',
+            color: '#fff',
+            fontSize: '20px',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+          }}
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          ✕
+        </button>
+
+        {/* Instruction banner */}
+        <div style={{
+          color: '#fff',
+          textAlign: 'center',
+          marginBottom: '20px',
+          maxWidth: '320px',
+          fontSize: '13.5px',
+          fontWeight: 600,
+          lineHeight: 1.4
+        }}>
+          {lang === 'ru' 
+            ? '📸 Сделайте скриншот QR-кода, чтобы оплатить в приложении банка' 
+            : '📸 Take a screenshot of the QR code to pay in your banking app'}
+          <div style={{ fontSize: '11px', color: '#b3b3b3', marginTop: '6px', fontWeight: 400 }}>
+            {lang === 'ru' 
+              ? 'Или зажмите изображение пальцем для сохранения в галерею' 
+              : 'Or press and hold the image to save it to your gallery'}
+          </div>
+        </div>
+
+        {/* QR Code Frame */}
+        {(() => {
+          const cardObj = p2pList.length > 0 && checkoutP2pIdx < p2pList.length ? p2pList[checkoutP2pIdx] : null;
+          const cardQrImg = cardObj ? cardObj.qr : null;
+          const cardBankName = cardObj ? cardObj.label : (lang === 'ru' ? 'Основная карта' : 'Primary Card');
+          
+          return (
+            <>
+              <div 
+                style={{
+                  padding: '16px',
+                  backgroundColor: '#fff',
+                  borderRadius: '16px',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  maxWidth: '85vw',
+                  maxHeight: '60vh'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <img 
+                  src={cardQrImg || ''} 
+                  style={{ 
+                    maxWidth: '100%', 
+                    maxHeight: '100%', 
+                    objectFit: 'contain',
+                    userSelect: 'auto',
+                    WebkitUserSelect: 'auto',
+                    display: 'block'
+                  }} 
+                  alt="SBP QR code Fullscreen" 
+                />
+              </div>
+
+              {/* Download button in Lightbox */}
+              <div style={{ marginTop: '24px' }}>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const link = document.createElement('a');
+                    link.href = cardQrImg || '';
+                    link.download = `qr_${cardBankName || 'card'}.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #0088CC 0%, #00A6FF 100%)',
+                    border: 'none',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    padding: '10px 24px',
+                    borderRadius: '20px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(0,136,204,0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  💾 {lang === 'ru' ? 'Скачать в галерею' : 'Save to Gallery'}
+                </button>
+              </div>
+            </>
+          );
+        })()}
+      </div>
+    )}
+    </>
   );
 }

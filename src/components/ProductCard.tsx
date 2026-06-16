@@ -86,6 +86,14 @@ export default function ProductCard({
               <button
                 type="button"
                 className="product-owner-btn"
+                onClick={(e) => { e.stopPropagation(); onGeneratePromo(product); }}
+                title="Promo"
+              >
+                📢
+              </button>
+              <button
+                type="button"
+                className="product-owner-btn"
                 onClick={(e) => { e.stopPropagation(); onOpenEditProduct(product); }}
                 title="Edit"
               >
