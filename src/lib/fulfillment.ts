@@ -60,6 +60,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       second: '2-digit'
     }) + ' MSK';
 
+    const isRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
     const paymentMethod = order.payment_method || 'p2p';
     const tonAmount = (product.price_fiat / 7.0).toFixed(2);
     const creatorWallet = creator?.payment_details?.ton || 'No TON wallet configured';
@@ -67,7 +68,16 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
     let buyerReceiptText = '';
     let creatorReceiptText = '';
 
-    if (paymentMethod.startsWith('ton')) {
+    const isFree = paymentMethod === 'free' || Number(product.price_fiat) === 0;
+
+    if (isFree) {
+      buyerReceiptText = isRussian
+        ? `🎁 *Бесплатный заказ подтвержден продавцом!*`
+        : `🎁 *Free request approved by the seller!*`;
+      creatorReceiptText = isRussian
+        ? `🎁 *Выдача бесплатного товара подтверждена!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}`
+        : `🎁 *Free item delivery confirmed!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Item:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}`;
+    } else if (paymentMethod.startsWith('ton')) {
       buyerReceiptText = `✅ *Платеж получен на кошелек.*`;
       creatorReceiptText = `Вы получили ${tonAmount} TON от ${buyerName} за продукт "${product.title}" на Ваш кошелек "${creatorWallet}"`;
     } else if (paymentMethod.startsWith('stars')) {
@@ -79,7 +89,6 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
     }
 
     const productType = product.product_type || 'DIGITAL';
-    const isRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
     const promoMarkup = {
       inline_keyboard: [
         [
@@ -136,9 +145,13 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
         // Notify Creator
         if (creator) {
-          const creatorVoucherText = paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
-            ? creatorReceiptText
-            : `📦 *Оплата физического товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nПокупатель сейчас заполняет адресные данные доставки в приложении.`;
+          const creatorVoucherText = isFree
+            ? (isRussian
+                ? `🎁 *Выдача бесплатного физического товара подтверждена!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}\n\nПолучатель сейчас заполняет адресные данные доставки в приложении.`
+                : `🎁 *Free physical item request approved!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Item:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}\n\nRecipient is now filling out shipping details in the app.`)
+            : (paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+                ? creatorReceiptText
+                : `📦 *Оплата физического товара!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Товар:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\nПокупатель сейчас заполняет адресные данные доставки в приложении.`);
 
           await sendTelegramNotification(
             creator.telegram_id,
@@ -209,9 +222,13 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
         // Notify Creator
         if (creator) {
-          let creatorVoucherTicketText = paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
-            ? creatorReceiptText
-            : `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`;
+          let creatorVoucherTicketText = isFree
+            ? (isRussian
+                ? `🎁 *Выдача бесплатного билета подтверждена!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}\n\n`
+                : `🎁 *Free ticket request approved!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Event:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}\n\n`)
+            : (paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+                ? creatorReceiptText
+                : `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`);
 
           if (maxQuantity !== null) {
             creatorVoucherTicketText += isRussian
@@ -266,9 +283,13 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
         );
 
         if (creator) {
-          const creatorBookingText = paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
-            ? creatorReceiptText + `\n⏰ *Забронированное время:* ${formattedTime}`
-            : `📅 *Новая запись на консультацию!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Услуга:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n⏰ *Забронированное время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`;
+          const creatorBookingText = isFree
+            ? (isRussian
+                ? `🎁 *Бронирование бесплатной консультации подтверждено!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Услуга:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}\n⏰ *Забронированное время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`
+                : `🎁 *Free booking request approved!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Service:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}\n⏰ *Booked Slot:* ${formattedTime}\n🔗 [Add to Google Calendar](${gCalUrl})`)
+            : (paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+                ? creatorReceiptText + `\n⏰ *Забронированное время:* ${formattedTime}`
+                : `📅 *Новая запись на консультацию!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Услуга:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n⏰ *Забронированное время:* ${formattedTime}\n🔗 [Добавить в Google Календарь](${gCalUrl})`);
 
           await sendTelegramNotification(
             creator.telegram_id,

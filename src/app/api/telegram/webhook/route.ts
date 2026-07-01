@@ -260,7 +260,11 @@ export async function POST(request: Request) {
           if (success) {
             // Edit the creator's bot message
             const oldText = cb.message?.text || cb.message?.caption || '';
-            const newText = oldText + (lang === 'ru' ? '\n\n[ ✅ Оплата подтверждена, товар успешно выдан ]' : '\n\n[ ✅ Approved and Delivered successfully ]');
+            const isFree = order.product && Number(order.product.price_fiat) === 0;
+            const approvalText = isFree
+              ? (lang === 'ru' ? '\n\n[ ✅ Запрос одобрен, товар успешно выдан ]' : '\n\n[ ✅ Request approved, item delivered ]')
+              : (lang === 'ru' ? '\n\n[ ✅ Оплата подтверждена, товар успешно выдан ]' : '\n\n[ ✅ Approved and Delivered successfully ]');
+            const newText = oldText + approvalText;
             
             if (cb.message?.document || cb.message?.photo) {
               await tgApi('editMessageCaption', {
@@ -726,8 +730,8 @@ export async function POST(request: Request) {
           return NextResponse.json({ ok: true });
         }
         const price = Number(text.trim().replace(',', '.'));
-        if (isNaN(price) || price <= 0) {
-          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Некорректная цена. Пожалуйста, укажите положительное число.' : 'Invalid price. Please send a positive number.' });
+        if (isNaN(price) || price < 0) {
+          await tgApi('sendMessage', { chat_id: chatId, text: lang === 'ru' ? 'Некорректная цена. Пожалуйста, укажите число от 0 и выше.' : 'Invalid price. Please enter a number 0 or greater.' });
           return NextResponse.json({ ok: true });
         }
         botState.data.price_fiat = price;
@@ -1086,7 +1090,10 @@ export async function POST(request: Request) {
         const buyer = o.buyer_tg_id;
         const pTitle = o.product?.title || 'Product';
         const price = o.product?.price_fiat || 0;
-        cartMsg += `${idx + 1}. Покупатель \`${buyer}\`\n📦 Товар: *${pTitle}* ($${price})\n⏰ Создана: ${date}\n\n`;
+        const priceStr = Number(price) === 0
+          ? (lang === 'ru' ? 'Бесплатно' : 'Free')
+          : `$${price}`;
+        cartMsg += `${idx + 1}. Покупатель \`${buyer}\`\n📦 Товар: *${pTitle}* (${priceStr})\n⏰ Создана: ${date}\n\n`;
       });
       await tgApi('sendMessage', {
         chat_id: chatId,

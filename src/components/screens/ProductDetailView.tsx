@@ -117,8 +117,8 @@ export default function ProductDetailView({
         }}>
           <div>
             ⚠️ {lang === 'ru' 
-              ? 'Срок действия вашей подписки PayBio из-за неоплаты истек. Покупатели больше не могут просматривать и покупать ваши товары.' 
-              : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+              ? 'Срок действия вашей подписки PayBio из-за неоплаты истек. Оплата и бронирование товаров покупателями отключены.' 
+              : 'Your PayBio subscription has expired. Payment and booking for your products are disabled for buyers.'}
           </div>
           <button 
             onClick={() => setIsPremiumOpen(true)}
@@ -638,16 +638,26 @@ export default function ProductDetailView({
         ) : !isStorePremium ? (
           <div className="tg-card animate-fade-up" style={{ padding: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <p style={{ fontWeight: 700, fontSize: '16px', color: 'var(--tg-text)', margin: 0 }}>
-              ⚠️ {lang === 'ru' ? 'Подписка истекла' : 'Subscription Expired'}
+              ⚠️ {lang === 'ru' 
+                ? (product.product_type === 'BOOKING' ? 'Бронирование недоступно' : 'Оплата недоступна')
+                : (product.product_type === 'BOOKING' ? 'Booking Unavailable' : 'Payment Unavailable')}
             </p>
             <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.6, margin: 0 }}>
-              {lang === 'ru' 
-                ? 'Для активации возможности оплаты этого товара покупателями, пожалуйста, продлите Premium подписку.'
-                : 'To enable customers to pay for this product, please renew your Premium subscription.'}
+              {isOwner ? (
+                lang === 'ru' 
+                  ? 'Для активации возможности оплаты/бронирования этого товара покупателями, пожалуйста, продлите Premium подписку.'
+                  : 'To enable customers to pay for or book this product, please renew your Premium subscription.'
+              ) : (
+                lang === 'ru'
+                  ? 'Оплата и бронирование временно недоступны, так как у владельца магазина не активна подписка.'
+                  : 'Payment and booking are temporarily unavailable because the store owner does not have an active subscription.'
+              )}
             </p>
-            <button className="btn-primary" onClick={() => setIsPremiumOpen(true)} style={{ background: 'var(--tg-accent)', color: '#fff', fontWeight: 700 }}>
-              👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
-            </button>
+            {isOwner && (
+              <button className="btn-primary" onClick={() => setIsPremiumOpen(true)} style={{ background: 'var(--tg-accent)', color: '#fff', fontWeight: 700 }}>
+                👑 {lang === 'ru' ? 'Активировать Premium' : 'Activate Premium'}
+              </button>
+            )}
           </div>
         ) : hasBoughtInSession ? (
           <button 
@@ -694,8 +704,19 @@ export default function ProductDetailView({
               boxShadow: '0 4px 15px rgba(43, 140, 243, 0.3)'
             }}
           >
-            <span>💳</span>
-            <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
+            {Number(product.price_fiat) === 0 ? (
+              <>
+                <span>🎁</span>
+                <span>
+                  {lang === 'ru' ? 'Резервировать' : 'Reserve'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>💳</span>
+                <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
+              </>
+            )}
           </button>
         )}
       </div>

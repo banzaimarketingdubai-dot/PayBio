@@ -127,7 +127,7 @@ export default function ProductCard({
               className="featured-product-action-btn"
               onClick={(e) => { e.stopPropagation(); onSelect(product.id); }}
             >
-              {product.product_type === 'BOOKING' ? (lang === 'ru' ? 'Запись' : 'Book') : (lang === 'ru' ? 'Купить' : 'Buy')}
+              {Number(product.price_fiat) === 0 ? (lang === 'ru' ? 'Резервировать' : 'Reserve') : product.product_type === 'BOOKING' ? (lang === 'ru' ? 'Запись' : 'Book') : (lang === 'ru' ? 'Купить' : 'Buy')}
             </button>
           </div>
         </div>
@@ -178,7 +178,7 @@ export default function ProductCard({
               className="universal-product-action-btn"
               onClick={(e) => { e.stopPropagation(); onSelect(product.id); }}
             >
-              {product.product_type === 'BOOKING' ? (lang === 'ru' ? 'Запись' : 'Book') : (lang === 'ru' ? 'Купить' : 'Buy')}
+              {Number(product.price_fiat) === 0 ? (lang === 'ru' ? 'Резервировать' : 'Reserve') : product.product_type === 'BOOKING' ? (lang === 'ru' ? 'Запись' : 'Book') : (lang === 'ru' ? 'Купить' : 'Buy')}
             </button>
           </div>
         </div>

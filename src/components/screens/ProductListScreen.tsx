@@ -154,7 +154,7 @@ export const ProductListScreen = memo(function ProductListScreen({
     setProdTitle(p.title);
     setProdDesc(p.description || '');
     setProdPriceUSD(String(p.price_fiat));
-    setProdPriceStars(p.price_stars ? String(p.price_stars) : String(Math.round(p.price_fiat * 50)));
+    setProdPriceStars(p.price_stars !== undefined && p.price_stars !== null ? String(p.price_stars) : String(Math.round(p.price_fiat * 50)));
     setProdCoverUrl(p.cover_url || '');
     setProdType(p.product_type || 'DIGITAL');
     setProdSubType(p.sub_type || '');
@@ -828,35 +828,62 @@ export const ProductListScreen = memo(function ProductListScreen({
     }
   };
 
+  const processVerifyAndRedeem = async (qrData: string) => {
+    try {
+      const res = await fetch('/api/vouchers/redeem', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qr_data: qrData, dry_run: true })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showAlert(lang === 'ru' ? `❌ Ошибка: ${data.error || 'Не удалось проверить билет'}` : `❌ Error: ${data.error || 'Failed to verify ticket'}`);
+        return;
+      }
+
+      const voucher = data.voucher;
+      const visitor = voucher.visitorName || 'Unknown';
+      const ticketType = voucher.order?.product?.title || (lang === 'ru' ? 'Ваучер' : 'Voucher');
+      const rawDate = voucher.order?.created_at || voucher.created_at;
+      const purchaseDate = rawDate ? new Date(rawDate).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US') : 'N/A';
+
+      const infoMsg = lang === 'ru'
+        ? `Имя посетителя: ${visitor}\nТип билета: ${ticketType}\nДата покупки: ${purchaseDate}\n\nЗарегистрировать гостя?`
+        : `Visitor Name: ${visitor}\nTicket Type: ${ticketType}\nPurchase Date: ${purchaseDate}\n\nRegister guest?`;
+
+      if (typeof window !== 'undefined') {
+        const WebApp = (window as any).Telegram?.WebApp;
+        if (WebApp?.showConfirm) {
+          WebApp.showConfirm(infoMsg, async (ok: boolean) => {
+            if (ok) {
+              await executeRedeem(qrData);
+            }
+          });
+        } else {
+          if (window.confirm(infoMsg)) {
+            await executeRedeem(qrData);
+          }
+        }
+      }
+    } catch (err: any) {
+      showAlert(err.message || 'Error verifying ticket.');
+    }
+  };
+
   const handleScanTicket = () => {
     if (typeof window !== 'undefined') {
       const WebApp = (window as any).Telegram?.WebApp;
-      const confirmMsg = lang === 'ru'
-        ? "Вы хотите погасить билет?"
-        : "Do you want to redeem the ticket?";
 
       if (WebApp?.showScanQrPopup) {
         WebApp.showScanQrPopup({ text: lang === 'ru' ? "Сканируйте QR-код билета" : "Scan Buyer's QR" }, async (text: string) => {
           WebApp.closeScanQrPopup();
-          if (WebApp?.showConfirm) {
-            WebApp.showConfirm(confirmMsg, async (ok: boolean) => {
-              if (ok) {
-                await executeRedeem(text);
-              }
-            });
-          } else {
-            if (window.confirm(confirmMsg)) {
-              await executeRedeem(text);
-            }
-          }
+          await processVerifyAndRedeem(text);
           return true;
         });
       } else {
         const qr = prompt(lang === 'ru' ? "Введите хэш QR-кода билета:" : "Enter scanned QR voucher code:");
         if (qr) {
-          if (window.confirm(confirmMsg)) {
-            executeRedeem(qr);
-          }
+          processVerifyAndRedeem(qr);
         }
       }
     }
@@ -895,7 +922,7 @@ export const ProductListScreen = memo(function ProductListScreen({
 
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prodTitle || !prodPriceUSD) return;
+    if (!prodTitle || prodPriceUSD === '') return;
     setIsAdding(true);
     try {
       const priceUSD = Number(prodPriceUSD);
@@ -1136,8 +1163,8 @@ export const ProductListScreen = memo(function ProductListScreen({
         }}>
           <div>
             ⚠️ {lang === 'ru'
-              ? 'Срок действия вашей подписки PayBio истек. Покупатели больше не могут просматривать и покупать ваши товары.'
-              : 'Your PayBio subscription has expired. Buyers can no longer view or purchase your products.'}
+              ? 'Срок действия вашей подписки PayBio истек. Оплата и бронирование товаров покупателями отключены.'
+              : 'Your PayBio subscription has expired. Payment and booking for your products are disabled for buyers.'}
           </div>
           <button
             onClick={onOpenPremium}
@@ -1976,8 +2003,12 @@ export const ProductListScreen = memo(function ProductListScreen({
                     onChange={(e) => {
                       const val = e.target.value;
                       setProdPriceUSD(val);
+                      if (val === '') {
+                        setProdPriceStars('');
+                        return;
+                      }
                       const num = Number(val);
-                      if (!isNaN(num) && num > 0) {
+                      if (!isNaN(num) && num >= 0) {
                         setProdPriceStars(String(Math.round(num * 50)));
                       } else {
                         setProdPriceStars('');
@@ -1996,8 +2027,12 @@ export const ProductListScreen = memo(function ProductListScreen({
                     onChange={(e) => {
                       const val = e.target.value;
                       setProdPriceStars(val);
+                      if (val === '') {
+                        setProdPriceUSD('');
+                        return;
+                      }
                       const num = Number(val);
-                      if (!isNaN(num) && num > 0) {
+                      if (!isNaN(num) && num >= 0) {
                         setProdPriceUSD(String(Math.round((num / 50) * 100) / 100));
                       } else {
                         setProdPriceUSD('');

@@ -88,6 +88,7 @@ export default function Storefront() {
             setVerifyError={store.setVerifyError}
             isProcessingPayment={store.isProcessingPayment}
             handleClaimPayment={store.handleClaimPayment}
+            handleFreeCheckout={store.handleFreeCheckout}
             activeOrderId={store.activeOrderId}
           />
         )}
@@ -184,15 +185,8 @@ export default function Storefront() {
     );
   };
 
-  // If store subscription expired and user is a buyer
-  if (!store.isStorePremium && !store.isOwner) {
-    return (
-      <>
-        <InactiveStoreView lang={store.lang} />
-        {renderOverlays()}
-      </>
-    );
-  }
+  // If store subscription expired and user is a buyer, they can still view products and catalog.
+  // Gating is now handled inside ProductDetailView.tsx when trying to pay/book.
 
   // If a delivery coordinates form needs to be filled out
   if (store.showDeliveryForm && store.product) {

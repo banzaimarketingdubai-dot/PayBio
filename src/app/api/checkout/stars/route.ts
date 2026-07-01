@@ -28,6 +28,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Product not found.' }, { status: 404 });
     }
 
+    // 1a. Validate creator's premium status
+    if (!product.creator?.is_premium) {
+      return NextResponse.json(
+        { error: 'Оплата и бронирование временно недоступны, так как у владельца магазина не активна подписка.' },
+        { status: 403 }
+      );
+    }
+
     // 1b. Validate voucher limits if product is VOUCHER
     if (product.product_type === 'VOUCHER') {
       try {

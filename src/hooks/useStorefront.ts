@@ -205,7 +205,7 @@ export function useStorefront() {
   // Checkout state
   const [paymentMethod, setPaymentMethod] = useState<'stars' | 'ton' | 'p2p' | null>(null);
   const [isPaymentSheetOpen, setIsPaymentSheetOpen] = useState(false);
-  const [checkoutMethod, setCheckoutMethod] = useState<'card' | 'stars' | 'crypto' | 'other' | null>(null);
+  const [checkoutMethod, setCheckoutMethod] = useState<'card' | 'stars' | 'crypto' | 'other' | 'free' | null>(null);
   const [cryptoSubMethod, setCryptoSubMethod] = useState<'ton' | 'usdt_trc20' | 'usdt_bep20'>('ton');
   const [checkoutP2pIdx, setCheckoutP2pIdx] = useState(0);
   const [file, setFile] = useState<File | null>(null);
@@ -1418,6 +1418,67 @@ export function useStorefront() {
     }
   }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang, cryptoSubMethod]);
 
+  const handleFreeCheckout = useCallback(async () => {
+    if (!product || isProcessingPayment) return;
+    if (product.product_type === 'BOOKING') {
+      if (!bookingDate || !bookingTime) {
+        showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
+        return;
+      }
+    }
+
+    setVerifying(true);
+    setVerifyError(null);
+    setVerifySuccess(false);
+
+    try {
+      const bookingSlot = product.product_type === 'BOOKING' ? {
+        start: `${bookingDate}T${bookingTime}:00`,
+        end: `${bookingDate}T${bookingTime}:00`
+      } : undefined;
+
+      const res = await fetch('/api/checkout/p2p', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: product.id,
+          buyer_tg_id: buyerTgId,
+          booking_slot: bookingSlot,
+          payment_method: 'free'
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to initialize order.');
+      }
+      const orderId = data.order_id;
+      setActiveOrderId(orderId);
+
+      const verifyRes = await fetch('/api/checkout/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          order_id: orderId 
+        }),
+      });
+      const result = await verifyRes.json();
+      if (verifyRes.ok && result.success) {
+        setVerifySuccess(true);
+        setHasBoughtInSession(true);
+        if (product.sub_type === 'PHYSICAL') {
+          setPaidOrderId(orderId);
+          setShowDeliveryForm(true);
+        }
+      } else {
+        throw new Error(result.reason || 'Failed to request free item.');
+      }
+    } catch (err: any) {
+      setVerifyError(err.message || 'Processing error.');
+    } finally {
+      setVerifying(false);
+    }
+  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, lang]);
+
   const handleShippingSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paidOrderId || !shipFullName || !shipPhone || !shipAddress) {
@@ -1673,6 +1734,7 @@ export function useStorefront() {
     handleBuyDirect,
     handleSelectPaymentMethod,
     handleClaimPayment,
+    handleFreeCheckout,
     handleShippingSubmit,
     handleActivateRealStore
   };

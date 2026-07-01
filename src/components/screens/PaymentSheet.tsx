@@ -13,8 +13,8 @@ export interface PaymentSheetProps {
   bookingDate: string;
   bookingTime: string;
   tonAmount: string;
-  checkoutMethod: 'card' | 'stars' | 'crypto' | 'other' | null;
-  setCheckoutMethod: (method: 'card' | 'stars' | 'crypto' | 'other' | null) => void;
+  checkoutMethod: 'card' | 'stars' | 'crypto' | 'other' | 'free' | null;
+  setCheckoutMethod: (method: 'card' | 'stars' | 'crypto' | 'other' | 'free' | null) => void;
   p2pList: any[];
   checkoutP2pIdx: number;
   setCheckoutP2pIdx: (idx: number) => void;
@@ -33,6 +33,7 @@ export interface PaymentSheetProps {
   setVerifyError: (error: string | null) => void;
   isProcessingPayment: boolean;
   handleClaimPayment: (receiptUrl?: string) => void;
+  handleFreeCheckout: () => void;
   activeOrderId: string | null;
 }
 
@@ -65,6 +66,7 @@ export default function PaymentSheet({
   setVerifyError,
   isProcessingPayment,
   handleClaimPayment,
+  handleFreeCheckout,
   activeOrderId
 }: PaymentSheetProps) {
   const [showInstructions, setShowInstructions] = React.useState(true);
@@ -74,10 +76,15 @@ export default function PaymentSheet({
 
   React.useEffect(() => {
     if (isOpen) {
-      setShowInstructions(true);
+      if (Number(product.price_fiat) === 0) {
+        setCheckoutMethod('free');
+        setShowInstructions(false);
+      } else {
+        setShowInstructions(true);
+      }
       setScreenshot(null);
     }
-  }, [isOpen]);
+  }, [isOpen, product.price_fiat, setCheckoutMethod]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -389,12 +396,20 @@ export default function PaymentSheet({
             </div>
           </div>
           <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <p style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--tg-text)' }}>
-              ${product.price_fiat}
-            </p>
-            <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--tg-hint)' }}>
-              {product.price_stars} ⭐ / ~{tonAmount} TON
-            </p>
+            {Number(product.price_fiat) === 0 ? (
+              <p style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--tg-green)' }}>
+                {lang === 'ru' ? 'Бесплатно' : 'Free'}
+              </p>
+            ) : (
+              <>
+                <p style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--tg-text)' }}>
+                  ${product.price_fiat}
+                </p>
+                <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--tg-hint)' }}>
+                  {product.price_stars} ⭐ / ~{tonAmount} TON
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -601,7 +616,7 @@ export default function PaymentSheet({
             {checkoutMethod && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }} className="animate-fade-in">
                 {/* Back to method selection */}
-                {!verifying && !verifySuccess && (
+                {!verifying && !verifySuccess && checkoutMethod !== 'free' && (
                   <button
                     onClick={() => {
                       setCheckoutMethod(null);
@@ -1077,6 +1092,153 @@ export default function PaymentSheet({
                     >
                       💬 {lang === 'ru' ? 'Написать автору' : 'Contact Creator'}
                     </button>
+                  </div>
+                )}
+
+                {/* ── FREE PANEL ── */}
+                {checkoutMethod === 'free' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '20px' }}>🎁</span>
+                      <span style={{ fontWeight: 800, fontSize: '15.5px' }}>
+                        {lang === 'ru' ? 'Резервировать бесплатно' : 'Reserve for Free'}
+                      </span>
+                    </div>
+
+                    <p style={{ fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.5, margin: 0 }}>
+                      {lang === 'ru'
+                        ? 'Вы запрашиваете этот товар или услугу бесплатно. После подтверждения автором, бот пришлет вам товар/билет.'
+                        : 'You are requesting this item or service for free. Once confirmed by the creator, the bot will deliver it to you.'}
+                    </p>
+
+                    {product.product_type === 'BOOKING' && bookingDate && bookingTime && (
+                      <div style={{
+                        padding: '10px 12px',
+                        background: 'var(--tg-secondary-bg)',
+                        borderRadius: '10px',
+                        fontSize: '12.5px',
+                        border: '1px solid var(--tg-border)',
+                        color: 'var(--tg-text)'
+                      }}>
+                        📅 <b>{lang === 'ru' ? 'Выбранное время:' : 'Selected slot:'}</b> {bookingDate} {bookingTime}
+                      </div>
+                    )}
+
+                    {!verifying && !verifySuccess && (
+                      <button
+                        onClick={handleFreeCheckout}
+                        className="btn-primary"
+                        disabled={hasBookingConflict}
+                        style={{
+                          background: !hasBookingConflict ? 'var(--tg-accent)' : 'var(--tg-hint)',
+                          height: '46px',
+                          fontSize: '14px',
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          cursor: !hasBookingConflict ? 'pointer' : 'not-allowed'
+                        }}
+                      >
+                        <span>⚡️</span>
+                        <span>
+                          {lang === 'ru' ? 'Зарезервировать бесплатно' : 'Reserve for Free'}
+                        </span>
+                      </button>
+                    )}
+
+                    {verifyError && (
+                      <div style={{
+                        padding: '10px 12px',
+                        background: 'rgba(233,92,92,0.1)',
+                        border: '1px solid rgba(233,92,92,0.2)',
+                        borderRadius: '10px',
+                        fontSize: '12.5px',
+                        color: 'var(--tg-red)',
+                      }} className="animate-scale-in">
+                        ❌ {verifyError}
+                        <button
+                          type="button"
+                          onClick={handleFreeCheckout}
+                          style={{ marginLeft: '8px', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: '12px' }}
+                        >
+                          {lang === 'ru' ? 'Повторить' : 'Retry'}
+                        </button>
+                      </div>
+                    )}
+
+                    {verifying && (
+                      <div style={{
+                        padding: '20px 14px',
+                        background: 'var(--tg-surface)',
+                        borderRadius: '12px',
+                        border: '1px solid var(--tg-border)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '12px'
+                      }} className="animate-fade-in">
+                        <span className="spinner-mini" style={{
+                          width: '24px',
+                          height: '24px',
+                          border: '2px solid rgba(255,255,255,0.1)',
+                          borderTopColor: 'var(--tg-accent)',
+                          borderRadius: '50%',
+                          animation: 'spin 1s linear infinite'
+                        }} />
+                        <p style={{ fontSize: '12.5px', color: 'var(--tg-hint)', margin: 0 }}>
+                          {lang === 'ru' ? 'Отправляем запрос автору...' : 'Sending request to the creator...'}
+                        </p>
+                      </div>
+                    )}
+
+                    {verifySuccess && (
+                      <div style={{
+                        padding: '20px 16px',
+                        background: 'rgba(77,202,90,0.08)',
+                        border: '1px solid rgba(77,202,90,0.2)',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        alignItems: 'center',
+                        textAlign: 'center'
+                      }} className="animate-scale-in">
+                        <div style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          background: 'var(--tg-green)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '18px',
+                          color: '#fff'
+                        }}>✓</div>
+                        <div>
+                          <p style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--tg-green)', margin: '0 0 4px 0' }}>
+                            {lang === 'ru' ? 'Запрос отправлен автору' : 'Request sent to creator'}
+                          </p>
+                          <p style={{ fontSize: '12px', color: 'var(--tg-hint)', margin: 0, lineHeight: 1.4 }}>
+                            {lang === 'ru'
+                              ? 'Как только он подтвердит выдачу, бот пришлет вам товар/билет.'
+                              : 'As soon as they confirm, the bot will deliver your product/ticket.'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            onClose();
+                            setCheckoutMethod(null);
+                          }}
+                          className="btn-primary"
+                          style={{ background: 'var(--tg-green)', height: '38px', fontSize: '13px', borderRadius: '8px', marginTop: '4px', width: '100%' }}
+                        >
+                          {lang === 'ru' ? 'Закрыть ✓' : 'Close ✓'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

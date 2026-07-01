@@ -162,18 +162,35 @@ export async function POST(request: Request) {
       const currency = order.payment_method === 'crypto' ? 'USDT/TON' : 'USD';
       const isProductRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
 
-      messageText = isProductRussian
-        ? `💰 *Новый запрос на подтверждение оплаты!* \n\nПокупатель утверждает, что перевел вам ${price} ${currency} за товар *"${product.title}"*. Проверьте ваш счет/кошелек.`
-        : `💰 *New Payment Confirmation Request!* \n\nBuyer claims they transferred ${price} ${currency} for *"${product.title}"*. Please check your banking app or wallet.`;
+      const isFree = Number(price) === 0;
 
-      replyMarkup = {
-        inline_keyboard: [
-          [
-            { text: isProductRussian ? '✅ Подтвердить и выдать товар' : '✅ Approve & Deliver', callback_data: `approve_pay_${order_id}` },
-            { text: isProductRussian ? '❌ Возникла проблема' : '❌ Problem with Payment', callback_data: `reject_pay_${order_id}` }
+      if (isFree) {
+        messageText = isProductRussian
+          ? `🎁 *Запрос на выдачу бесплатного товара/услуги!* \n\nПокупатель *${buyerName}* хочет получить товар/услугу *"${product.title}"* бесплатно. Подтвердите выдачу товара.`
+          : `🎁 *Free Item/Service Request!* \n\nBuyer *${buyerName}* wants to receive *"${product.title}"* for free. Please approve and deliver.`;
+
+        replyMarkup = {
+          inline_keyboard: [
+            [
+              { text: isProductRussian ? '✅ Выдать бесплатно' : '✅ Approve & Deliver', callback_data: `approve_pay_${order_id}` },
+              { text: isProductRussian ? '❌ Отклонить запрос' : '❌ Reject Request', callback_data: `reject_pay_${order_id}` }
+            ]
           ]
-        ]
-      };
+        };
+      } else {
+        messageText = isProductRussian
+          ? `💰 *Новый запрос на подтверждение оплаты!* \n\nПокупатель утверждает, что перевел вам ${price} ${currency} за товар *"${product.title}"*. Проверьте ваш счет/кошелек.`
+          : `💰 *New Payment Confirmation Request!* \n\nBuyer claims they transferred ${price} ${currency} for *"${product.title}"*. Please check your banking app or wallet.`;
+
+        replyMarkup = {
+          inline_keyboard: [
+            [
+              { text: isProductRussian ? '✅ Подтвердить и выдать товар' : '✅ Approve & Deliver', callback_data: `approve_pay_${order_id}` },
+              { text: isProductRussian ? '❌ Возникла проблема' : '❌ Problem with Payment', callback_data: `reject_pay_${order_id}` }
+            ]
+          ]
+        };
+      }
     }
 
     if (receipt_url && receipt_url.startsWith('data:image')) {

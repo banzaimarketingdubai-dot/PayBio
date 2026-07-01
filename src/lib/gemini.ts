@@ -63,8 +63,8 @@ export async function extractProductFromText(rawText: string): Promise<ExtractPr
     Extract the following details in JSON format:
     - title: A catchy title for the digital product.
     - description: A short, engaging description for the storefront.
-    - price_fiat: The price of the product in USD (fiat). If the price is mentioned in TON, Stars, or Rubles, convert/estimate it to USD (assume 1 TON = $7.00, 1 Star = $0.02, 100 RUB = $1.10). Default to $5.00 if no price can be parsed.
-    - price_stars: The price of the product in Telegram Stars. Standard rate is $1 = 50 Stars. (E.g. $10 = 500 Stars).
+    - price_fiat: The price of the product in USD (fiat). If the price is mentioned in TON, Stars, or Rubles, convert/estimate it to USD (assume 1 TON = $7.00, 1 Star = $0.02, 100 RUB = $1.10). Default to $5.00 if no price can be parsed, or 0 if it is explicitly mentioned as free, zero, or бесплатно.
+    - price_stars: The price of the product in Telegram Stars. Standard rate is $1 = 50 Stars. (E.g. $10 = 500 Stars, $0 = 0 Stars).
 
     Creator's input: "${rawText.replace(/"/g, '\\"')}"
 
