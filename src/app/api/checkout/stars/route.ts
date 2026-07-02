@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     // 1b. Validate voucher limits if product is VOUCHER
     let hasGenderBalance = false;
-    if (product.product_type === 'VOUCHER') {
+    if (product.product_type === 'VOUCHER' || product.product_type === 'TICKET') {
       try {
         const content = JSON.parse(product.content_url);
         if (content) {
@@ -60,20 +60,23 @@ export async function POST(request: Request) {
       }
     }
 
+    const isPair = gender === 'PAIR';
     if (hasGenderBalance) {
-      if (!gender || (gender !== 'M' && gender !== 'F')) {
-        return NextResponse.json({ error: 'Пожалуйста, выберите пол (М или Ж) для покупки билета.' }, { status: 400 });
+      if (!gender || (gender !== 'M' && gender !== 'F' && gender !== 'PAIR')) {
+        return NextResponse.json({ error: 'Пожалуйста, выберите пол или парный билет для покупки.' }, { status: 400 });
       }
 
-      const { maleCount, femaleCount } = await db.getGenderCounts(product_id);
-      const newMaleCount = maleCount + (gender === 'M' ? 1 : 0);
-      const newFemaleCount = femaleCount + (gender === 'F' ? 1 : 0);
+      if (!isPair) {
+        const { maleCount, femaleCount } = await db.getGenderCounts(product_id);
+        const newMaleCount = maleCount + (gender === 'M' ? 1 : 0);
+        const newFemaleCount = femaleCount + (gender === 'F' ? 1 : 0);
 
-      if (Math.abs(newMaleCount - newFemaleCount) > 2) {
-        return NextResponse.json({
-          error: 'GENDER_BALANCE_LIMIT',
-          message: 'Извините, покупка билетов выбранного пола временно ограничена для удержания баланса М/Ж. Вы можете записаться в лист ожидания.'
-        }, { status: 403 });
+        if (Math.abs(newMaleCount - newFemaleCount) > 2) {
+          return NextResponse.json({
+            error: 'GENDER_BALANCE_LIMIT',
+            message: 'Извините, покупка билетов выбранного пола временно ограничена для удержания баланса М/Ж. Вы можете записаться в лист ожидания.'
+          }, { status: 403 });
+        }
       }
     }
 
@@ -159,9 +162,12 @@ export async function POST(request: Request) {
           ? `@${buyer.username || 'user'}` 
           : `ID: ${buyerTgId}`;
         
+        const displayPriceFiat = product.price_fiat * (isPair ? 2 : 1);
+        const displayPriceStars = product.price_stars * (isPair ? 2 : 1);
+        
         await sendTelegramNotification(
           creatorTgId,
-          `🛒 *Checkout Initiated!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"* ($${product.price_fiat} / ${product.price_stars} Stars).`
+          `🛒 *Checkout Initiated!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"*${isPair ? ' (Pair M+F)' : ''} ($${displayPriceFiat} / ${displayPriceStars} Stars).`
         );
       }
     }
@@ -171,15 +177,15 @@ export async function POST(request: Request) {
     // For Telegram Stars, provider_token must be empty, and currency must be "XTR"
     const tgUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/createInvoiceLink`;
     const payload = {
-      title: product.title.slice(0, 32), // Telegram has length constraints
+      title: (product.title.slice(0, 25) + (isPair ? ' (М+Ж)' : '')).slice(0, 32), // Telegram has length constraints
       description: product.description ? product.description.slice(0, 255) : 'Digital Product',
       payload: order.id, // We pass the order_id as the payload to track it in shipping query/pre_checkout query
       provider_token: '', // Empty for Stars
       currency: 'XTR',
       prices: [
         {
-          label: product.title.slice(0, 32),
-          amount: Math.round(product.price_stars), // Stars must be integers
+          label: (product.title.slice(0, 25) + (isPair ? ' (М+Ж)' : '')).slice(0, 32),
+          amount: Math.round(product.price_stars * (isPair ? 2 : 1)), // Stars must be integers
         },
       ],
     };

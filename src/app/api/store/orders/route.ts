@@ -5,15 +5,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const creatorId = searchParams.get('creator_id');
+    const buyerTgId = searchParams.get('buyer_tg_id');
 
-    if (!creatorId) {
+    if (!creatorId && !buyerTgId) {
       return NextResponse.json(
-        { error: 'Missing creator_id parameter.' },
+        { error: 'Missing creator_id or buyer_tg_id parameter.' },
         { status: 400 }
       );
     }
 
-    const orders = await db.getOrdersByCreatorId(creatorId);
+    let orders = [];
+    if (creatorId) {
+      orders = await db.getOrdersByCreatorId(creatorId);
+    } else if (buyerTgId) {
+      orders = await db.getOrdersByBuyerTgId(Number(buyerTgId));
+    }
 
     return NextResponse.json({
       success: true,

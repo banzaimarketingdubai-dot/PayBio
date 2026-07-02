@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 
     // 1b. Validate voucher limits if product is VOUCHER
     let hasGenderBalance = false;
-    if (!isPremiumVirtual && product.product_type === 'VOUCHER') {
+    if (!isPremiumVirtual && (product.product_type === 'VOUCHER' || product.product_type === 'TICKET')) {
       try {
         const content = JSON.parse(product.content_url);
         if (content) {
@@ -74,20 +74,23 @@ export async function POST(request: Request) {
       }
     }
 
+    const isPair = gender === 'PAIR';
     if (hasGenderBalance) {
-      if (!gender || (gender !== 'M' && gender !== 'F')) {
-        return NextResponse.json({ error: 'Пожалуйста, выберите пол (М или Ж) для покупки билета.' }, { status: 400 });
+      if (!gender || (gender !== 'M' && gender !== 'F' && gender !== 'PAIR')) {
+        return NextResponse.json({ error: 'Пожалуйста, выберите пол или парный билет для покупки.' }, { status: 400 });
       }
 
-      const { maleCount, femaleCount } = await db.getGenderCounts(product_id);
-      const newMaleCount = maleCount + (gender === 'M' ? 1 : 0);
-      const newFemaleCount = femaleCount + (gender === 'F' ? 1 : 0);
+      if (!isPair) {
+        const { maleCount, femaleCount } = await db.getGenderCounts(product_id);
+        const newMaleCount = maleCount + (gender === 'M' ? 1 : 0);
+        const newFemaleCount = femaleCount + (gender === 'F' ? 1 : 0);
 
-      if (Math.abs(newMaleCount - newFemaleCount) > 2) {
-        return NextResponse.json({
-          error: 'GENDER_BALANCE_LIMIT',
-          message: 'Извините, покупка билетов выбранного пола временно ограничена для удержания баланса М/Ж. Вы можете записаться в лист ожидания.'
-        }, { status: 403 });
+        if (Math.abs(newMaleCount - newFemaleCount) > 2) {
+          return NextResponse.json({
+            error: 'GENDER_BALANCE_LIMIT',
+            message: 'Извините, покупка билетов выбранного пола временно ограничена для удержания баланса М/Ж. Вы можете записаться в лист ожидания.'
+          }, { status: 403 });
+        }
       }
     }
 
@@ -177,10 +180,11 @@ export async function POST(request: Request) {
           ? `@${buyer.username || 'user'}` 
           : `ID: ${bTgId}`;
         
+        const displayPriceFiat = product.price_fiat * (isPair ? 2 : 1);
         const methodName = method === 'crypto' ? 'Crypto' : 'Card/P2P';
         await sendTelegramNotification(
           creatorTgId,
-          `🛒 *Checkout Initiated (${methodName})!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"* ($${product.price_fiat}).`
+          `🛒 *Checkout Initiated (${methodName})!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"*${isPair ? ' (Pair M+F)' : ''} ($${displayPriceFiat}).`
         );
       }
     }

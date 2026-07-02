@@ -36,8 +36,8 @@ interface ProductDetailViewProps {
   setIsPaymentSheetOpen: (open: boolean) => void;
   setIsPremiumOpen: (open: boolean) => void;
   hasBoughtInSession: boolean;
-  buyerGender?: 'M' | 'F' | null;
-  setBuyerGender?: (gender: 'M' | 'F' | null) => void;
+  buyerGender?: 'M' | 'F' | 'PAIR' | null;
+  setBuyerGender?: (gender: 'M' | 'F' | 'PAIR' | null) => void;
 }
 
 const getDaysWord = (days: number, lang: 'ru' | 'en') => {
@@ -78,20 +78,30 @@ export default function ProductDetailView({
   let maxQuantity: number | null = null;
   let hasLimit = false;
   let hasGenderBalance = false;
+  let rubric = '';
+  let eventDate = '';
+  let eventTime = '';
+  let location = '';
 
-  if (product.product_type === 'BOOKING' || product.product_type === 'VOUCHER') {
+  if (product.product_type === 'BOOKING' || product.product_type === 'VOUCHER' || product.product_type === 'TICKET') {
     try {
       const parsed = JSON.parse(product.content_url);
       if (parsed) {
         if (product.product_type === 'BOOKING') {
           slotsText = parsed.slots || '';
-        } else if (product.product_type === 'VOUCHER') {
+        } else if (product.product_type === 'VOUCHER' || product.product_type === 'TICKET') {
           if (typeof parsed.max_quantity === 'number') {
             maxQuantity = parsed.max_quantity;
             hasLimit = true;
           }
           if (parsed.has_gender_balance) {
             hasGenderBalance = true;
+          }
+          if (product.product_type === 'TICKET') {
+            rubric = parsed.rubric || 'party';
+            eventDate = parsed.event_date || '';
+            eventTime = parsed.event_time || '';
+            location = parsed.location || '';
           }
         }
       }
@@ -100,7 +110,10 @@ export default function ProductDetailView({
     }
   }
 
-  const isSoldOut = product.product_type === 'VOUCHER' && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
+  const isSoldOut = (product.product_type === 'VOUCHER' || product.product_type === 'TICKET') && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
+
+  const isPairSelected = buyerGender === 'PAIR';
+  const displayPriceFiat = Number(product.price_fiat) * (isPairSelected ? 2 : 1);
 
   const [genderCounts, setGenderCounts] = React.useState<{ maleCount: number; femaleCount: number } | null>(null);
 
@@ -287,8 +300,138 @@ export default function ProductDetailView({
         </div>
 
         {/* Category-Specific Storefront Product Layout */}
-        {product.product_type === 'VOUCHER' ? (
-          /* ── VOUCHER / TICKET CATEGORY LAYOUT (TICKET STUB) ── */
+        {product.product_type === 'TICKET' ? (
+          /* ── TICKET / EVENT CATEGORY LAYOUT ── */
+          <div style={{
+            background: 'var(--tg-surface)',
+            borderRadius: '20px',
+            padding: product.cover_url ? '0 0 24px 0' : '24px 20px',
+            marginBottom: '20px',
+            border: '1px solid var(--tg-border)',
+            overflow: 'hidden',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+            position: 'relative'
+          }}>
+            {product.cover_url && (
+              <div style={{
+                width: '100%',
+                height: '220px',
+                backgroundImage: `url("${product.cover_url}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                marginBottom: '20px',
+                position: 'relative'
+              }}>
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  height: '80px',
+                  background: 'linear-gradient(to top, var(--tg-surface), transparent)'
+                }} />
+              </div>
+            )}
+            
+            <div style={{ padding: product.cover_url ? '0 20px' : '0' }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                <span className="chip" style={{ background: 'rgba(192,132,252,0.15)', color: '#c084fc', fontWeight: 700 }}>
+                  🎫 {lang === 'ru' ? 'Мероприятие' : 'Event'}
+                </span>
+                {rubric && (
+                  <span className="chip" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--tg-hint)' }}>
+                    {rubric === 'party' ? (lang === 'ru' ? '💃 Вечеринка' : '💃 Party') :
+                     rubric === 'concert' ? (lang === 'ru' ? '🎤 Концерт' : '🎤 Concert') :
+                     rubric === 'masterclass' ? (lang === 'ru' ? '🎓 Мастер-класс' : '🎓 Masterclass') :
+                     rubric === 'lecture' ? (lang === 'ru' ? '📖 Лекция' : '📖 Lecture') :
+                     rubric === 'exhibition' ? (lang === 'ru' ? '🖼️ Выставка' : '🖼️ Exhibition') :
+                     rubric === 'sports' ? (lang === 'ru' ? '⚽ Спорт' : '⚽ Sports') :
+                     (lang === 'ru' ? '✨ Другое' : '✨ Other')}
+                  </span>
+                )}
+              </div>
+
+              <h1 style={{
+                fontSize: '24px', fontWeight: 800,
+                color: 'var(--tg-text)', lineHeight: 1.3,
+                letterSpacing: '-0.5px',
+                marginBottom: '16px',
+                textAlign: 'left'
+              }}>
+                {product.title}
+              </h1>
+
+              {/* Event Parameter Info Blocks */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                background: 'rgba(255,255,255,0.02)',
+                padding: '16px',
+                borderRadius: '16px',
+                border: '1px solid var(--tg-border)',
+                textAlign: 'left',
+                marginBottom: '20px'
+              }}>
+                {eventDate && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '20px' }}>📅</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600, textTransform: 'uppercase' }}>
+                        {lang === 'ru' ? 'Дата и Время' : 'Date & Time'}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '14px', color: 'var(--tg-text)', fontWeight: 700 }}>
+                        {eventDate} {eventTime && `в ${eventTime}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                {location && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '10px' }}>
+                    <span style={{ fontSize: '20px' }}>📍</span>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600, textTransform: 'uppercase' }}>
+                        {lang === 'ru' ? 'Место проведения' : 'Location'}
+                      </p>
+                      <p style={{ margin: 0, fontSize: '14px', color: 'var(--tg-text)', fontWeight: 700 }}>
+                        {location}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div 
+                onClick={() => setIsProductReviewsOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginBottom: '16px',
+                  padding: '5px 10px',
+                  background: 'rgba(255, 215, 0, 0.08)',
+                  border: '1px solid rgba(255, 215, 0, 0.2)',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  color: '#ffd700',
+                  cursor: 'pointer',
+                  fontWeight: 700
+                }}
+              >
+                <span>⭐️</span>
+                <span>{lang === 'ru' ? 'РЕЙТИНГ / ОТЗЫВЫ' : 'RATING / REVIEWS'}</span>
+              </div>
+              
+              <p style={{
+                fontSize: '14px',
+                color: 'var(--tg-hint)', lineHeight: 1.6,
+                margin: 0,
+                textAlign: 'left'
+              }}>
+                {product.description}
+              </p>
+            </div>
+          </div>
+        ) : product.product_type === 'VOUCHER' ? (
+          /* ── VOUCHER CATEGORY LAYOUT (TICKET STUB) ── */
           <div style={{
             background: 'var(--tg-surface)',
             borderRadius: '16px',
@@ -577,7 +720,7 @@ export default function ProductDetailView({
           </div>
         )}
 
-        {product.product_type === 'VOUCHER' && hasLimit && (
+        {(product.product_type === 'VOUCHER' || product.product_type === 'TICKET') && hasLimit && (
           <div style={{ margin: '0 0 16px 0', padding: '12px 16px', background: 'var(--tg-surface)', borderRadius: '14px', border: '1px solid var(--tg-border)', display: 'flex', flexDirection: 'column', gap: '8px' }} className="animate-fade-up">
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 600 }}>
               <span style={{ color: 'var(--tg-hint)' }}>
@@ -764,6 +907,24 @@ export default function ProductDetailView({
                     ♀️ {lang === 'ru' ? 'Я женщина (Ж)' : 'Female (F)'}
                   </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setBuyerGender?.('PAIR')}
+                  style={{
+                    width: '100%',
+                    height: '42px',
+                    borderRadius: '10px',
+                    border: buyerGender === 'PAIR' ? '2px solid #10b981' : '1px solid var(--tg-border)',
+                    background: buyerGender === 'PAIR' ? 'rgba(16,185,129,0.1)' : 'transparent',
+                    color: buyerGender === 'PAIR' ? '#10b981' : 'var(--tg-text)',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    marginTop: '4px'
+                  }}
+                >
+                  👫 {lang === 'ru' ? 'Купить пару (М + Ж) — Выгодно 🌟' : 'Buy M + F Pair (Best Value) 🌟'}
+                </button>
                 <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0, lineHeight: '1.4' }}>
                   {lang === 'ru' 
                     ? '⚠️ Для обеспечения равного гендерного состава участников количество мужских и женских билетов удерживается в паритете (разница не более 2).'
@@ -779,7 +940,7 @@ export default function ProductDetailView({
                   return;
                 }
                 if (hasGenderBalance && !buyerGender) {
-                  showAlert(lang === 'ru' ? 'Пожалуйста, выберите ваш пол (М или Ж) перед продолжением.' : 'Please select your gender (M or F) before proceeding.');
+                  showAlert(lang === 'ru' ? 'Пожалуйста, выберите ваш пол или покупку пары М+Ж перед продолжением.' : 'Please select your gender or buy a pair M+F before proceeding.');
                   return;
                 }
                 setIsPaymentSheetOpen(true);
@@ -808,7 +969,7 @@ export default function ProductDetailView({
               ) : (
                 <>
                   <span>💳</span>
-                  <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
+                  <span>{lang === 'ru' ? `Оплатить $${displayPriceFiat}` : `Pay $${displayPriceFiat}`}</span>
                 </>
               )}
             </button>

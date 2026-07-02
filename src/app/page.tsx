@@ -90,6 +90,7 @@ export default function Storefront() {
             handleClaimPayment={store.handleClaimPayment}
             handleFreeCheckout={store.handleFreeCheckout}
             activeOrderId={store.activeOrderId}
+            buyerGender={store.buyerGender}
           />
         )}
 
@@ -315,6 +316,10 @@ export default function Storefront() {
           onActivateRealStore={store.handleActivateRealStore}
           buyerHasStore={store.buyerHasStore}
           botUsername={store.botUsername}
+          buyerOrders={store.buyerOrders}
+          creatorOrders={store.creatorOrders}
+          loadingOrders={store.loadingOrders}
+          fetchOrders={store.fetchOrders}
         />
       </div>
 

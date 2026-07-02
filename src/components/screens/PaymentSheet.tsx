@@ -35,6 +35,7 @@ export interface PaymentSheetProps {
   handleClaimPayment: (receiptUrl?: string) => void;
   handleFreeCheckout: () => void;
   activeOrderId: string | null;
+  buyerGender?: 'M' | 'F' | 'PAIR' | null;
 }
 
 export default function PaymentSheet({
@@ -67,12 +68,18 @@ export default function PaymentSheet({
   isProcessingPayment,
   handleClaimPayment,
   handleFreeCheckout,
-  activeOrderId
+  activeOrderId,
+  buyerGender
 }: PaymentSheetProps) {
   const [showInstructions, setShowInstructions] = React.useState(true);
   const [screenshot, setScreenshot] = React.useState<string | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const isPair = buyerGender === 'PAIR';
+  const priceFiat = Number(product.price_fiat) * (isPair ? 2 : 1);
+  const priceStars = Math.round(Number(product.price_stars) * (isPair ? 2 : 1));
+  const finalTonAmount = isPair ? (Number(tonAmount) * 2).toFixed(2) : tonAmount;
 
   React.useEffect(() => {
     if (isOpen) {
@@ -380,7 +387,7 @@ export default function PaymentSheet({
             <img src={product.cover_url} style={{ width: '48px', height: '48px', borderRadius: '8px', objectFit: 'cover' }} alt="Product Cover" />
           ) : (
             <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>
-              {product.product_type === 'VOUCHER' ? '🎟️' : product.product_type === 'BOOKING' ? '📅' : '💾'}
+              {product.product_type === 'TICKET' ? '🎫' : product.product_type === 'VOUCHER' ? '🎟️' : product.product_type === 'BOOKING' ? '📅' : '💾'}
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -391,7 +398,13 @@ export default function PaymentSheet({
               {product.product_type === 'BOOKING' && bookingDate && bookingTime ? (
                 <span>🕒 {bookingDate} {bookingTime}</span>
               ) : (
-                <span>{product.product_type === 'VOUCHER' ? (lang === 'ru' ? 'Билет / Ваучер' : 'Ticket / Voucher') : (lang === 'ru' ? 'Цифровой файл' : 'Digital file')}</span>
+                <span>
+                  {product.product_type === 'TICKET'
+                    ? (lang === 'ru' ? 'Билет на событие' : 'Event Ticket')
+                    : product.product_type === 'VOUCHER'
+                    ? (lang === 'ru' ? 'Ваучер' : 'Voucher')
+                    : (lang === 'ru' ? 'Цифровой файл' : 'Digital file')}
+                </span>
               )}
             </div>
           </div>
@@ -403,10 +416,10 @@ export default function PaymentSheet({
             ) : (
               <>
                 <p style={{ margin: 0, fontSize: '14.5px', fontWeight: 800, color: 'var(--tg-text)' }}>
-                  ${product.price_fiat}
+                  ${priceFiat}
                 </p>
                 <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--tg-hint)' }}>
-                  {product.price_stars} ⭐ / ~{tonAmount} TON
+                  {priceStars} ⭐ / ~{finalTonAmount} TON
                 </p>
               </>
             )}
@@ -773,7 +786,7 @@ export default function PaymentSheet({
                     }}>
                       <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
                       <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--tg-text)' }}>
-                        ${product.price_fiat}
+                        ${priceFiat}
                       </span>
                     </div>
 
@@ -827,7 +840,7 @@ export default function PaymentSheet({
                       {isProcessingPayment ? (
                         <span>{lang === 'ru' ? 'Запуск оплаты...' : 'Launching payment...'}</span>
                       ) : (
-                        <span>{lang === 'ru' ? `Оплатить ${product.price_stars} ⭐` : `Pay ${product.price_stars} ⭐`}</span>
+                        <span>{lang === 'ru' ? `Оплатить ${priceStars} ⭐` : `Pay ${priceStars} ⭐`}</span>
                       )}
                     </button>
 
@@ -968,12 +981,12 @@ export default function PaymentSheet({
                         }}>
                           <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
                           <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tg-text)' }}>
-                            {tonAmount} TON
+                            {finalTonAmount} TON
                           </span>
                         </div>
 
                         <a
-                          href={`ton://transfer/${tonDetails}?amount=${Math.round(Number(tonAmount) * 1e9)}`}
+                          href={`ton://transfer/${tonDetails}?amount=${Math.round(Number(finalTonAmount) * 1e9)}`}
                           className="btn-primary"
                           style={{ background: 'var(--tg-green)', textDecoration: 'none', height: '42px', fontSize: '13.5px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         >
@@ -1003,7 +1016,7 @@ export default function PaymentSheet({
                         }}>
                           <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
                           <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tg-text)' }}>
-                            {product.price_fiat} USDT
+                            {priceFiat} USDT
                           </span>
                         </div>
                       </div>
@@ -1030,7 +1043,7 @@ export default function PaymentSheet({
                         }}>
                           <span style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Сумма к переводу:' : 'Amount to transfer:'}</span>
                           <span style={{ fontSize: '15px', fontWeight: 800, color: 'var(--tg-text)' }}>
-                            {product.price_fiat} USDT
+                            {priceFiat} USDT
                           </span>
                         </div>
                       </div>

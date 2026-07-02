@@ -42,9 +42,88 @@ export default function ProductCard({
   const cover = coverStyles[styleIdx];
   const isStarred = starredIds.includes(product.id);
 
+  let ticketInfo: {
+    event_date?: string;
+    event_time?: string;
+    location?: string;
+    rubric?: string | string[];
+  } | null = null;
+
+  if (product.product_type === 'TICKET') {
+    try {
+      ticketInfo = JSON.parse(product.content_url);
+    } catch (e) {}
+  }
+
+  const getRubricBadgeStyle = (rubricId: string) => {
+    const colors: Record<string, { bg: string; border: string; text: string }> = {
+      business: { bg: 'rgba(251, 191, 36, 0.12)', border: '#fbbf24', text: '#fbbf24' },
+      development: { bg: 'rgba(59, 130, 246, 0.12)', border: '#3b82f6', text: '#60a5fa' },
+      activities: { bg: 'rgba(249, 115, 22, 0.12)', border: '#f97316', text: '#fb923c' },
+      networking: { bg: 'rgba(168, 85, 247, 0.12)', border: '#a855f7', text: '#c084fc' },
+      relations: { bg: 'rgba(236, 72, 153, 0.12)', border: '#ec4899', text: '#f472b6' },
+      other: { bg: 'rgba(6, 182, 212, 0.12)', border: '#06b6d4', text: '#22d3ee' }
+    };
+    return colors[rubricId.toLowerCase()] || { bg: 'rgba(255,255,255,0.06)', border: 'var(--tg-border)', text: 'var(--tg-hint)' };
+  };
+
+  const getRubricLabel = (rubricId: string) => {
+    const labels: Record<string, { ru: string; en: string }> = {
+      business: { ru: '💼 Бизнес', en: '💼 Business' },
+      development: { ru: '🧠 Развитие', en: '🧠 Development' },
+      activities: { ru: '💃 Активности', en: '💃 Activities' },
+      networking: { ru: '🤝 Нетворкинг', en: '🤝 Networking' },
+      relations: { ru: '❤️ Отношения', en: '❤️ Relations' },
+      other: { ru: '✨ Другое', en: '✨ Other' }
+    };
+    const item = labels[rubricId.toLowerCase()];
+    return item ? (lang === 'ru' ? item.ru : item.en) : rubricId;
+  };
+
+  const getRubricsBorder = (prod: Product) => {
+    if (prod.product_type !== 'TICKET') return {};
+    
+    let rubricsList: string[] = [];
+    try {
+      const content = JSON.parse(prod.content_url);
+      if (content && content.rubric) {
+        rubricsList = Array.isArray(content.rubric) ? content.rubric : [content.rubric];
+      }
+    } catch (e) {}
+
+    if (rubricsList.length === 0) return {};
+
+    const rubricColors: Record<string, string> = {
+      business: '#fbbf24',
+      development: '#3b82f6',
+      activities: '#f97316',
+      networking: '#a855f7',
+      relations: '#ec4899',
+      other: '#06b6d4'
+    };
+
+    const colors = rubricsList
+      .map(r => rubricColors[r.toLowerCase()])
+      .filter(Boolean);
+
+    if (colors.length === 0) return {};
+    if (colors.length === 1) {
+      return { border: `2px solid ${colors[0]}` };
+    }
+
+    return {
+      border: '2px solid transparent',
+      backgroundImage: `linear-gradient(var(--tg-bg, #18181b), var(--tg-bg, #18181b)), linear-gradient(135deg, ${colors.join(', ')})`,
+      backgroundOrigin: 'border-box',
+      backgroundClip: 'padding-box, border-box'
+    };
+  };
+
   const typeBadge =
     product.product_type === 'VOUCHER'
-      ? (lang === 'ru' ? '🎟 Билет' : '🎟 Ticket')
+      ? (lang === 'ru' ? '🎟 Ваучер' : '🎟 Voucher')
+      : product.product_type === 'TICKET'
+      ? (lang === 'ru' ? '🎫 Билет' : '🎫 Ticket')
       : product.product_type === 'BOOKING'
       ? (lang === 'ru' ? '📅 Запись' : '📅 Booking')
       : (lang === 'ru' ? '📁 Файл' : '📁 File');
@@ -55,6 +134,7 @@ export default function ProductCard({
       <div
         className="featured-product-card animate-fade-up"
         onClick={() => onSelect(product.id)}
+        style={getRubricsBorder(product)}
       >
         <div
           className="featured-product-cover"
@@ -114,6 +194,45 @@ export default function ProductCard({
 
         <div className="featured-product-body">
           <h4 className="featured-product-title">{product.title}</h4>
+          {ticketInfo && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 10px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {(Array.isArray(ticketInfo.rubric) ? ticketInfo.rubric : [ticketInfo.rubric || 'other']).map((rubricId) => {
+                  const styleObj = getRubricBadgeStyle(rubricId);
+                  return (
+                    <span
+                      key={rubricId}
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: styleObj.bg,
+                        border: `1px solid ${styleObj.border}`,
+                        color: styleObj.text,
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      {getRubricLabel(rubricId)}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11.5px', color: 'var(--tg-hint)' }}>
+                {ticketInfo.event_date && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    📅 {new Date(ticketInfo.event_date).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {ticketInfo.event_time && ` в ${ticketInfo.event_time}`}
+                  </span>
+                )}
+                {ticketInfo.location && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    📍 {ticketInfo.location}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           <p className="featured-product-description">
             {product.description || (lang === 'ru' ? 'Описание отсутствует' : 'No description available')}
           </p>
@@ -140,6 +259,7 @@ export default function ProductCard({
     <div
       className="universal-product-card animate-fade-up"
       onClick={() => onSelect(product.id)}
+      style={getRubricsBorder(product)}
     >
       {/* Left side: Cover image */}
       <div
@@ -159,6 +279,45 @@ export default function ProductCard({
       <div className="universal-product-info">
         <div className={isOwner ? 'universal-product-title-row-owner' : 'universal-product-title-row'}>
           <h4 className="universal-product-title">{product.title}</h4>
+          {ticketInfo && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: '8px 0 10px' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {(Array.isArray(ticketInfo.rubric) ? ticketInfo.rubric : [ticketInfo.rubric || 'other']).map((rubricId) => {
+                  const styleObj = getRubricBadgeStyle(rubricId);
+                  return (
+                    <span
+                      key={rubricId}
+                      style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '6px',
+                        background: styleObj.bg,
+                        border: `1px solid ${styleObj.border}`,
+                        color: styleObj.text,
+                        textTransform: 'uppercase'
+                      }}
+                    >
+                      {getRubricLabel(rubricId)}
+                    </span>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '11.5px', color: 'var(--tg-hint)' }}>
+                {ticketInfo.event_date && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    📅 {new Date(ticketInfo.event_date).toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'en-US', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {ticketInfo.event_time && ` в ${ticketInfo.event_time}`}
+                  </span>
+                )}
+                {ticketInfo.location && (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    📍 {ticketInfo.location}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
           {product.description && (
             <p className="universal-product-description">{product.description}</p>
           )}

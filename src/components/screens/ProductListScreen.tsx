@@ -9,6 +9,7 @@ import ProductCard from '@/components/ProductCard';
 import { Creator, Product } from '@/types/store';
 import { getTWA, showAlert, handleOpenLink } from '@/utils/telegram';
 import { TRANSLATIONS } from '@/lib/translations';
+import EventStoreScreen from '@/components/screens/EventStoreScreen';
 
 // Heavy components — loaded only when needed
 const ImageCropper = dynamic(() => import('@/components/ImageCropper'), { ssr: false });
@@ -64,8 +65,8 @@ interface ProductListScreenProps {
   onDeleteProduct: (id: string) => Promise<boolean>;
   onUpdateProduct: (id: string, title: string, description: string, priceFiat: number, priceStars?: number, contentUrl?: string, coverUrl?: string, productType?: string, section?: string, subType?: string) => Promise<boolean>;
 
-  currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR';
-  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR') => void;
+  currentScreen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR' | 'EVENTS' | 'CART';
+  setCurrentScreen: (screen: 'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR' | 'EVENTS' | 'CART') => void;
   starredIds: string[];
   setStarredIds: (ids: string[]) => void;
   sectionsList: string[];
@@ -85,6 +86,10 @@ interface ProductListScreenProps {
   onActivateRealStore?: () => void;
   buyerHasStore?: boolean;
   botUsername?: string;
+  buyerOrders: any[];
+  creatorOrders: any[];
+  loadingOrders: boolean;
+  fetchOrders: () => Promise<void>;
 }
 
 export const ProductListScreen = memo(function ProductListScreen({
@@ -129,7 +134,11 @@ export const ProductListScreen = memo(function ProductListScreen({
   isDemoMode = false,
   onActivateRealStore,
   buyerHasStore = false,
-  botUsername
+  botUsername,
+  buyerOrders,
+  creatorOrders,
+  loadingOrders,
+  fetchOrders
 }: ProductListScreenProps) {
   // In demo mode, treat as buyer for header controls, but owner can preview catalog items.
   const isOwner = isDemoMode ? false : rawIsOwner;
@@ -163,17 +172,29 @@ export const ProductListScreen = memo(function ProductListScreen({
     let urlVal = p.content_url || '';
     let icsVal = '';
     let maxVal = '';
-    if (p.product_type === 'BOOKING' || p.product_type === 'VOUCHER') {
+    // Reset event-specific form states
+    setProdRubrics(['party']);
+    setProdEventDate('');
+    setProdEventTime('');
+    setProdLocation('');
+
+    if (p.product_type === 'BOOKING' || p.product_type === 'VOUCHER' || p.product_type === 'TICKET') {
       try {
         const parsed = JSON.parse(p.content_url);
         if (parsed) {
           if (p.product_type === 'BOOKING') {
             urlVal = parsed.slots || '';
             icsVal = parsed.ics_url || '';
-          } else if (p.product_type === 'VOUCHER') {
+          } else if (p.product_type === 'VOUCHER' || p.product_type === 'TICKET') {
             urlVal = parsed.fulfillment_url || '';
             maxVal = parsed.max_quantity ? String(parsed.max_quantity) : '';
             setProdHasGenderBalance(!!parsed.has_gender_balance);
+            if (p.product_type === 'TICKET') {
+              setProdRubrics(parsed.rubric ? (Array.isArray(parsed.rubric) ? parsed.rubric : [parsed.rubric]) : ['party']);
+              setProdEventDate(parsed.event_date || '');
+              setProdEventTime(parsed.event_time || '');
+              setProdLocation(parsed.location || '');
+            }
           }
         }
       } catch (e) {
@@ -197,11 +218,23 @@ export const ProductListScreen = memo(function ProductListScreen({
     setProdCalendarIcsUrl('');
     setProdMaxQuantity('');
     setProdHasGenderBalance(false);
+    setProdRubrics(['party']);
+    setProdEventDate('');
+    setProdEventTime('');
+    setProdLocation('');
     setProdCoverUrl('');
     setAiPrompt('');
-    setProdType(defaultSection === 'BOOKING' ? 'BOOKING' : defaultSection === 'VOUCHER' ? 'VOUCHER' : 'DIGITAL');
+    setProdType(
+      defaultSection === 'BOOKING'
+        ? 'BOOKING'
+        : defaultSection === 'VOUCHER'
+        ? 'VOUCHER'
+        : defaultSection === 'TICKET'
+        ? 'TICKET'
+        : 'DIGITAL'
+    );
     setProdSubType('');
-    setSelectedProductSection(defaultSection);
+    setSelectedProductSection(defaultSection === 'TICKET' ? 'TICKET' : defaultSection);
     setCreationStep('TYPE_SELECT');
     setIsAddProductOpen(true);
   };
@@ -427,6 +460,10 @@ export const ProductListScreen = memo(function ProductListScreen({
 
   // New product type states
   const [prodType, setProdType] = useState('DIGITAL');
+  const [prodRubrics, setProdRubrics] = useState<string[]>(['party']);
+  const [prodEventDate, setProdEventDate] = useState('');
+  const [prodEventTime, setProdEventTime] = useState('');
+  const [prodLocation, setProdLocation] = useState('');
 
   // AI Promo generation states
   const [isPromoOpen, setIsPromoOpen] = useState(false);
@@ -943,6 +980,16 @@ export const ProductListScreen = memo(function ProductListScreen({
           max_quantity: prodMaxQuantity ? Number(prodMaxQuantity) : null,
           has_gender_balance: prodHasGenderBalance
         });
+      } else if (prodType === 'TICKET') {
+        finalContentUrl = JSON.stringify({
+          fulfillment_url: prodUrl,
+          max_quantity: prodMaxQuantity ? Number(prodMaxQuantity) : null,
+          has_gender_balance: prodHasGenderBalance,
+          rubric: prodRubrics,
+          event_date: prodEventDate,
+          event_time: prodEventTime,
+          location: prodLocation
+        });
       }
 
       let success: any = false;
@@ -984,6 +1031,10 @@ export const ProductListScreen = memo(function ProductListScreen({
         setProdCalendarIcsUrl('');
         setProdMaxQuantity('');
         setProdHasGenderBalance(false);
+        setProdRubrics(['party']);
+        setProdEventDate('');
+        setProdEventTime('');
+        setProdLocation('');
         setProdSubType('');
         setProdCoverUrl('');
         setAiPrompt('');
@@ -1093,70 +1144,405 @@ export const ProductListScreen = memo(function ProductListScreen({
     }
   };
 
-  if (currentScreen === 'SETTINGS') {
-    const bookingProductsList = products.filter(p => p.product_type === 'BOOKING');
-    return (
-      <SettingsView
-        creator={creator}
-        lang={lang}
-        t={t}
-        currentScreen={currentScreen}
-        setCurrentScreen={setCurrentScreen}
-        storeName={storeName}
-        storeDescription={storeDescription}
-        storeAvatar={storeAvatar}
-        storeBanner={storeBanner}
-        setStoreAvatar={setStoreAvatar}
-        setStoreBanner={setStoreBanner}
-        socialLinks={socialLinks}
-        onAvatarUpload={handleAvatarUpload}
-        onBannerUpload={handleBannerUpload}
-        onSaveSettings={onSaveSettings}
-        bookingProductsList={bookingProductsList}
-        busySlots={busySlots}
-        dbBookings={dbBookings}
-        fetchBusySlotsForProduct={fetchBusySlotsForProduct}
-        buyerTgId={buyerTgId}
-        onOpenPremium={onOpenPremium}
-        isCreatorPremium={!!creator?.is_premium}
-        onTriggerOnboarding={onTriggerOnboarding}
-      />
-    );
-  }
+  const renderBuyerProfile = () => {
+    const WebApp = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    const buyerName = WebApp?.initDataUnsafe?.user
+      ? `${WebApp.initDataUnsafe.user.first_name || ''} ${WebApp.initDataUnsafe.user.last_name || ''}`.trim()
+      : 'PayBio User';
+    const buyerUsername = WebApp?.initDataUnsafe?.user?.username
+      ? `@${WebApp.initDataUnsafe.user.username}`
+      : '';
 
-  if (currentScreen === 'PARTNER') {
     return (
-      <PartnerDashboard
-        creator={creator}
-        setCreator={setCreator}
-        setCurrentScreen={setCurrentScreen}
-        lang={lang}
-        t={t}
-      />
-    );
-  }
+      <div style={{ padding: '24px 16px 80px', display: 'flex', flexDirection: 'column', gap: '20px' }} className="animate-fade-in">
+        <h2 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 10px 0' }}>
+          {lang === 'ru' ? 'Личный кабинет' : 'My Profile'}
+        </h2>
 
-  if (currentScreen === 'CALENDAR') {
-    return (
-      <CalendarSettingsView
-        creator={creator}
-        lang={lang}
-        t={t}
-        currentScreen={currentScreen}
-        setCurrentScreen={setCurrentScreen}
-        products={products}
-        onSaveSettings={onSaveSettings}
-        onUpdateProduct={onUpdateProduct}
-        busySlots={busySlots}
-        dbBookings={dbBookings}
-        fetchBusySlotsForProduct={fetchBusySlotsForProduct}
-        buyerTgId={buyerTgId}
-      />
+        {/* Profile Card */}
+        <div style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid var(--tg-border)',
+          borderRadius: '16px',
+          padding: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px'
+        }}>
+          <div style={{
+            width: '60px', height: '60px', borderRadius: '50%',
+            background: 'var(--tg-accent, #0088cc)', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '24px', fontWeight: 700
+          }}>
+            {buyerName.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700 }}>{buyerName}</h3>
+            {buyerUsername && <p style={{ margin: '4px 0 0 0', fontSize: '13.5px', color: 'var(--tg-hint)' }}>{buyerUsername}</p>}
+          </div>
+        </div>
+
+        {/* Settings / Actions */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* Language switcher */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            background: 'rgba(255,255,255,0.03)',
+            padding: '14px 16px', borderRadius: '12px', border: '1px solid var(--tg-border)'
+          }}>
+            <span style={{ fontSize: '14px', fontWeight: 600 }}>🌐 {lang === 'ru' ? 'Язык' : 'Language'}</span>
+            <button
+              onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
+              style={{
+                background: 'rgba(255,255,255,0.06)', border: '1px solid var(--tg-border)',
+                borderRadius: '8px', padding: '4px 10px', fontSize: '12.5px', fontWeight: 700, color: 'var(--tg-text)', cursor: 'pointer'
+              }}
+            >
+              {lang === 'ru' ? 'Русский' : 'English'}
+            </button>
+          </div>
+
+          {/* Viral CTA: Create own store */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(0, 136, 204, 0.1) 0%, rgba(0, 166, 255, 0.05) 100%)',
+            border: '1px solid rgba(0, 136, 204, 0.2)',
+            borderRadius: '16px',
+            padding: '20px',
+            textAlign: 'center',
+            marginTop: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <span style={{ fontSize: '32px' }}>🚀</span>
+            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>
+              {lang === 'ru' ? 'Хотите продавать свои товары?' : 'Want to sell your own products?'}
+            </h4>
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--tg-hint)', lineHeight: 1.4 }}>
+              {lang === 'ru'
+                ? 'Создайте свой ИИ-магазин в Telegram за 1 минуту! Продавайте файлы, билеты и бронируйте время без комиссий с моментальными выплатами.'
+                : 'Create your AI storefront in Telegram in 1 minute! Sell files, tickets, and book time with zero commission and instant payouts.'}
+            </p>
+            <button
+              onClick={() => {
+                const actualBotUsername = botUsername || 'PaybioBot';
+                handleOpenLink(`https://t.me/${actualBotUsername}`);
+              }}
+              style={{
+                width: '100%', padding: '12px', borderRadius: '10px', border: 'none',
+                background: 'var(--tg-accent, #0088cc)', color: '#fff', fontWeight: 700, cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0, 136, 204, 0.2)'
+              }}
+            >
+              {lang === 'ru' ? 'Запустить бота ✨' : 'Launch Bot ✨'}
+            </button>
+          </div>
+        </div>
+      </div>
     );
-  }
+  };
+
+  const [activeCartTab, setActiveCartTab] = useState<'purchased' | 'sold'>('purchased');
+  const [selectedOrderForQr, setSelectedOrderForQr] = useState<any>(null);
+
+  const renderCartView = () => {
+    const displayOrders = activeCartTab === 'purchased' ? buyerOrders : creatorOrders;
+
+    const formatDate = (dateStr: string) => {
+      try {
+        return new Date(dateStr).toLocaleString(lang === 'ru' ? 'ru-RU' : 'en-US', {
+          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+        });
+      } catch {
+        return dateStr;
+      }
+    };
+
+    return (
+      <div style={{ padding: '24px 16px 80px', display: 'flex', flexDirection: 'column', gap: '20px' }} className="animate-fade-in">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontSize: '22px', fontWeight: 800, margin: 0 }}>
+            {lang === 'ru' ? 'Мои заказы' : 'My Orders'}
+          </h2>
+          {loadingOrders && <span style={{ fontSize: '12px', color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Обновление...' : 'Syncing...'}</span>}
+        </div>
+
+        {isOwner && (
+          <div style={{
+            display: 'flex',
+            background: 'rgba(255,255,255,0.04)',
+            borderRadius: '12px',
+            padding: '3px',
+            border: '1px solid var(--tg-border)'
+          }}>
+            <button
+              onClick={() => setActiveCartTab('purchased')}
+              style={{
+                flex: 1, padding: '8px', border: 'none', borderRadius: '9px',
+                background: activeCartTab === 'purchased' ? 'var(--tg-accent)' : 'transparent',
+                color: activeCartTab === 'purchased' ? '#fff' : 'var(--tg-hint)',
+                fontSize: '12.5px', fontWeight: 700, cursor: 'pointer'
+              }}
+            >
+              🛍️ {lang === 'ru' ? 'Куплено' : 'Purchased'}
+            </button>
+            <button
+              onClick={() => setActiveCartTab('sold')}
+              style={{
+                flex: 1, padding: '8px', border: 'none', borderRadius: '9px',
+                background: activeCartTab === 'sold' ? 'var(--tg-accent)' : 'transparent',
+                color: activeCartTab === 'sold' ? '#fff' : 'var(--tg-hint)',
+                fontSize: '12.5px', fontWeight: 700, cursor: 'pointer'
+              }}
+            >
+              💵 {lang === 'ru' ? 'Продано' : 'Sold'}
+            </button>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {displayOrders && displayOrders.length > 0 ? (
+            displayOrders.map((order: any) => {
+              const prod = order.product;
+              const isApproved = order.status === 'approved' || order.status === 'PAID';
+              const isPending = order.status === 'PENDING';
+
+              return (
+                <div key={order.id} style={{
+                  background: 'rgba(255,255,255,0.02)',
+                  border: '1px solid var(--tg-border)',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  textAlign: 'left'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <span style={{ fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600 }}>
+                        {formatDate(order.created_at)}
+                      </span>
+                      <h4 style={{ margin: '4px 0 0 0', fontSize: '15px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                        {prod?.title || (lang === 'ru' ? 'Удаленный товар' : 'Deleted Product')}
+                      </h4>
+                    </div>
+                    <span style={{
+                      fontSize: '11px', fontWeight: 700, padding: '4px 8px', borderRadius: '8px',
+                      background: isApproved ? 'rgba(77,202,90,0.15)' : isPending ? 'rgba(255,149,0,0.15)' : 'rgba(255,59,48,0.15)',
+                      color: isApproved ? '#4dca5a' : isPending ? '#ff9500' : '#ff3b30'
+                    }}>
+                      {order.status}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '10px' }}>
+                    <div style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>
+                      {lang === 'ru' ? 'Оплата:' : 'Payment:'}{' '}
+                      <span style={{ color: 'var(--tg-text)', fontWeight: 600, textTransform: 'uppercase' }}>
+                        {order.payment_method}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '13px', color: 'var(--tg-hint)' }}>
+                      {lang === 'ru' ? 'Цена:' : 'Price:'}{' '}
+                      <span style={{ color: 'var(--tg-text)', fontWeight: 700 }}>
+                        {order.payment_method === 'stars' ? `⭐ ${prod?.price_stars || 0}` : `$${prod?.price_fiat || 0}`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {activeCartTab === 'purchased' && isApproved && (
+                    <div style={{ marginTop: '4px' }}>
+                      {prod?.product_type === 'VOUCHER' || prod?.product_type === 'TICKET' ? (
+                        <button
+                          onClick={() => setSelectedOrderForQr(order)}
+                          style={{
+                            width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid var(--tg-accent)',
+                            background: 'rgba(0, 136, 204, 0.08)', color: 'var(--tg-accent)',
+                            fontWeight: 700, fontSize: '12.5px', cursor: 'pointer'
+                          }}
+                        >
+                          🎫 {lang === 'ru' ? 'Показать билет (QR-код)' : 'Show Ticket (QR-code)'}
+                        </button>
+                      ) : prod?.product_type === 'BOOKING' ? (
+                        <div style={{
+                          padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px',
+                          border: '1px solid var(--tg-border)', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '4px'
+                        }}>
+                          <p style={{ margin: 0, fontWeight: 700 }}>📅 {lang === 'ru' ? 'Сессия забронирована!' : 'Session Booked!'}</p>
+                          <p style={{ margin: 0, color: 'var(--tg-hint)' }}>{lang === 'ru' ? 'Детали высланы ботом.' : 'Details sent by the bot.'}</p>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenLink(prod?.content_url || '')}
+                          style={{
+                            width: '100%', padding: '10px', borderRadius: '10px', border: 'none',
+                            background: 'var(--tg-accent)', color: '#fff',
+                            fontWeight: 700, fontSize: '12.5px', cursor: 'pointer'
+                          }}
+                        >
+                          📁 {lang === 'ru' ? 'Скачать файл' : 'Download File'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {activeCartTab === 'sold' && (
+                    <div style={{
+                      marginTop: '4px', padding: '10px', background: 'rgba(255,255,255,0.02)',
+                      borderRadius: '10px', border: '1px solid var(--tg-border)', fontSize: '12.5px',
+                      display: 'flex', flexDirection: 'column', gap: '6px'
+                    }}>
+                      <p style={{ margin: 0 }}>
+                        👤 {lang === 'ru' ? 'Покупатель Telegram ID:' : 'Buyer Telegram ID:'}{' '}
+                        <span style={{ fontWeight: 700 }}>{order.buyer_tg_id}</span>
+                      </p>
+                      {order.voucher?.delivery_data && (
+                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '6px', marginTop: '4px' }}>
+                          <p style={{ margin: '0 0 4px 0', fontWeight: 700, color: 'var(--tg-green)' }}>
+                            📦 {lang === 'ru' ? 'Адрес доставки (СДЭК):' : 'Shipping Coordinates (CDEK):'}
+                          </p>
+                          <p style={{ margin: '2px 0' }}>{lang === 'ru' ? 'ФИО:' : 'Name:'} {order.voucher.delivery_data.fullName}</p>
+                          <p style={{ margin: '2px 0' }}>{lang === 'ru' ? 'Тел:' : 'Phone:'} {order.voucher.delivery_data.phone}</p>
+                          <p style={{ margin: '2px 0' }}>{lang === 'ru' ? 'Адрес:' : 'Address:'} {order.voucher.delivery_data.address}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          ) : (
+            <div style={{
+              textAlign: 'center', padding: '40px 20px', color: 'var(--tg-hint)',
+              background: 'rgba(255,255,255,0.01)', borderRadius: '16px',
+              border: '1px dashed var(--tg-border)', marginTop: '20px'
+            }}>
+              <span style={{ fontSize: '32px' }}>🛒</span>
+              <p style={{ margin: '10px 0 0 0', fontSize: '13px', fontWeight: 600 }}>
+                {lang === 'ru' ? 'Заказов не найдено' : 'No orders found'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {selectedOrderForQr && (() => {
+          const voucher = selectedOrderForQr.voucher;
+          const qrData = voucher?.qr_data || '';
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrData)}`;
+          return (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 9999,
+              background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px'
+            }}>
+              <div style={{
+                background: 'var(--tg-bg)', color: 'var(--tg-text)', borderRadius: '24px',
+                padding: '24px', width: '100%', maxWidth: '320px', textAlign: 'center',
+                border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
+              }} className="animate-scale-in">
+                <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>
+                  {selectedOrderForQr.product?.title || 'Ticket'}
+                </h3>
+                <p style={{ fontSize: '12px', color: 'var(--tg-hint)', marginBottom: '16px' }}>
+                  {lang === 'ru' ? 'Предъявите код на входе' : 'Present this code at the entrance'}
+                </p>
+
+                <div style={{
+                  background: '#fff', padding: '16px', borderRadius: '16px',
+                  display: 'inline-block', marginBottom: '20px', boxShadow: '0 8px 24px rgba(0,0,0,0.1)'
+                }}>
+                  <img src={qrUrl} alt="Voucher QR Code" style={{ width: '200px', height: '200px', display: 'block' }} />
+                </div>
+
+                <button
+                  onClick={() => setSelectedOrderForQr(null)}
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: '12px', border: 'none',
+                    background: 'var(--tg-accent)', color: '#fff', fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  {lang === 'ru' ? 'Закрыть' : 'Close'}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingTop: 'var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px))' }} className="animate-fade-in">
+    <div style={{ minHeight: '100svh', background: 'var(--tg-bg)', position: 'relative', paddingBottom: '90px', paddingTop: 'var(--tg-safe-area-inset-top, env(safe-area-inset-top, 50px))' }} className="animate-fade-in">
+
+      {/* ─── SCREEN CONTENT SWITCHER ─── */}
+      {currentScreen === 'SETTINGS' && (
+        isOwner ? (
+          <SettingsView
+            creator={creator}
+            lang={lang}
+            t={t}
+            currentScreen={currentScreen}
+            setCurrentScreen={setCurrentScreen}
+            storeName={storeName}
+            storeDescription={storeDescription}
+            storeAvatar={storeAvatar}
+            storeBanner={storeBanner}
+            setStoreAvatar={setStoreAvatar}
+            setStoreBanner={setStoreBanner}
+            socialLinks={socialLinks}
+            onAvatarUpload={handleAvatarUpload}
+            onBannerUpload={handleBannerUpload}
+            onSaveSettings={onSaveSettings}
+            bookingProductsList={products.filter(p => p.product_type === 'BOOKING')}
+            busySlots={busySlots}
+            dbBookings={dbBookings}
+            fetchBusySlotsForProduct={fetchBusySlotsForProduct}
+            buyerTgId={buyerTgId}
+            onOpenPremium={onOpenPremium}
+            isCreatorPremium={!!creator?.is_premium}
+            onTriggerOnboarding={onTriggerOnboarding}
+          />
+        ) : (
+          renderBuyerProfile()
+        )
+      )}
+
+      {currentScreen === 'PARTNER' && (
+        <PartnerDashboard
+          creator={creator}
+          setCreator={setCreator}
+          setCurrentScreen={setCurrentScreen}
+          lang={lang}
+          t={t}
+        />
+      )}
+
+      {currentScreen === 'CALENDAR' && (
+        <CalendarSettingsView
+          creator={creator}
+          lang={lang}
+          t={t}
+          currentScreen={currentScreen}
+          setCurrentScreen={setCurrentScreen}
+          products={products}
+          onSaveSettings={onSaveSettings}
+          onUpdateProduct={onUpdateProduct}
+          busySlots={busySlots}
+          dbBookings={dbBookings}
+          fetchBusySlotsForProduct={fetchBusySlotsForProduct}
+          buyerTgId={buyerTgId}
+        />
+      )}
+
+      {currentScreen === 'CART' && (
+        renderCartView()
+      )}
+
+      {(currentScreen === 'CATALOG' || currentScreen === 'EVENTS') && (
+        <>
 
       {/* Demo Mode Welcome Banner */}
       {isDemoMode && (
@@ -1495,6 +1881,8 @@ export const ProductListScreen = memo(function ProductListScreen({
 
 
 
+
+
       {/* ─── LOWER UTILITY SECTION (SOCIALS, STATS) ─── */}
       <div style={{ padding: '0 20px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1593,9 +1981,24 @@ export const ProductListScreen = memo(function ProductListScreen({
         </div>
       </div>
 
-      {/* Catalog items container */}
-      <div style={{ padding: '0 16px 80px' }}>
-        <p className="section-header" style={{ marginBottom: '14px' }}>{t.storeCatalog}</p>
+      {/* Catalog items container / Events screen switcher */}
+      {currentScreen === 'EVENTS' ? (
+        <EventStoreScreen
+          products={products}
+          lang={lang}
+          t={t}
+          isOwner={isOwner}
+          onSelect={onSelect}
+          starredIds={starredIds}
+          onToggleStar={handleToggleStar}
+          onGeneratePromo={handleGeneratePromo}
+          onOpenEditProduct={handleOpenEditProduct}
+          onConfirmDelete={handleConfirmDelete}
+          onAddProduct={handleOpenCreateProduct}
+        />
+      ) : (
+        <div style={{ padding: '0 16px 80px' }}>
+          <p className="section-header" style={{ marginBottom: '14px' }}>{t.storeCatalog}</p>
 
         {/* Promoted / Starred horizontal gallery */}
         {promotedProducts.length > 0 && (
@@ -1901,6 +2304,9 @@ export const ProductListScreen = memo(function ProductListScreen({
           </div>
         </div>
       </div>
+      )}
+        </>
+      )}
 
       {/* ─── BOTTOM SHEET: STORE REVIEWS ─── */}
       <div className={`bottom-sheet-overlay ${isReviewsOpen ? 'active' : ''}`} onClick={() => setIsReviewsOpen(false)}>
@@ -1974,8 +2380,23 @@ export const ProductListScreen = memo(function ProductListScreen({
                 >
                   <div className="type-card-icon" style={{ color: '#f87171' }}>🎟️</div>
                   <div className="type-card-info">
-                    <span className="type-card-title">{lang === 'ru' ? 'Билет или Ваучер' : 'Ticket or Voucher'}</span>
-                    <span className="type-card-desc">{lang === 'ru' ? 'Электронный билет с QR-кодом для входа' : 'E-ticket with verification QR'}</span>
+                    <span className="type-card-title">{lang === 'ru' ? 'Ваучер' : 'Voucher'}</span>
+                    <span className="type-card-desc">{lang === 'ru' ? 'Скидочный купон, сертификат, физический товар' : 'Discount coupon, certificate, physical deal'}</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  className="type-card"
+                  onClick={() => {
+                    setProdType('TICKET');
+                    setCreationStep('FORM');
+                  }}
+                >
+                  <div className="type-card-icon" style={{ color: '#c084fc' }}>🎫</div>
+                  <div className="type-card-info">
+                    <span className="type-card-title">{lang === 'ru' ? 'Билет на мероприятие' : 'Event Ticket'}</span>
+                    <span className="type-card-desc">{lang === 'ru' ? 'Билет на концерт, вечеринку, мастер-класс с контролем гендерного баланса' : 'Ticket for concerts, parties, workshops with gender balance control'}</span>
                   </div>
                 </button>
 
@@ -2139,6 +2560,146 @@ export const ProductListScreen = memo(function ProductListScreen({
                     />
                   </div>
 
+                  <div className="bottom-sheet-form-group animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+                    <div>
+                      <label className="bottom-sheet-label" style={{ margin: 0 }}>
+                        {lang === 'ru' ? '⚖️ Контроль гендерного баланса (М/Ж)' : '⚖️ Gender Balance Control (M/F)'}
+                      </label>
+                      <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                        {lang === 'ru' 
+                          ? 'Удержание баланса М/Ж с разницей не более 2 и автоматическим листом ожидания.'
+                          : 'Keeps M/F difference <= 2 with an automatic waiting list.'}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={prodHasGenderBalance}
+                      onChange={(e) => setProdHasGenderBalance(e.target.checked)}
+                      style={{ width: '22px', height: '22px', cursor: 'pointer', accentColor: 'var(--tg-accent)' }}
+                    />
+                  </div>
+                </>
+              )}
+
+              {prodType === 'TICKET' && (
+                <>
+                  {/* Event Rubric Checkboxes */}
+                  <div className="bottom-sheet-form-group animate-fade-in">
+                    <label className="bottom-sheet-label">
+                      {lang === 'ru' ? 'Рубрика мероприятия (выберите одну или несколько)' : 'Event Rubrics (select one or more)'}
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                      {[
+                        { id: 'business', labelRu: '💼 Бизнес', labelEn: '💼 Business' },
+                        { id: 'development', labelRu: '🧠 Развитие', labelEn: '🧠 Development' },
+                        { id: 'activities', labelRu: '💃 Активности', labelEn: '💃 Activities' },
+                        { id: 'networking', labelRu: '🤝 Нетворкинг', labelEn: '🤝 Networking' },
+                        { id: 'relations', labelRu: '❤️ Отношения', labelEn: '❤️ Relations' },
+                        { id: 'other', labelRu: '✨ Другое', labelEn: '✨ Other' }
+                      ].map((rubric) => {
+                        const isChecked = prodRubrics.includes(rubric.id);
+                        return (
+                          <button
+                            key={rubric.id}
+                            type="button"
+                            onClick={() => {
+                              if (isChecked) {
+                                if (prodRubrics.length > 1) {
+                                  setProdRubrics(prodRubrics.filter(r => r !== rubric.id));
+                                }
+                              } else {
+                                setProdRubrics([...prodRubrics, rubric.id]);
+                              }
+                            }}
+                            style={{
+                              padding: '10px 8px',
+                              borderRadius: '10px',
+                              border: isChecked ? '2px solid var(--tg-accent)' : '1px solid var(--tg-border)',
+                              background: isChecked ? 'rgba(0,136,204,0.08)' : 'transparent',
+                              color: isChecked ? 'var(--tg-accent)' : 'var(--tg-text)',
+                              fontSize: '12.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              readOnly
+                              style={{ accentColor: 'var(--tg-accent)', width: '14px', height: '14px', pointerEvents: 'none' }}
+                            />
+                            <span>{lang === 'ru' ? rubric.labelRu : rubric.labelEn}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Event Date & Time */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }} className="animate-fade-in">
+                    <div className="bottom-sheet-form-group">
+                      <label className="bottom-sheet-label">
+                        {lang === 'ru' ? 'Дата проведения' : 'Event Date'}
+                      </label>
+                      <input
+                        type="date"
+                        className="tg-input"
+                        value={prodEventDate}
+                        onChange={(e) => setProdEventDate(e.target.value)}
+                        required
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </div>
+                    <div className="bottom-sheet-form-group">
+                      <label className="bottom-sheet-label">
+                        {lang === 'ru' ? 'Время начала' : 'Start Time'}
+                      </label>
+                      <input
+                        type="time"
+                        className="tg-input"
+                        value={prodEventTime}
+                        onChange={(e) => setProdEventTime(e.target.value)}
+                        required
+                        style={{ colorScheme: 'dark' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Event Location */}
+                  <div className="bottom-sheet-form-group animate-fade-in">
+                    <label className="bottom-sheet-label">
+                      {lang === 'ru' ? 'Место проведения (Локация)' : 'Event Location (Venue)'}
+                    </label>
+                    <input
+                      type="text"
+                      className="tg-input"
+                      placeholder={lang === 'ru' ? "Например: Москва, Красная площадь или Zoom-ссылка" : "e.g. London, Hyde Park or Online Zoom"}
+                      value={prodLocation}
+                      onChange={(e) => setProdLocation(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  {/* Max tickets limit */}
+                  <div className="bottom-sheet-form-group animate-fade-in">
+                    <label className="bottom-sheet-label">
+                      {lang === 'ru' ? 'Количество билетов (Лимит)' : 'Tickets Quantity Limit'}
+                    </label>
+                    <input
+                      type="number"
+                      className="tg-input"
+                      placeholder="e.g. 100"
+                      value={prodMaxQuantity}
+                      onChange={(e) => setProdMaxQuantity(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Gender Balance Toggle */}
                   <div className="bottom-sheet-form-group animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
                     <div>
                       <label className="bottom-sheet-label" style={{ margin: 0 }}>
@@ -2671,7 +3232,7 @@ export const ProductListScreen = memo(function ProductListScreen({
       {isDemoMode && (
         <div style={{
           position: 'fixed',
-          bottom: '24px',
+          bottom: '88px',
           left: '50%',
           transform: 'translateX(-50%)',
           width: 'calc(100% - 32px)',
@@ -2711,6 +3272,60 @@ export const ProductListScreen = memo(function ProductListScreen({
           </button>
         </div>
       )}
+
+      {/* ─── PERSISTENT STICKY BOTTOM NAVIGATION BAR ─── */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 1000,
+        height: '76px',
+        background: 'rgba(18, 18, 18, 0.85)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+        display: 'flex',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        paddingBottom: 'env(safe-area-inset-bottom, 12px)',
+        boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.4)'
+      }}>
+        {[
+          { screen: 'CATALOG', labelRu: 'Магазин', labelEn: 'Shop', icon: '🛍️' },
+          { screen: 'EVENTS', labelRu: 'Ивенты', labelEn: 'Events', icon: '🎫' },
+          { screen: 'CART', labelRu: 'Корзина', labelEn: 'Cart', icon: '🛒' },
+          { screen: 'SETTINGS', labelRu: 'Профиль', labelEn: 'Profile', icon: '👤' }
+        ].map((tab) => {
+          const isActive = currentScreen === tab.screen;
+          return (
+            <button
+              key={tab.screen}
+              type="button"
+              onClick={() => setCurrentScreen(tab.screen as any)}
+              style={{
+                background: 'none',
+                border: 'none',
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '4px',
+                cursor: 'pointer',
+                color: isActive ? 'var(--tg-accent, #0088cc)' : 'var(--tg-hint, #888)',
+                transition: 'all 0.2s ease',
+                transform: isActive ? 'scale(1.05)' : 'scale(1)'
+              }}
+            >
+              <span style={{ fontSize: '20px', filter: isActive ? 'none' : 'grayscale(30%)' }}>{tab.icon}</span>
+              <span style={{ fontSize: '11px', fontWeight: isActive ? 800 : 500 }}>
+                {lang === 'ru' ? tab.labelRu : tab.labelEn}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
     </div>
   );

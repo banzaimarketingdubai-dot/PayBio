@@ -990,6 +990,41 @@ export const db = {
     }
   },
 
+  async getOrdersByBuyerTgId(buyerTgId: number) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('*, product:product_id(*)')
+        .eq('buyer_tg_id', buyerTgId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+
+      // Fetch vouchers
+      const { data: vouchers, error: vError } = await supabaseAdmin
+        .from('vouchers')
+        .select('*')
+        .in('order_id', (data || []).map((o: any) => o.id));
+      
+      const ordersWithVouchers = (data || []).map((o: any) => {
+        const voucher = (vouchers || []).find((v: any) => v.order_id === o.id);
+        return { ...o, voucher };
+      });
+      return ordersWithVouchers;
+    } else {
+      const mockDb = readMockDb();
+      const mockVouchers = mockDb.vouchers || [];
+
+      return mockDb.orders
+        .filter(o => Number(o.buyer_tg_id) === Number(buyerTgId))
+        .map((o: any) => {
+          const product = mockDb.products.find((p: any) => p.id === o.product_id);
+          const voucher = mockVouchers.find((v: any) => v.order_id === o.id);
+          return { ...o, product, voucher };
+        })
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+  },
+
   // --- Vouchers Operations ---
   async createVoucher(orderId: string, buyerTgId: string, qrData: string) {
     if (isRealSupabaseConfigured) {
@@ -1650,9 +1685,17 @@ export const db = {
           const parsed = JSON.parse(order.receipt_url);
           if (parsed && parsed.gender === 'M') maleCount++;
           else if (parsed && parsed.gender === 'F') femaleCount++;
+          else if (parsed && parsed.gender === 'PAIR') {
+            maleCount++;
+            femaleCount++;
+          }
         } catch {
           if (order.receipt_url === 'M') maleCount++;
           else if (order.receipt_url === 'F') femaleCount++;
+          else if (order.receipt_url === 'PAIR') {
+            maleCount++;
+            femaleCount++;
+          }
         }
       }
     }

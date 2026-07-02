@@ -178,12 +178,19 @@ export function useStorefront() {
   const [storeBanner, setStoreBanner] = useState('');
   const [socialLinks, setSocialLinks] = useState({ youtube: '', instagram: '', tiktok: '', vk: '', max: '' });
 
+  const isOwner = useMemo(() => {
+    return !!(creator && Number(buyerTgId) === Number(creator.telegram_id));
+  }, [creator, buyerTgId]);
+
   // Catalog customization states
   const [starredIds, setStarredIds] = useState<string[]>([]);
   const [sectionsList, setSectionsList] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [sectionOrder, setSectionOrder] = useState<string[]>(['DIGITAL', 'VOUCHER', 'BOOKING']);
   const [productSections, setProductSections] = useState<Record<string, string>>({});
-  const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR'>('CATALOG');
+  const [currentScreen, setCurrentScreen] = useState<'CATALOG' | 'SETTINGS' | 'PARTNER' | 'CALENDAR' | 'EVENTS' | 'CART'>('CATALOG');
+  const [buyerOrders, setBuyerOrders] = useState<any[]>([]);
+  const [creatorOrders, setCreatorOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
   const [forceShowOnboarding, setForceShowOnboarding] = useState(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
 
@@ -230,7 +237,7 @@ export function useStorefront() {
   const [shipPhone, setShipPhone] = useState('');
   const [shipMethod, setShipMethod] = useState('SDEK');
   const [shipAddress, setShipAddress] = useState('');
-  const [buyerGender, setBuyerGender] = useState<'M' | 'F' | null>(null);
+  const [buyerGender, setBuyerGender] = useState<'M' | 'F' | 'PAIR' | null>(null);
 
   // Booking states
   const [bookingDate, setBookingDate] = useState('');
@@ -666,6 +673,97 @@ export function useStorefront() {
       setIsLoadingBusySlots(false);
     }
   }, []);
+
+  const fetchOrders = useCallback(async () => {
+    if (isDemoMode) {
+      const mockOrders = [
+        {
+          id: 'demo-order-1',
+          product_id: 'demo-product-2',
+          buyer_tg_id: buyerTgId || 99999,
+          status: 'PAID',
+          payment_method: 'stars',
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+          product: DEMO_PRODUCTS[1],
+          voucher: null
+        },
+        {
+          id: 'demo-order-2',
+          product_id: 'demo-product-3',
+          buyer_tg_id: buyerTgId || 99999,
+          status: 'PAID',
+          payment_method: 'stars',
+          created_at: new Date(Date.now() - 7200000).toISOString(),
+          product: DEMO_PRODUCTS[2],
+          voucher: {
+            id: 'demo-v-1',
+            order_id: 'demo-order-2',
+            buyer_tg_id: String(buyerTgId || 99999),
+            qr_data: JSON.stringify({ seller: 'PayBioDemo', ticket_no: 1, product: 'Воркаут-интенсив: Билет 🎟️', order_id: 'demo-order-2', date: '02.07.2026' }),
+            status: 'ACTIVE',
+            created_at: new Date(Date.now() - 7200000).toISOString()
+          }
+        }
+      ];
+      setBuyerOrders(mockOrders);
+      if (isOwner) {
+        setCreatorOrders([
+          {
+            id: 'demo-order-3',
+            product_id: 'demo-product-1',
+            buyer_tg_id: 12345,
+            status: 'PAID',
+            payment_method: 'card',
+            created_at: new Date(Date.now() - 1800000).toISOString(),
+            product: DEMO_PRODUCTS[0],
+            voucher: {
+              id: 'demo-v-2',
+              order_id: 'demo-order-3',
+              buyer_tg_id: '12345',
+              qr_data: JSON.stringify({ seller: 'PayBioDemo', ticket_no: 1, product: 'Физический мерч TMZ 👕', order_id: 'demo-order-3', date: '02.07.2026' }),
+              status: 'ACTIVE',
+              delivery_data: {
+                fullName: 'Иван Иванов',
+                phone: '+79998887766',
+                method: 'SDEK',
+                address: 'г. Москва, ул. Ленина, д. 1, кв. 10'
+              },
+              created_at: new Date(Date.now() - 1800000).toISOString()
+            }
+          }
+        ]);
+      }
+      return;
+    }
+
+    setLoadingOrders(true);
+    try {
+      if (buyerTgId) {
+        const res = await fetch(`/api/store/orders?buyer_tg_id=${buyerTgId}`);
+        const data = await res.json();
+        if (data.success) {
+          setBuyerOrders(data.orders || []);
+        }
+      }
+      if (isOwner && creator?.id) {
+        const res = await fetch(`/api/store/orders?creator_id=${creator.id}`);
+        const data = await res.json();
+        if (data.success) {
+          setCreatorOrders(data.orders || []);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch orders:', e);
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [buyerTgId, isOwner, creator?.id, isDemoMode]);
+
+  useEffect(() => {
+    if (currentScreen === 'CART') {
+      fetchOrders();
+    }
+  }, [currentScreen, fetchOrders]);
 
   // Fetch data
   useEffect(() => {
@@ -1206,8 +1304,8 @@ export function useStorefront() {
     }
   }, [creator, productSections]);
 
-  const handleOfferWaitingList = useCallback(async (prodId: string, buyerId: number, gender: 'M' | 'F' | null) => {
-    if (!gender) return;
+  const handleOfferWaitingList = useCallback(async (prodId: string, buyerId: number, gender: 'M' | 'F' | 'PAIR' | null) => {
+    if (!gender || gender === 'PAIR') return;
     const confirmMsg = lang === 'ru'
       ? 'Извините, покупка билетов выбранного пола временно ограничена для соблюдения баланса М/Ж. Хотите записаться в лист ожидания? Бот уведомит вас, как только билеты станут доступны.'
       : 'Sorry, tickets for the selected gender are temporarily limited to maintain M/F balance. Would you like to join the waiting list? The bot will notify you once tickets are available.';
@@ -1629,10 +1727,6 @@ export function useStorefront() {
     }
   }, [buyerTgId, lang]);
 
-  const isOwner = useMemo(() => {
-    return !!(creator && Number(buyerTgId) === Number(creator.telegram_id));
-  }, [creator, buyerTgId]);
-
   const showOnboarding = useMemo(() => {
     return forceShowOnboarding || (isOwner && productsList.length === 0 && !creator?.profile_customization?.onboarding_completed);
   }, [forceShowOnboarding, isOwner, productsList, creator]);
@@ -1747,6 +1841,10 @@ export function useStorefront() {
     isDemoMode,
     isDemoPaymentSuccessOpen,
     setIsDemoPaymentSuccessOpen,
+    buyerOrders,
+    creatorOrders,
+    loadingOrders,
+    fetchOrders,
 
     // Memoized / Calculated values
     t,

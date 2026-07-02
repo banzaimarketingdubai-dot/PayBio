@@ -25,9 +25,9 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
     // Check if gender balance is enabled
     let hasGenderBalance = false;
-    let buyerGender: 'M' | 'F' | null = null;
+    let buyerGender: 'M' | 'F' | 'PAIR' | null = null;
     try {
-      if (product.product_type === 'VOUCHER') {
+      if (product.product_type === 'VOUCHER' || product.product_type === 'TICKET') {
         const parsed = JSON.parse(product.content_url);
         if (parsed && parsed.has_gender_balance) {
           hasGenderBalance = true;
@@ -42,7 +42,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
           buyerGender = parsed.gender;
         }
       } catch {
-        if (order.receipt_url === 'M' || order.receipt_url === 'F') {
+        if (order.receipt_url === 'M' || order.receipt_url === 'F' || order.receipt_url === 'PAIR') {
           buyerGender = order.receipt_url as any;
         }
       }
@@ -53,7 +53,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
     if (hasGenderBalance) {
       await db.removeFromWaitingList(product.id, Number(buyerTgId));
-      if (buyerGender) {
+      if (buyerGender && buyerGender !== 'PAIR') {
         checkAndNotifyWaitingList(product.id, buyerGender).catch(err => {
           console.error('Error in checkAndNotifyWaitingList:', err);
         });
@@ -162,7 +162,7 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
           creatorReceiptText
         );
       }
-    } else if (productType === 'VOUCHER') {
+    } else if (productType === 'VOUCHER' || productType === 'TICKET') {
       const isPhysical = product.sub_type === 'PHYSICAL';
 
       if (isPhysical) {
@@ -213,71 +213,170 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
           ? (creator.username ? `@${creator.username}` : creator.profile_customization?.store_name || `ID: ${creator.telegram_id}`) 
           : 'Unknown';
 
-        const qrPayloadObj = {
-          seller: sellerName,
-          ticket_no: ticketNumber,
-          product: product.title,
-          order_id: orderId,
-          date: formattedDateTime
-        };
-        const qrData = JSON.stringify(qrPayloadObj);
-        
-        await db.createVoucher(orderId, String(buyerTgId), qrData);
+        const isPairSelected = buyerGender === 'PAIR';
 
-        // Generate public QR code link with encoded QR payload
-        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+        if (isPairSelected) {
+          const ticketNumber1 = ticketNumber;
+          const ticketNumber2 = ticketNumber + 1;
 
-        let ticketDetailsText = isRussian
-          ? `🎟️ *Ваш билет на событие/услугу* \n\n` +
-            `📦 *Событие:* "${product.title}"\n` +
-            `👤 *Организатор:* ${sellerName}\n` +
-            `📅 *Дата и время покупки:* ${formattedDateTime}\n`
-          : `🎟️ *Your Event/Service Ticket* \n\n` +
-            `📦 *Event:* "${product.title}"\n` +
-            `👤 *Organizer:* ${sellerName}\n` +
-            `📅 *Purchase Date & Time:* ${formattedDateTime}\n`;
+          // Ticket 1: Male
+          const qrPayloadObj1 = {
+            seller: sellerName,
+            ticket_no: ticketNumber1,
+            product: product.title + ' (Мужской / Male)',
+            order_id: orderId,
+            gender: 'M',
+            date: formattedDateTime
+          };
+          const qrData1 = JSON.stringify(qrPayloadObj1);
+          await db.createVoucher(orderId, String(buyerTgId), qrData1);
+          const qrUrl1 = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData1)}`;
 
-        if (maxQuantity !== null) {
-          ticketDetailsText += isRussian
-            ? `🔢 *Порядковый номер билета:* №${ticketNumber} (из ${maxQuantity})\n`
-            : `🔢 *Ticket Number:* No. ${ticketNumber} (out of ${maxQuantity})\n`;
-        }
+          let ticketDetailsText1 = isRussian
+            ? `🎟️ *Билет 1/2 (Мужской)* \n\n` +
+              `📦 *Событие:* "${product.title}"\n` +
+              `👤 *Организатор:* ${sellerName}\n` +
+              `📅 *Дата и время покупки:* ${formattedDateTime}\n`
+            : `🎟️ *Ticket 1/2 (Male)* \n\n` +
+              `📦 *Event:* "${product.title}"\n` +
+              `👤 *Organizer:* ${sellerName}\n` +
+              `📅 *Purchase Date & Time:* ${formattedDateTime}\n`;
+          if (maxQuantity !== null) {
+            ticketDetailsText1 += isRussian
+              ? `🔢 *Порядковый номер билета:* №${ticketNumber1} (из ${maxQuantity})\n`
+              : `🔢 *Ticket Number:* No. ${ticketNumber1} (out of ${maxQuantity})\n`;
+          }
+          ticketDetailsText1 += isRussian
+            ? `\nПредъявите QR-код выше организатору для сканирования и подтверждения входа (М).`
+            : `\nPresent the QR code above to the organizer for scanning and entry confirmation (Male).`;
 
-        ticketDetailsText += isRussian
-          ? `\nПредъявите QR-код выше организатору для сканирования и подтверждения входа.`
-          : `\nPresent the QR code above to the organizer for scanning and entry confirmation.`;
+          await sendTelegramPhoto(buyerTgId, qrUrl1, ticketDetailsText1);
 
-        await sendTelegramPhoto(
-          buyerTgId,
-          qrUrl,
-          ticketDetailsText,
-          promoMarkup
-        );
+          // Ticket 2: Female
+          const qrPayloadObj2 = {
+            seller: sellerName,
+            ticket_no: ticketNumber2,
+            product: product.title + ' (Женский / Female)',
+            order_id: orderId,
+            gender: 'F',
+            date: formattedDateTime
+          };
+          const qrData2 = JSON.stringify(qrPayloadObj2);
+          await db.createVoucher(orderId, String(buyerTgId), qrData2);
+          const qrUrl2 = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData2)}`;
 
-        // Notify Creator
-        if (creator) {
-          let creatorVoucherTicketText = isFree
-            ? (isRussian
-                ? `🎁 *Выдача бесплатного билета подтверждена!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}\n\n`
-                : `🎁 *Free ticket request approved!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Event:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}\n\n`)
-            : (paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
-                ? creatorReceiptText
-                : `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`);
+          let ticketDetailsText2 = isRussian
+            ? `🎟️ *Билет 2/2 (Женский)* \n\n` +
+              `📦 *Событие:* "${product.title}"\n` +
+              `👤 *Организатор:* ${sellerName}\n` +
+              `📅 *Дата и время покупки:* ${formattedDateTime}\n`
+            : `🎟️ *Ticket 2/2 (Female)* \n\n` +
+              `📦 *Event:* "${product.title}"\n` +
+              `👤 *Organizer:* ${sellerName}\n` +
+              `📅 *Purchase Date & Time:* ${formattedDateTime}\n`;
+          if (maxQuantity !== null) {
+            ticketDetailsText2 += isRussian
+              ? `🔢 *Порядковый номер билета:* №${ticketNumber2} (из ${maxQuantity})\n`
+              : `🔢 *Ticket Number:* No. ${ticketNumber2} (out of ${maxQuantity})\n`;
+          }
+          ticketDetailsText2 += isRussian
+            ? `\nПредъявите QR-код выше организатору для сканирования и подтверждения входа (Ж).`
+            : `\nPresent the QR code above to the organizer for scanning and entry confirmation (Female).`;
+
+          await sendTelegramPhoto(buyerTgId, qrUrl2, ticketDetailsText2, promoMarkup);
+
+          // Notify Creator about Pair purchase
+          if (creator) {
+            const displayPriceFiat = product.price_fiat * 2;
+            const displayPriceStars = product.price_stars * 2;
+            let creatorVoucherTicketText = isFree
+              ? (isRussian
+                  ? `🎁 *Выдача бесплатного парного билета (М+Ж) подтверждена!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}\n\n`
+                  : `🎁 *Free pair ticket (M+F) request approved!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Event:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}\n\n`)
+              : (paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+                  ? `💳 *Оплата парного билета (М+Ж) получена!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${displayPriceFiat} (~${displayPriceStars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`
+                  : `🎟️ *Продажа парного билета (М+Ж)!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${displayPriceFiat} (~${displayPriceStars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`);
+
+            if (maxQuantity !== null) {
+              creatorVoucherTicketText += isRussian
+                ? `🔢 *Порядковые номера билетов:* №${ticketNumber1}, №${ticketNumber2} (из ${maxQuantity})\n\n`
+                : `🔢 *Ticket Numbers:* No. ${ticketNumber1}, No. ${ticketNumber2} (out of ${maxQuantity})\n\n`;
+            }
+
+            creatorVoucherTicketText += isRussian
+              ? `Оба ваучера успешно сгенерированы и отправлены покупателю.`
+              : `Both vouchers successfully generated and sent to the buyer.`;
+
+            await sendTelegramNotification(creator.telegram_id, creatorVoucherTicketText);
+          }
+        } else {
+          // Normal single ticket delivery
+          const qrPayloadObj = {
+            seller: sellerName,
+            ticket_no: ticketNumber,
+            product: product.title,
+            order_id: orderId,
+            date: formattedDateTime
+          };
+          const qrData = JSON.stringify(qrPayloadObj);
+          
+          await db.createVoucher(orderId, String(buyerTgId), qrData);
+
+          // Generate public QR code link with encoded QR payload
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrData)}`;
+
+          let ticketDetailsText = isRussian
+            ? `🎟️ *Ваш билет на событие/услугу* \n\n` +
+              `📦 *Событие:* "${product.title}"\n` +
+              `👤 *Организатор:* ${sellerName}\n` +
+              `📅 *Дата и время покупки:* ${formattedDateTime}\n`
+            : `🎟️ *Your Event/Service Ticket* \n\n` +
+              `📦 *Event:* "${product.title}"\n` +
+              `👤 *Organizer:* ${sellerName}\n` +
+              `📅 *Purchase Date & Time:* ${formattedDateTime}\n`;
 
           if (maxQuantity !== null) {
-            creatorVoucherTicketText += isRussian
-              ? `🔢 *Порядковый номер билета:* №${ticketNumber} (из ${maxQuantity})\n\n`
-              : `🔢 *Ticket Number:* No. ${ticketNumber} (out of ${maxQuantity})\n\n`;
+            ticketDetailsText += isRussian
+              ? `🔢 *Порядковый номер билета:* №${ticketNumber} (из ${maxQuantity})\n`
+              : `🔢 *Ticket Number:* No. ${ticketNumber} (out of ${maxQuantity})\n`;
           }
 
-          creatorVoucherTicketText += isRussian
-            ? `Ваучер успешно сгенерирован и отправлен покупателю.`
-            : `Voucher successfully generated and sent to the buyer.`;
+          ticketDetailsText += isRussian
+            ? `\nПредъявите QR-код выше организатору для сканирования и подтверждения входа.`
+            : `\nPresent the QR code above to the organizer for scanning and entry confirmation.`;
 
-          await sendTelegramNotification(
-            creator.telegram_id,
-            creatorVoucherTicketText
+          await sendTelegramPhoto(
+            buyerTgId,
+            qrUrl,
+            ticketDetailsText,
+            promoMarkup
           );
+
+          // Notify Creator
+          if (creator) {
+            let creatorVoucherTicketText = isFree
+              ? (isRussian
+                  ? `🎁 *Выдача бесплатного билета подтверждена!* \n\n👤 *Получатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n📅 *Дата и время:* ${formattedDateTime}\n\n`
+                  : `🎁 *Free ticket request approved!* \n\n👤 *Recipient:* ${buyerName}\n📦 *Event:* "${product.title}"\n📅 *Date & Time:* ${formattedDateTime}\n\n`)
+              : (paymentMethod.startsWith('ton') || paymentMethod.startsWith('stars')
+                  ? creatorReceiptText
+                  : `🎟️ *Продажа билета!* \n\n👤 *Покупатель:* ${buyerName}\n📦 *Событие:* "${product.title}"\n💵 *Сумма:* $${product.price_fiat} (~${product.price_stars} Stars)\n📅 *Дата и время:* ${formattedDateTime}\n\n`);
+
+            if (maxQuantity !== null) {
+              creatorVoucherTicketText += isRussian
+                ? `🔢 *Порядковый номер билета:* №${ticketNumber} (из ${maxQuantity})\n\n`
+                : `🔢 *Ticket Number:* No. ${ticketNumber} (out of ${maxQuantity})\n\n`;
+            }
+
+            creatorVoucherTicketText += isRussian
+              ? `Ваучер успешно сгенерирован и отправлен покупателю.`
+              : `Voucher successfully generated and sent to the buyer.`;
+
+            await sendTelegramNotification(
+              creator.telegram_id,
+              creatorVoucherTicketText
+            );
+          }
         }
       }
     } else if (productType === 'BOOKING') {
