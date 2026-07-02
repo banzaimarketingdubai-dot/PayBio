@@ -13,6 +13,7 @@ interface BookingCalendarProps {
   productId?: string;
   userTgId?: number;
   onRefreshBusySlots?: () => void;
+  isStorePremium?: boolean;
 }
 
 export default function BookingCalendar({
@@ -28,6 +29,7 @@ export default function BookingCalendar({
   productId,
   userTgId,
   onRefreshBusySlots,
+  isStorePremium = true,
 }: BookingCalendarProps) {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
@@ -294,6 +296,24 @@ export default function BookingCalendar({
       gap: '16px',
     }} className="animate-fade-up">
 
+      {!isStorePremium && !isOwner && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px solid rgba(239, 68, 68, 0.2)',
+          borderRadius: '12px',
+          padding: '12px',
+          fontSize: '13px',
+          color: 'var(--tg-destructive, #ef4444)',
+          textAlign: 'center',
+          fontWeight: 600,
+          lineHeight: 1.4
+        }}>
+          ⚠️ {lang === 'ru' 
+            ? 'Бронирование временно недоступно, так как у владельца магазина не активна подписка.' 
+            : 'Booking is temporarily unavailable because the store owner does not have an active subscription.'}
+        </div>
+      )}
+
       {/* Tabs Selector */}
       <div className="calendar-view-tabs">
         <button 
@@ -390,7 +410,7 @@ export default function BookingCalendar({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
               {calendarDays.map((day, idx) => {
                 const isSelected = bookingDate === day.dateStr;
-                const disabled = day.isPast || !day.isCurrentMonth;
+                const disabled = day.isPast || !day.isCurrentMonth || (!isStorePremium && !isOwner);
                 
                 return (
                   <button
@@ -444,15 +464,23 @@ export default function BookingCalendar({
           <div className="week-selector-container">
             {weekDays.map((day, idx) => {
               const isSelected = bookingDate === day.dateStr;
+              const disabled = !isStorePremium && !isOwner;
               return (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => {
-                    setBookingDate(day.dateStr);
-                    setBookingTime('');
+                    if (!disabled) {
+                      setBookingDate(day.dateStr);
+                      setBookingTime('');
+                    }
                   }}
+                  disabled={disabled}
                   className={`week-day-btn ${isSelected ? 'active' : ''}`}
+                  style={{
+                    opacity: disabled ? 0.4 : 1,
+                    cursor: disabled ? 'not-allowed' : 'pointer'
+                  }}
                 >
                   <span style={{ fontSize: '10px', opacity: 0.8, textTransform: 'uppercase' }}>{day.dayName}</span>
                   <span style={{ fontSize: '16px', fontWeight: 'bold', marginTop: '2px' }}>{day.dayNum}</span>
@@ -473,12 +501,17 @@ export default function BookingCalendar({
             <button
               type="button"
               onClick={() => {
-                setBookingDate(todayStr);
-                setBookingTime('');
+                if (isStorePremium || isOwner) {
+                  setBookingDate(todayStr);
+                  setBookingTime('');
+                }
               }}
+              disabled={!isStorePremium && !isOwner}
               style={{
                 background: 'rgba(255,255,255,0.06)', border: 'none', borderRadius: '12px',
-                padding: '4px 10px', fontSize: '11px', color: 'var(--tg-text)', cursor: 'pointer'
+                padding: '4px 10px', fontSize: '11px', color: 'var(--tg-text)', 
+                cursor: (!isStorePremium && !isOwner) ? 'not-allowed' : 'pointer',
+                opacity: (!isStorePremium && !isOwner) ? 0.4 : 1
               }}
             >
               {lang === 'ru' ? 'Сегодня' : 'Today'}
@@ -559,6 +592,10 @@ export default function BookingCalendar({
                 btnBg = 'rgba(255,255,255,0.02)';
                 btnColor = 'rgba(255,255,255,0.15)';
                 textDecor = 'line-through';
+              } else if (!isStorePremium && !isOwner) {
+                // Disabled because store has no premium subscription
+                btnBg = 'rgba(255,255,255,0.01)';
+                btnColor = 'rgba(255,255,255,0.15)';
               }
 
               return (
@@ -568,11 +605,11 @@ export default function BookingCalendar({
                   onClick={() => {
                     if (isOwner) {
                       handleSlotClickOwner(time);
-                    } else if (!busy) {
+                    } else if (!busy && isStorePremium) {
                       setBookingTime(time);
                     }
                   }}
-                  disabled={loading || (!isOwner && busy)}
+                  disabled={loading || (!isOwner && (busy || !isStorePremium))}
                   style={{
                     padding: '8px 0',
                     borderRadius: '8px',

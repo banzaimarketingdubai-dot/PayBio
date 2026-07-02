@@ -599,6 +599,7 @@ export default function ProductDetailView({
             productId={product.id}
             userTgId={buyerTgId}
             onRefreshBusySlots={() => fetchBusySlotsForProduct(product.id)}
+            isStorePremium={isStorePremium}
           />
         )}
 
