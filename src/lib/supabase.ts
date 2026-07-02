@@ -334,7 +334,7 @@ export const db = {
     const isPremium = existing ? existing.is_premium : true;
     const premiumUntil = existing 
       ? existing.premium_until 
-      : new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString();
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     // New users get 'trial'; existing users keep their source
     const premiumSource: 'trial' | 'paid' | 'promo' | null = existing
       ? (existing.premium_source ?? 'trial')
