@@ -358,6 +358,8 @@ export default function Storefront() {
               hasBoughtInSession={store.hasBoughtInSession}
               buyerGender={store.buyerGender}
               setBuyerGender={store.setBuyerGender}
+              selectedTicketType={store.selectedTicketType}
+              setSelectedTicketType={store.setSelectedTicketType}
             />
           )}
         </div>

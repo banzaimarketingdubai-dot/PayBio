@@ -907,6 +907,50 @@ export const db = {
     }
   },
 
+  async getApprovedOrderCountForTicketType(productId: string, ticketTypeId: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('receipt_url')
+        .eq('product_id', productId)
+        .in('status', ['approved', 'PAID']);
+      if (error) throw error;
+      
+      let count = 0;
+      data?.forEach((o: any) => {
+        if (o.receipt_url) {
+          try {
+            const parsed = JSON.parse(o.receipt_url);
+            if (parsed && parsed.ticket_type_id === ticketTypeId) {
+              count++;
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+      });
+      return count;
+    } else {
+      const mockDb = readMockDb();
+      let count = 0;
+      mockDb.orders.forEach(o => {
+        if (o.product_id === productId && (o.status === 'approved' || o.status === 'PAID')) {
+          if (o.receipt_url) {
+            try {
+              const parsed = JSON.parse(o.receipt_url);
+              if (parsed && parsed.ticket_type_id === ticketTypeId) {
+                count++;
+              }
+            } catch (e) {
+              // Ignore
+            }
+          }
+        }
+      });
+      return count;
+    }
+  },
+
   async getAllUsers() {
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin

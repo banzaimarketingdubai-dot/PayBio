@@ -142,6 +142,7 @@ export function useStorefront() {
     return cid;
   });
   const [product, setProduct] = useState<Product | null>(null);
+  const [selectedTicketType, setSelectedTicketType] = useState<any>(null);
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -310,9 +311,24 @@ export function useStorefront() {
       const found = productsList.find(p => p.id === id);
       if (found) {
         setProduct(found);
+        if (found.product_type === 'TICKET') {
+          try {
+            const parsed = JSON.parse(found.content_url);
+            if (parsed && parsed.tickets && parsed.tickets.length > 0) {
+              setSelectedTicketType(parsed.tickets[0]);
+            } else {
+              setSelectedTicketType(null);
+            }
+          } catch (e) {
+            setSelectedTicketType(null);
+          }
+        } else {
+          setSelectedTicketType(null);
+        }
       }
     } else {
       setProduct(null);
+      setSelectedTicketType(null);
     }
     setIsPaymentSheetOpen(false);
     setCheckoutMethod(null);
@@ -813,6 +829,20 @@ export function useStorefront() {
             setProduct(data.product);
             if (data.product.creator) {
               setCreator(data.product.creator);
+            }
+            if (data.product.product_type === 'TICKET') {
+              try {
+                const parsed = JSON.parse(data.product.content_url);
+                if (parsed && parsed.tickets && parsed.tickets.length > 0) {
+                  setSelectedTicketType(parsed.tickets[0]);
+                } else {
+                  setSelectedTicketType(null);
+                }
+              } catch (e) {
+                setSelectedTicketType(null);
+              }
+            } else {
+              setSelectedTicketType(null);
             }
             if (data.buyer_has_store !== undefined) {
               setBuyerHasStore(data.buyer_has_store);
@@ -1367,7 +1397,13 @@ export function useStorefront() {
       const res = await fetch('/api/checkout/stars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot, gender: buyerGender }),
+        body: JSON.stringify({
+          product_id: product.id,
+          buyer_tg_id: buyerTgId,
+          booking_slot: bookingSlot,
+          gender: buyerGender,
+          ticket_type_id: selectedTicketType?.id
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1404,7 +1440,7 @@ export function useStorefront() {
       showAlert('Error initiating payment.');
       setIsProcessingPayment(false);
     }
-  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered, isDemoMode, buyerGender, handleOfferWaitingList]);
+  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered, isDemoMode, buyerGender, handleOfferWaitingList, selectedTicketType]);
 
   const handleBuyDirect = useCallback(async () => {
     if (!product) return;
@@ -1471,7 +1507,8 @@ export function useStorefront() {
           buyer_tg_id: buyerTgId,
           booking_slot: bookingSlot,
           payment_method: method === 'crypto' ? cryptoSubMethod : 'p2p',
-          gender: buyerGender
+          gender: buyerGender,
+          ticket_type_id: selectedTicketType?.id
         }),
       });
       const data = await res.json();
@@ -1486,7 +1523,7 @@ export function useStorefront() {
     } catch (err: any) {
       setVerifyError(err.message || 'Error initializing order.');
     }
-  }, [product, bookingDate, bookingTime, buyerTgId, cryptoSubMethod, buyerGender, handleOfferWaitingList]);
+  }, [product, bookingDate, bookingTime, buyerTgId, cryptoSubMethod, buyerGender, handleOfferWaitingList, selectedTicketType]);
 
   const handleClaimPayment = useCallback(async (receiptUrl?: string) => {
     if (!product) return;
@@ -1517,7 +1554,8 @@ export function useStorefront() {
             buyer_tg_id: buyerTgId,
             booking_slot: bookingSlot,
             payment_method: checkoutMethod === 'crypto' ? cryptoSubMethod : 'p2p',
-            gender: buyerGender
+            gender: buyerGender,
+            ticket_type_id: selectedTicketType?.id
           }),
         });
         const orderData = await orderRes.json();
@@ -1555,7 +1593,7 @@ export function useStorefront() {
     } finally {
       setVerifying(false);
     }
-  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang, cryptoSubMethod, buyerGender, handleOfferWaitingList]);
+  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang, cryptoSubMethod, buyerGender, handleOfferWaitingList, selectedTicketType]);
 
   const handleFreeCheckout = useCallback(async () => {
     if (!product || isProcessingPayment) return;
@@ -1583,7 +1621,8 @@ export function useStorefront() {
           product_id: product.id,
           buyer_tg_id: buyerTgId,
           booking_slot: bookingSlot,
-          payment_method: 'free'
+          payment_method: 'free',
+          ticket_type_id: selectedTicketType?.id
         }),
       });
       const data = await res.json();
@@ -1616,7 +1655,7 @@ export function useStorefront() {
     } finally {
       setVerifying(false);
     }
-  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, lang]);
+  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, lang, selectedTicketType]);
 
   const handleShippingSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1747,6 +1786,8 @@ export function useStorefront() {
     buyerTgId,
     creatorTgId,
     product,
+    selectedTicketType,
+    setSelectedTicketType,
     productsList,
     loading,
     error,

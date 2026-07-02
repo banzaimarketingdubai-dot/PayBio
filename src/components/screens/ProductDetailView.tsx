@@ -38,6 +38,8 @@ interface ProductDetailViewProps {
   hasBoughtInSession: boolean;
   buyerGender?: 'M' | 'F' | 'PAIR' | null;
   setBuyerGender?: (gender: 'M' | 'F' | 'PAIR' | null) => void;
+  selectedTicketType?: any;
+  setSelectedTicketType?: (t: any) => void;
 }
 
 const getDaysWord = (days: number, lang: 'ru' | 'en') => {
@@ -72,7 +74,9 @@ export default function ProductDetailView({
   setIsPremiumOpen,
   hasBoughtInSession,
   buyerGender,
-  setBuyerGender
+  setBuyerGender,
+  selectedTicketType,
+  setSelectedTicketType
 }: ProductDetailViewProps) {
   let slotsText = product.content_url || '';
   let maxQuantity: number | null = null;
@@ -112,8 +116,34 @@ export default function ProductDetailView({
 
   const isSoldOut = (product.product_type === 'VOUCHER' || product.product_type === 'TICKET') && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
 
+  let tickets: any[] = [];
+  if (product.product_type === 'TICKET' && product.content_url) {
+    try {
+      const parsed = JSON.parse(product.content_url);
+      if (parsed && parsed.tickets) {
+        tickets = parsed.tickets;
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+  if (product.product_type === 'TICKET' && tickets.length === 0) {
+    tickets = [
+      {
+        id: 'ticket_default',
+        name: lang === 'ru' ? 'Входной билет' : 'General Admission',
+        priceFiat: Number(product.price_fiat),
+        priceStars: product.price_stars || Math.round(Number(product.price_fiat) * 50),
+        maxQuantity: maxQuantity || 100
+      }
+    ];
+  }
+
   const isPairSelected = buyerGender === 'PAIR';
-  const displayPriceFiat = Number(product.price_fiat) * (isPairSelected ? 2 : 1);
+  const basePriceFiat = (product.product_type === 'TICKET' && selectedTicketType)
+    ? Number(selectedTicketType.priceFiat)
+    : Number(product.price_fiat);
+  const displayPriceFiat = basePriceFiat * (isPairSelected ? 2 : 1);
 
   const [genderCounts, setGenderCounts] = React.useState<{ maleCount: number; femaleCount: number } | null>(null);
 
@@ -428,6 +458,60 @@ export default function ProductDetailView({
               }}>
                 {product.description}
               </p>
+
+              {/* TICKET TYPES SELECTOR */}
+              {tickets.length > 0 && (
+                <div style={{ marginTop: '20px', borderTop: '1px solid var(--tg-border)', paddingTop: '16px', textAlign: 'left' }}>
+                  <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: 'var(--tg-hint)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {lang === 'ru' ? 'Выберите тип билета' : 'Select Ticket Type'}
+                  </p>
+                  <div style={{
+                    display: 'flex',
+                    gap: '10px',
+                    overflowX: 'auto',
+                    padding: '4px 0 12px 0',
+                    scrollbarWidth: 'none',
+                    msOverflowStyle: 'none'
+                  }}>
+                    {tickets.map((tItem) => {
+                      const isSelected = selectedTicketType?.id === tItem.id;
+                      return (
+                        <div
+                          key={tItem.id}
+                          onClick={() => setSelectedTicketType && setSelectedTicketType(tItem)}
+                          style={{
+                            flex: '0 0 140px',
+                            background: isSelected ? 'rgba(0, 136, 204, 0.08)' : 'rgba(255,255,255,0.02)',
+                            border: isSelected ? '2px solid var(--tg-accent)' : '1px dashed var(--tg-border)',
+                            borderRadius: '12px',
+                            padding: '10px',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                            transition: 'all 0.2s ease',
+                            boxShadow: isSelected ? '0 0 12px rgba(0, 136, 204, 0.15)' : 'none'
+                          }}
+                        >
+                          <div style={{ position: 'absolute', left: '-5px', top: 'calc(50% - 5px)', width: '8px', height: '10px', borderRadius: '50%', background: 'var(--tg-surface)' }} />
+                          <div style={{ position: 'absolute', right: '-5px', top: 'calc(50% - 5px)', width: '8px', height: '10px', borderRadius: '50%', background: 'var(--tg-surface)' }} />
+                          
+                          <p style={{ margin: 0, fontSize: '12.5px', fontWeight: 800, color: isSelected ? 'var(--tg-accent)' : 'var(--tg-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {tItem.name}
+                          </p>
+                          <p style={{ margin: 0, fontSize: '12px', fontWeight: 700, color: 'var(--tg-text)' }}>
+                            ${tItem.priceFiat}
+                          </p>
+                          <p style={{ margin: 0, fontSize: '10px', color: 'var(--tg-hint)' }}>
+                            {tItem.priceStars} ⭐
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : product.product_type === 'VOUCHER' ? (
@@ -780,12 +864,16 @@ export default function ProductDetailView({
           <div>
             <p style={{ fontSize: '11px', color: 'var(--tg-hint)', marginBottom: '3px' }}>{t.price}</p>
             <p style={{ fontSize: '26px', fontWeight: 800, color: 'var(--tg-text)', letterSpacing: '-0.5px' }}>
-              ${product.price_fiat}
+              ${displayPriceFiat}
             </p>
           </div>
           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-            <span className="chip chip-blue">{product.price_stars} ⭐ {t.stars}</span>
-            <span className="chip chip-hint">~{tonAmount} TON</span>
+            <span className="chip chip-blue">
+              {((product.product_type === 'TICKET' && selectedTicketType) ? selectedTicketType.priceStars : (product.price_stars || 0)) * (isPairSelected ? 2 : 1)} ⭐ {t.stars}
+            </span>
+            <span className="chip chip-hint">
+              ~{String(Math.round((displayPriceFiat / (Number(product.price_fiat) || 1)) * Number(tonAmount) * 100) / 100)} TON
+            </span>
           </div>
         </div>
       </div>

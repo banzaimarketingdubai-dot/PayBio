@@ -8,7 +8,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { product_id, buyer_tg_id, booking_slot, gender } = body;
+    const { product_id, buyer_tg_id, booking_slot, gender, ticket_type_id } = body;
 
     if (!product_id || !buyer_tg_id) {
       return NextResponse.json(
@@ -38,6 +38,7 @@ export async function POST(request: Request) {
 
     // 1b. Validate voucher limits if product is VOUCHER
     let hasGenderBalance = false;
+    let selectedTicketType: any = null;
     if (product.product_type === 'VOUCHER' || product.product_type === 'TICKET') {
       try {
         const content = JSON.parse(product.content_url);
@@ -45,7 +46,21 @@ export async function POST(request: Request) {
           if (content.has_gender_balance) {
             hasGenderBalance = true;
           }
-          if (typeof content.max_quantity === 'number') {
+          
+          if (product.product_type === 'TICKET' && ticket_type_id && content.tickets) {
+            selectedTicketType = content.tickets.find((t: any) => t.id === ticket_type_id);
+            if (selectedTicketType) {
+              const soldCount = await db.getApprovedOrderCountForTicketType(product_id, ticket_type_id);
+              if (selectedTicketType.maxQuantity && soldCount >= selectedTicketType.maxQuantity) {
+                return NextResponse.json(
+                  { error: 'Извините, все билеты выбранного типа распроданы.' },
+                  { status: 400 }
+                );
+              }
+            }
+          }
+
+          if (!selectedTicketType && typeof content.max_quantity === 'number') {
             const soldCount = await db.getApprovedOrderCount(product_id);
             if (soldCount >= content.max_quantity) {
               return NextResponse.json(
@@ -139,11 +154,16 @@ export async function POST(request: Request) {
     }
 
     // 2. Create a pending order
+    const orderMetadata = (gender || selectedTicketType) ? JSON.stringify({
+      gender: gender || null,
+      ticket_type_id: selectedTicketType?.id || null,
+      ticket_type_name: selectedTicketType?.name || null
+    }) : undefined;
     const order = await db.createOrder(
       product_id,
       buyer_tg_id,
       'stars',
-      gender ? JSON.stringify({ gender }) : undefined
+      orderMetadata
     );
 
     // 2b. Handle Booking product type slot reservation
@@ -162,12 +182,12 @@ export async function POST(request: Request) {
           ? `@${buyer.username || 'user'}` 
           : `ID: ${buyerTgId}`;
         
-        const displayPriceFiat = product.price_fiat * (isPair ? 2 : 1);
-        const displayPriceStars = product.price_stars * (isPair ? 2 : 1);
+        const displayPriceFiat = selectedTicketType ? selectedTicketType.priceFiat * (isPair ? 2 : 1) : product.price_fiat * (isPair ? 2 : 1);
+        const displayPriceStars = selectedTicketType ? selectedTicketType.priceStars * (isPair ? 2 : 1) : product.price_stars * (isPair ? 2 : 1);
         
         await sendTelegramNotification(
           creatorTgId,
-          `🛒 *Checkout Initiated!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"*${isPair ? ' (Pair M+F)' : ''} ($${displayPriceFiat} / ${displayPriceStars} Stars).`
+          `🛒 *Checkout Initiated!* \n\nBuyer *${buyerName}* has initiated checkout for your product *"${product.title}"*${selectedTicketType ? ` [${selectedTicketType.name}]` : ""}${isPair ? ' (Pair M+F)' : ''} ($${displayPriceFiat} / ${displayPriceStars} Stars).`
         );
       }
     }
@@ -175,17 +195,20 @@ export async function POST(request: Request) {
 
     // 3. Request Telegram Stars Invoice Link
     // For Telegram Stars, provider_token must be empty, and currency must be "XTR"
+    const displayPriceStars = selectedTicketType ? selectedTicketType.priceStars : product.price_stars;
+    const invoiceTitle = selectedTicketType ? `${product.title.slice(0, 15)} (${selectedTicketType.name.slice(0, 10)})` : product.title;
+
     const tgUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/createInvoiceLink`;
     const payload = {
-      title: (product.title.slice(0, 25) + (isPair ? ' (М+Ж)' : '')).slice(0, 32), // Telegram has length constraints
+      title: (invoiceTitle.slice(0, 25) + (isPair ? ' (М+Ж)' : '')).slice(0, 32), // Telegram has length constraints
       description: product.description ? product.description.slice(0, 255) : 'Digital Product',
       payload: order.id, // We pass the order_id as the payload to track it in shipping query/pre_checkout query
       provider_token: '', // Empty for Stars
       currency: 'XTR',
       prices: [
         {
-          label: (product.title.slice(0, 25) + (isPair ? ' (М+Ж)' : '')).slice(0, 32),
-          amount: Math.round(product.price_stars * (isPair ? 2 : 1)), // Stars must be integers
+          label: (invoiceTitle.slice(0, 25) + (isPair ? ' (М+Ж)' : '')).slice(0, 32),
+          amount: Math.round(displayPriceStars * (isPair ? 2 : 1)), // Stars must be integers
         },
       ],
     };
