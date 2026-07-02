@@ -8,7 +8,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { product_id, buyer_tg_id, booking_slot } = body;
+    const { product_id, buyer_tg_id, booking_slot, gender } = body;
 
     if (!product_id || !buyer_tg_id) {
       return NextResponse.json(
@@ -37,20 +37,43 @@ export async function POST(request: Request) {
     }
 
     // 1b. Validate voucher limits if product is VOUCHER
+    let hasGenderBalance = false;
     if (product.product_type === 'VOUCHER') {
       try {
         const content = JSON.parse(product.content_url);
-        if (content && typeof content.max_quantity === 'number') {
-          const soldCount = await db.getApprovedOrderCount(product_id);
-          if (soldCount >= content.max_quantity) {
-            return NextResponse.json(
-              { error: 'Извините, все билеты распроданы.' },
-              { status: 400 }
-            );
+        if (content) {
+          if (content.has_gender_balance) {
+            hasGenderBalance = true;
+          }
+          if (typeof content.max_quantity === 'number') {
+            const soldCount = await db.getApprovedOrderCount(product_id);
+            if (soldCount >= content.max_quantity) {
+              return NextResponse.json(
+                { error: 'Извините, все билеты распроданы.' },
+                { status: 400 }
+              );
+            }
           }
         }
       } catch (e) {
         // Ignore JSON parse errors for non-JSON content_url legacy products
+      }
+    }
+
+    if (hasGenderBalance) {
+      if (!gender || (gender !== 'M' && gender !== 'F')) {
+        return NextResponse.json({ error: 'Пожалуйста, выберите пол (М или Ж) для покупки билета.' }, { status: 400 });
+      }
+
+      const { maleCount, femaleCount } = await db.getGenderCounts(product_id);
+      const newMaleCount = maleCount + (gender === 'M' ? 1 : 0);
+      const newFemaleCount = femaleCount + (gender === 'F' ? 1 : 0);
+
+      if (Math.abs(newMaleCount - newFemaleCount) > 2) {
+        return NextResponse.json({
+          error: 'GENDER_BALANCE_LIMIT',
+          message: 'Извините, покупка билетов выбранного пола временно ограничена для удержания баланса М/Ж. Вы можете записаться в лист ожидания.'
+        }, { status: 403 });
       }
     }
 
@@ -113,7 +136,12 @@ export async function POST(request: Request) {
     }
 
     // 2. Create a pending order
-    const order = await db.createOrder(product_id, buyer_tg_id, 'stars');
+    const order = await db.createOrder(
+      product_id,
+      buyer_tg_id,
+      'stars',
+      gender ? JSON.stringify({ gender }) : undefined
+    );
 
     // 2b. Handle Booking product type slot reservation
     if (product.product_type === 'BOOKING' && booking_slot) {

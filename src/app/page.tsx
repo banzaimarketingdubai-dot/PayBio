@@ -351,6 +351,8 @@ export default function Storefront() {
               setIsPaymentSheetOpen={store.setIsPaymentSheetOpen}
               setIsPremiumOpen={store.setIsPremiumOpen}
               hasBoughtInSession={store.hasBoughtInSession}
+              buyerGender={store.buyerGender}
+              setBuyerGender={store.setBuyerGender}
             />
           )}
         </div>

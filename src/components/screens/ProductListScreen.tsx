@@ -173,6 +173,7 @@ export const ProductListScreen = memo(function ProductListScreen({
           } else if (p.product_type === 'VOUCHER') {
             urlVal = parsed.fulfillment_url || '';
             maxVal = parsed.max_quantity ? String(parsed.max_quantity) : '';
+            setProdHasGenderBalance(!!parsed.has_gender_balance);
           }
         }
       } catch (e) {
@@ -195,6 +196,7 @@ export const ProductListScreen = memo(function ProductListScreen({
     setProdUrl('');
     setProdCalendarIcsUrl('');
     setProdMaxQuantity('');
+    setProdHasGenderBalance(false);
     setProdCoverUrl('');
     setAiPrompt('');
     setProdType(defaultSection === 'BOOKING' ? 'BOOKING' : defaultSection === 'VOUCHER' ? 'VOUCHER' : 'DIGITAL');
@@ -213,6 +215,7 @@ export const ProductListScreen = memo(function ProductListScreen({
   const [prodCalendarIcsUrl, setProdCalendarIcsUrl] = useState('');
   const [prodMaxQuantity, setProdMaxQuantity] = useState('');
   const [prodSubType, setProdSubType] = useState('');
+  const [prodHasGenderBalance, setProdHasGenderBalance] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
 
   // Product cover visual state
@@ -937,7 +940,8 @@ export const ProductListScreen = memo(function ProductListScreen({
       } else if (prodType === 'VOUCHER') {
         finalContentUrl = JSON.stringify({
           fulfillment_url: prodUrl,
-          max_quantity: prodMaxQuantity ? Number(prodMaxQuantity) : null
+          max_quantity: prodMaxQuantity ? Number(prodMaxQuantity) : null,
+          has_gender_balance: prodHasGenderBalance
         });
       }
 
@@ -979,6 +983,7 @@ export const ProductListScreen = memo(function ProductListScreen({
         setProdUrl('');
         setProdCalendarIcsUrl('');
         setProdMaxQuantity('');
+        setProdHasGenderBalance(false);
         setProdSubType('');
         setProdCoverUrl('');
         setAiPrompt('');
@@ -1021,6 +1026,68 @@ export const ProductListScreen = memo(function ProductListScreen({
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleDuplicateProduct = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    setIsAdding(true);
+    try {
+      const priceUSD = Number(prodPriceUSD);
+      const priceStars = prodPriceStars ? Number(prodPriceStars) : undefined;
+
+      let finalContentUrl = prodUrl || '';
+      if (prodType === 'BOOKING') {
+        finalContentUrl = JSON.stringify({
+          slots: prodUrl,
+          ics_url: prodCalendarIcsUrl
+        });
+      } else if (prodType === 'VOUCHER') {
+        finalContentUrl = JSON.stringify({
+          fulfillment_url: prodUrl,
+          max_quantity: prodMaxQuantity ? Number(prodMaxQuantity) : null,
+          has_gender_balance: prodHasGenderBalance
+        });
+      }
+
+      const copyTitle = prodTitle + (lang === 'ru' ? ' (Копия)' : ' (Copy)');
+
+      const success = await onAddProduct(
+        copyTitle,
+        prodDesc,
+        priceUSD,
+        priceStars,
+        finalContentUrl || undefined,
+        prodCoverUrl || undefined,
+        prodType,
+        selectedProductSection,
+        prodSubType || undefined
+      );
+
+      if (success) {
+        setProdTitle('');
+        setProdDesc('');
+        setProdPriceUSD('');
+        setProdPriceStars('');
+        setProdUrl('');
+        setProdCalendarIcsUrl('');
+        setProdMaxQuantity('');
+        setProdHasGenderBalance(false);
+        setProdSubType('');
+        setProdCoverUrl('');
+        setAiPrompt('');
+        setProdType('DIGITAL');
+        setEditingProduct(null);
+        setIsAddProductOpen(false);
+        showAlert(lang === 'ru' ? '✓ Товар успешно продублирован!' : '✓ Product duplicated successfully!');
+      } else {
+        showAlert(lang === 'ru' ? 'Не удалось продублировать товар' : 'Failed to duplicate product.');
+      }
+    } catch (err: any) {
+      showAlert(err.message || 'Error duplicating product.');
     } finally {
       setIsAdding(false);
     }
@@ -2071,6 +2138,25 @@ export const ProductListScreen = memo(function ProductListScreen({
                       onChange={(e) => setProdMaxQuantity(e.target.value)}
                     />
                   </div>
+
+                  <div className="bottom-sheet-form-group animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0' }}>
+                    <div>
+                      <label className="bottom-sheet-label" style={{ margin: 0 }}>
+                        {lang === 'ru' ? '⚖️ Контроль гендерного баланса (М/Ж)' : '⚖️ Gender Balance Control (M/F)'}
+                      </label>
+                      <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                        {lang === 'ru' 
+                          ? 'Удержание баланса М/Ж с разницей не более 2 и автоматическим листом ожидания.'
+                          : 'Keeps M/F difference <= 2 with an automatic waiting list.'}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={prodHasGenderBalance}
+                      onChange={(e) => setProdHasGenderBalance(e.target.checked)}
+                      style={{ width: '22px', height: '22px', cursor: 'pointer', accentColor: 'var(--tg-accent)' }}
+                    />
+                  </div>
                 </>
               )}
 
@@ -2201,6 +2287,22 @@ export const ProductListScreen = memo(function ProductListScreen({
                   editingProduct ? (lang === 'ru' ? 'Сохранить изменения ✓' : 'Save Changes ✓') : t.addProductBtn
                 )}
               </button>
+              {editingProduct && (
+                <button
+                  type="button"
+                  onClick={handleDuplicateProduct}
+                  className="btn-secondary"
+                  style={{
+                    marginTop: '10px',
+                    borderColor: 'var(--tg-accent)',
+                    color: 'var(--tg-accent)',
+                    fontWeight: 700
+                  }}
+                  disabled={isAdding}
+                >
+                  📄 {lang === 'ru' ? 'Создать дубликат товара' : 'Create Duplicate Product'}
+                </button>
+              )}
             </form>
           )}
         </div>

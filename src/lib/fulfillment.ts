@@ -14,9 +14,6 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
       return true;
     }
 
-    // 1. Update order status in DB
-    await db.updateOrderStatus(orderId, 'PAID');
-
     const product = order.product;
     if (!product) {
       console.error(`Fulfillment error: Product not found for order ${orderId}.`);
@@ -25,6 +22,43 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
 
     const buyerTgId = order.buyer_tg_id;
     const creator = product.creator;
+
+    // Check if gender balance is enabled
+    let hasGenderBalance = false;
+    let buyerGender: 'M' | 'F' | null = null;
+    try {
+      if (product.product_type === 'VOUCHER') {
+        const parsed = JSON.parse(product.content_url);
+        if (parsed && parsed.has_gender_balance) {
+          hasGenderBalance = true;
+        }
+      }
+    } catch {}
+
+    if (hasGenderBalance && order.receipt_url) {
+      try {
+        const parsed = JSON.parse(order.receipt_url);
+        if (parsed && parsed.gender) {
+          buyerGender = parsed.gender;
+        }
+      } catch {
+        if (order.receipt_url === 'M' || order.receipt_url === 'F') {
+          buyerGender = order.receipt_url as any;
+        }
+      }
+    }
+
+    // 1. Update order status in DB
+    await db.updateOrderStatus(orderId, 'PAID');
+
+    if (hasGenderBalance) {
+      await db.removeFromWaitingList(product.id, Number(buyerTgId));
+      if (buyerGender) {
+        checkAndNotifyWaitingList(product.id, buyerGender).catch(err => {
+          console.error('Error in checkAndNotifyWaitingList:', err);
+        });
+      }
+    }
 
     // Resolve buyer username/handle or fallback
     let buyerName = `ID: ${buyerTgId}`;
@@ -303,5 +337,68 @@ export async function fulfillOrder(orderId: string): Promise<boolean> {
   } catch (err) {
     console.error(`Fulfillment processing error for order ${orderId}:`, err);
     return false;
+  }
+}
+
+async function checkAndNotifyWaitingList(productId: string, purchasedGender: 'M' | 'F') {
+  try {
+    const product = await db.getProductById(productId);
+    if (!product) return;
+
+    const { maleCount, femaleCount } = await db.getGenderCounts(productId);
+
+    let unlockedGender: 'M' | 'F' | null = null;
+    if (purchasedGender === 'F' && maleCount - femaleCount === 1) {
+      unlockedGender = 'M';
+    } else if (purchasedGender === 'M' && femaleCount - maleCount === 1) {
+      unlockedGender = 'F';
+    }
+
+    if (unlockedGender) {
+      const waitingList = await db.getWaitingList(productId, unlockedGender);
+      if (waitingList && waitingList.length > 0) {
+        const botUsername = 'PaybioBot';
+        const storefrontUrl = `https://t.me/${botUsername}/app?startapp=${productId}`;
+
+        const genderNameRu = unlockedGender === 'M' ? 'для мужчин' : 'для женщин';
+        const genderNameEn = unlockedGender === 'M' ? 'for men' : 'for women';
+
+        const textRu = `🔔 *Билеты снова доступны!* \n\nБаланс М/Ж восстановлен, и билеты ${genderNameRu} на событие *"${product.title}"* снова открыты для покупки! \n\nУспейте забронировать и приобрести билет по ссылке ниже:`;
+        const textEn = `🔔 *Tickets are available again!* \n\nThe M/F balance has been restored, and tickets ${genderNameEn} for the event *"${product.title}"* are open for purchase! \n\nHurry up to check out and buy your ticket via the link below:`;
+
+        const isRussian = /[а-яА-Я]/.test(product.title) || /[а-яА-Я]/.test(product.description || '');
+        const messageText = isRussian ? textRu : textEn;
+
+        const markup = {
+          inline_keyboard: [
+            [
+              { text: isRussian ? '🎟️ Купить билет' : '🎟️ Buy Ticket', url: storefrontUrl }
+            ]
+          ]
+        };
+
+        await Promise.all(
+          waitingList.map(async (entry: any) => {
+            try {
+              await sendTelegramNotification(entry.buyer_tg_id, messageText, markup);
+            } catch (err) {
+              console.error(`Failed to send waiting list notification to ${entry.buyer_tg_id}:`, err);
+            }
+          })
+        );
+
+        await Promise.all(
+          waitingList.map(async (entry: any) => {
+            try {
+              await db.removeFromWaitingList(productId, entry.buyer_tg_id);
+            } catch (err) {
+              console.error(`Failed to remove ${entry.buyer_tg_id} from waiting list:`, err);
+            }
+          })
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error in checkAndNotifyWaitingList:', err);
   }
 }

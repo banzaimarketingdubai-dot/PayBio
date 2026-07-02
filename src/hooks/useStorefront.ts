@@ -230,6 +230,7 @@ export function useStorefront() {
   const [shipPhone, setShipPhone] = useState('');
   const [shipMethod, setShipMethod] = useState('SDEK');
   const [shipAddress, setShipAddress] = useState('');
+  const [buyerGender, setBuyerGender] = useState<'M' | 'F' | null>(null);
 
   // Booking states
   const [bookingDate, setBookingDate] = useState('');
@@ -1205,6 +1206,34 @@ export function useStorefront() {
     }
   }, [creator, productSections]);
 
+  const handleOfferWaitingList = useCallback(async (prodId: string, buyerId: number, gender: 'M' | 'F' | null) => {
+    if (!gender) return;
+    const confirmMsg = lang === 'ru'
+      ? 'Извините, покупка билетов выбранного пола временно ограничена для соблюдения баланса М/Ж. Хотите записаться в лист ожидания? Бот уведомит вас, как только билеты станут доступны.'
+      : 'Sorry, tickets for the selected gender are temporarily limited to maintain M/F balance. Would you like to join the waiting list? The bot will notify you once tickets are available.';
+    
+    if (confirm(confirmMsg)) {
+      try {
+        const res = await fetch('/api/store/waiting-list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ product_id: prodId, buyer_tg_id: buyerId, gender })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showAlert(lang === 'ru' 
+            ? '✓ Вы успешно добавлены в лист ожидания!' 
+            : '✓ You have been successfully added to the waiting list!');
+          setIsPaymentSheetOpen(false);
+        } else {
+          showAlert(data.error || 'Failed to join waiting list.');
+        }
+      } catch (err: any) {
+        showAlert(err.message || 'Error joining waiting list.');
+      }
+    }
+  }, [lang]);
+
   const handleStarsPayment = useCallback(async () => {
     if (!product || isProcessingPayment) return;
     if (product.id === 'premium_virtual') {
@@ -1240,11 +1269,15 @@ export function useStorefront() {
       const res = await fetch('/api/checkout/stars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot }),
+        body: JSON.stringify({ product_id: product.id, buyer_tg_id: buyerTgId, booking_slot: bookingSlot, gender: buyerGender }),
       });
       const data = await res.json();
       if (!res.ok) {
-        showAlert(data.error || 'Failed to create invoice.');
+        if (data.error === 'GENDER_BALANCE_LIMIT') {
+          handleOfferWaitingList(product.id, buyerTgId, buyerGender);
+        } else {
+          showAlert(data.error || 'Failed to create invoice.');
+        }
         setIsProcessingPayment(false);
         return;
       }
@@ -1273,7 +1306,7 @@ export function useStorefront() {
       showAlert('Error initiating payment.');
       setIsProcessingPayment(false);
     }
-  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered, isDemoMode]);
+  }, [product, isProcessingPayment, bookingDate, bookingTime, buyerTgId, handleBuyPremiumWithStars, lang, t.fileDelivered, isDemoMode, buyerGender, handleOfferWaitingList]);
 
   const handleBuyDirect = useCallback(async () => {
     if (!product) return;
@@ -1339,19 +1372,23 @@ export function useStorefront() {
           product_id: product.id,
           buyer_tg_id: buyerTgId,
           booking_slot: bookingSlot,
-          payment_method: method === 'crypto' ? cryptoSubMethod : 'p2p'
+          payment_method: method === 'crypto' ? cryptoSubMethod : 'p2p',
+          gender: buyerGender
         }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setActiveOrderId(data.order_id);
       } else {
+        if (data.error === 'GENDER_BALANCE_LIMIT') {
+          handleOfferWaitingList(product.id, buyerTgId, buyerGender);
+        }
         setVerifyError(data.error || 'Failed to initialize order.');
       }
     } catch (err: any) {
       setVerifyError(err.message || 'Error initializing order.');
     }
-  }, [product, bookingDate, bookingTime, buyerTgId, cryptoSubMethod]);
+  }, [product, bookingDate, bookingTime, buyerTgId, cryptoSubMethod, buyerGender, handleOfferWaitingList]);
 
   const handleClaimPayment = useCallback(async (receiptUrl?: string) => {
     if (!product) return;
@@ -1381,11 +1418,15 @@ export function useStorefront() {
             product_id: product.id,
             buyer_tg_id: buyerTgId,
             booking_slot: bookingSlot,
-            payment_method: checkoutMethod === 'crypto' ? cryptoSubMethod : 'p2p'
+            payment_method: checkoutMethod === 'crypto' ? cryptoSubMethod : 'p2p',
+            gender: buyerGender
           }),
         });
         const orderData = await orderRes.json();
         if (!orderRes.ok) {
+          if (orderData.error === 'GENDER_BALANCE_LIMIT') {
+            handleOfferWaitingList(product.id, buyerTgId, buyerGender);
+          }
           throw new Error(orderData.error || 'Failed to initialize order.');
         }
         currentOrderId = orderData.order_id;
@@ -1416,7 +1457,7 @@ export function useStorefront() {
     } finally {
       setVerifying(false);
     }
-  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang, cryptoSubMethod]);
+  }, [product, activeOrderId, bookingDate, bookingTime, buyerTgId, checkoutMethod, lang, cryptoSubMethod, buyerGender, handleOfferWaitingList]);
 
   const handleFreeCheckout = useCallback(async () => {
     if (!product || isProcessingPayment) return;
@@ -1690,6 +1731,8 @@ export function useStorefront() {
     setBookingDate,
     bookingTime,
     setBookingTime,
+    buyerGender,
+    setBuyerGender,
     busySlots,
     dbBookings,
     isLoadingBusySlots,

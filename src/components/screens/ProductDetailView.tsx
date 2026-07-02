@@ -36,6 +36,8 @@ interface ProductDetailViewProps {
   setIsPaymentSheetOpen: (open: boolean) => void;
   setIsPremiumOpen: (open: boolean) => void;
   hasBoughtInSession: boolean;
+  buyerGender?: 'M' | 'F' | null;
+  setBuyerGender?: (gender: 'M' | 'F' | null) => void;
 }
 
 const getDaysWord = (days: number, lang: 'ru' | 'en') => {
@@ -68,11 +70,14 @@ export default function ProductDetailView({
   handleSelectProduct,
   setIsPaymentSheetOpen,
   setIsPremiumOpen,
-  hasBoughtInSession
+  hasBoughtInSession,
+  buyerGender,
+  setBuyerGender
 }: ProductDetailViewProps) {
   let slotsText = product.content_url || '';
   let maxQuantity: number | null = null;
   let hasLimit = false;
+  let hasGenderBalance = false;
 
   if (product.product_type === 'BOOKING' || product.product_type === 'VOUCHER') {
     try {
@@ -85,6 +90,9 @@ export default function ProductDetailView({
             maxQuantity = parsed.max_quantity;
             hasLimit = true;
           }
+          if (parsed.has_gender_balance) {
+            hasGenderBalance = true;
+          }
         }
       }
     } catch (e) {
@@ -93,6 +101,21 @@ export default function ProductDetailView({
   }
 
   const isSoldOut = product.product_type === 'VOUCHER' && hasLimit && (product.sold_count || 0) >= (maxQuantity || 0);
+
+  const [genderCounts, setGenderCounts] = React.useState<{ maleCount: number; femaleCount: number } | null>(null);
+
+  React.useEffect(() => {
+    if (hasGenderBalance) {
+      fetch(`/api/store/gender-counts?product_id=${product.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setGenderCounts({ maleCount: data.maleCount, femaleCount: data.femaleCount });
+          }
+        })
+        .catch(err => console.error('Error fetching gender counts:', err));
+    }
+  }, [product, hasGenderBalance]);
 
   return (
     <div style={{
@@ -683,42 +706,113 @@ export default function ProductDetailView({
             <span>{lang === 'ru' ? 'Оплачено (Получено в боте)' : 'Paid (Delivered to bot)'}</span>
           </button>
         ) : (
-          <button 
-            onClick={() => {
-              if (product.product_type === 'BOOKING' && (!bookingDate || !bookingTime)) {
-                showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
-                return;
-              }
-              setIsPaymentSheetOpen(true);
-            }}
-            className="btn-primary"
-            style={{ 
-              background: 'var(--tg-accent)', 
-              fontSize: '16px', 
-              fontWeight: 700, 
-              height: '54px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '10px',
-              borderRadius: '16px',
-              boxShadow: '0 4px 15px rgba(43, 140, 243, 0.3)'
-            }}
-          >
-            {Number(product.price_fiat) === 0 ? (
-              <>
-                <span>🎁</span>
-                <span>
-                  {lang === 'ru' ? 'Резервировать' : 'Reserve'}
+          <>
+            {hasGenderBalance && (
+              <div style={{
+                padding: '16px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid var(--tg-border)',
+                borderRadius: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '13.5px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ⚖️ {lang === 'ru' ? 'Контроль баланса М/Ж' : 'M/F Balance Control'}
                 </span>
-              </>
-            ) : (
-              <>
-                <span>💳</span>
-                <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
-              </>
+                
+                {genderCounts && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--tg-hint)' }}>
+                    <span>♂️ {lang === 'ru' ? 'Куплено М билетов' : 'M tickets sold'}: <strong>{genderCounts.maleCount}</strong></span>
+                    <span>♀️ {lang === 'ru' ? 'Куплено Ж билетов' : 'F tickets sold'}: <strong>{genderCounts.femaleCount}</strong></span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setBuyerGender?.('M')}
+                    style={{
+                      flex: 1,
+                      height: '42px',
+                      borderRadius: '10px',
+                      border: buyerGender === 'M' ? '2px solid #3b82f6' : '1px solid var(--tg-border)',
+                      background: buyerGender === 'M' ? 'rgba(59,130,246,0.1)' : 'transparent',
+                      color: buyerGender === 'M' ? '#3b82f6' : 'var(--tg-text)',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ♂️ {lang === 'ru' ? 'Я мужчина (М)' : 'Male (M)'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBuyerGender?.('F')}
+                    style={{
+                      flex: 1,
+                      height: '42px',
+                      borderRadius: '10px',
+                      border: buyerGender === 'F' ? '2px solid #ec4899' : '1px solid var(--tg-border)',
+                      background: buyerGender === 'F' ? 'rgba(236,72,153,0.1)' : 'transparent',
+                      color: buyerGender === 'F' ? '#ec4899' : 'var(--tg-text)',
+                      fontWeight: 600,
+                      fontSize: '13px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ♀️ {lang === 'ru' ? 'Я женщина (Ж)' : 'Female (F)'}
+                  </button>
+                </div>
+                <p style={{ fontSize: '11px', color: 'var(--tg-hint)', margin: 0, lineHeight: '1.4' }}>
+                  {lang === 'ru' 
+                    ? '⚠️ Для обеспечения равного гендерного состава участников количество мужских и женских билетов удерживается в паритете (разница не более 2).'
+                    : '⚠️ To ensure equal gender ratio, the quantity of male and female tickets is balanced (difference <= 2).'}
+                </p>
+              </div>
             )}
-          </button>
+
+            <button 
+              onClick={() => {
+                if (product.product_type === 'BOOKING' && (!bookingDate || !bookingTime)) {
+                  showAlert(lang === 'ru' ? 'Пожалуйста, выберите дату и время записи.' : 'Please select date and time for the booking.');
+                  return;
+                }
+                if (hasGenderBalance && !buyerGender) {
+                  showAlert(lang === 'ru' ? 'Пожалуйста, выберите ваш пол (М или Ж) перед продолжением.' : 'Please select your gender (M or F) before proceeding.');
+                  return;
+                }
+                setIsPaymentSheetOpen(true);
+              }}
+              className="btn-primary"
+              style={{ 
+                background: 'var(--tg-accent)', 
+                fontSize: '16px', 
+                fontWeight: 700, 
+                height: '54px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                gap: '10px',
+                borderRadius: '16px',
+                boxShadow: '0 4px 15px rgba(43, 140, 243, 0.3)'
+              }}
+            >
+              {Number(product.price_fiat) === 0 ? (
+                <>
+                  <span>🎁</span>
+                  <span>
+                    {lang === 'ru' ? 'Резервировать' : 'Reserve'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span>💳</span>
+                  <span>{lang === 'ru' ? `Оплатить $${product.price_fiat}` : `Pay $${product.price_fiat}`}</span>
+                </>
+              )}
+            </button>
+          </>
         )}
       </div>
 

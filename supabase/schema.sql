@@ -177,3 +177,23 @@ WITH CHECK (true);
 CREATE POLICY "Allow updates to partner_payouts"
 ON partner_payouts FOR UPDATE
 USING (true);
+
+-- Table 7: waiting_lists
+CREATE TABLE IF NOT EXISTS waiting_lists (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    buyer_tg_id BIGINT NOT NULL,
+    gender TEXT NOT NULL, -- 'M' or 'F'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE waiting_lists ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access to waiting_lists"
+ON waiting_lists FOR SELECT
+USING (true);
+
+CREATE POLICY "Allow anyone to manage waiting_lists"
+ON waiting_lists FOR ALL
+USING (true)
+WITH CHECK (true);

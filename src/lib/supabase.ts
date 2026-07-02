@@ -155,6 +155,14 @@ export interface PromoCode {
   created_at: string;
 }
 
+export interface WaitingList {
+  id: string;
+  product_id: string;
+  buyer_tg_id: number;
+  gender: string;
+  created_at: string;
+}
+
 interface DatabaseSchema {
   users: User[];
   products: Product[];
@@ -165,6 +173,7 @@ interface DatabaseSchema {
   promo_codes?: PromoCode[];
   referral_commissions?: ReferralCommission[];
   partner_payouts?: PartnerPayout[];
+  waiting_lists?: WaitingList[];
 }
 
 const MOCK_DB_PATH = path.join(process.cwd(), 'mock_db.json');
@@ -841,10 +850,31 @@ export const db = {
   },
 
   async updateOrderReceiptAndStatus(orderId: string, receiptUrl: string, status: string) {
+    const existing = await this.getOrderById(orderId);
+    let finalReceiptUrl = receiptUrl;
+    if (existing && existing.receipt_url) {
+      try {
+        const parsed = JSON.parse(existing.receipt_url);
+        if (parsed && parsed.gender) {
+          finalReceiptUrl = JSON.stringify({
+            gender: parsed.gender,
+            screenshot_url: receiptUrl
+          });
+        }
+      } catch {
+        if (existing.receipt_url === 'M' || existing.receipt_url === 'F') {
+          finalReceiptUrl = JSON.stringify({
+            gender: existing.receipt_url,
+            screenshot_url: receiptUrl
+          });
+        }
+      }
+    }
+
     if (isRealSupabaseConfigured) {
       const { data, error } = await supabaseAdmin
         .from('orders')
-        .update({ receipt_url: receiptUrl, status: status })
+        .update({ receipt_url: finalReceiptUrl, status: status })
         .eq('id', orderId)
         .select()
         .single();
@@ -854,7 +884,7 @@ export const db = {
       const mockDb = readMockDb();
       const order = mockDb.orders.find(o => o.id === orderId);
       if (order) {
-        order.receipt_url = receiptUrl;
+        order.receipt_url = finalReceiptUrl;
         order.status = status;
         writeMockDb(mockDb);
       }
@@ -1595,6 +1625,114 @@ export const db = {
       writeMockDb(mockDb);
     }
     return payout;
+  },
+
+  async getGenderCounts(productId: string) {
+    let approvedOrders: Order[] = [];
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('product_id', productId)
+        .in('status', ['approved', 'PAID']);
+      if (error) throw error;
+      approvedOrders = data || [];
+    } else {
+      const mockDb = readMockDb();
+      approvedOrders = mockDb.orders.filter(o => o.product_id === productId && (o.status === 'approved' || o.status === 'PAID'));
+    }
+
+    let maleCount = 0;
+    let femaleCount = 0;
+    for (const order of approvedOrders) {
+      if (order.receipt_url) {
+        try {
+          const parsed = JSON.parse(order.receipt_url);
+          if (parsed && parsed.gender === 'M') maleCount++;
+          else if (parsed && parsed.gender === 'F') femaleCount++;
+        } catch {
+          if (order.receipt_url === 'M') maleCount++;
+          else if (order.receipt_url === 'F') femaleCount++;
+        }
+      }
+    }
+    return { maleCount, femaleCount };
+  },
+
+  async addToWaitingList(productId: string, buyerTgId: number, gender: string) {
+    if (isRealSupabaseConfigured) {
+      const { data, error } = await supabaseAdmin
+        .from('waiting_lists')
+        .insert({
+          product_id: productId,
+          buyer_tg_id: buyerTgId,
+          gender: gender
+        })
+        .select()
+        .single();
+      if (error) {
+        console.error('Error adding to waiting list:', error);
+        return null;
+      }
+      return data;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.waiting_lists) mockDb.waiting_lists = [];
+      const exists = mockDb.waiting_lists.some(w => w.product_id === productId && w.buyer_tg_id === buyerTgId && w.gender === gender);
+      if (exists) return true;
+
+      const newEntry = {
+        id: Math.random().toString(36).substring(2, 15),
+        product_id: productId,
+        buyer_tg_id: buyerTgId,
+        gender: gender,
+        created_at: new Date().toISOString()
+      };
+      mockDb.waiting_lists.push(newEntry);
+      writeMockDb(mockDb);
+      return newEntry;
+    }
+  },
+
+  async getWaitingList(productId: string, gender?: string) {
+    if (isRealSupabaseConfigured) {
+      let query = supabaseAdmin
+        .from('waiting_lists')
+        .select('*')
+        .eq('product_id', productId);
+      if (gender) {
+        query = query.eq('gender', gender);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.waiting_lists) mockDb.waiting_lists = [];
+      let list = mockDb.waiting_lists.filter(w => w.product_id === productId);
+      if (gender) {
+        list = list.filter(w => w.gender === gender);
+      }
+      return list;
+    }
+  },
+
+  async removeFromWaitingList(productId: string, buyerTgId: number) {
+    if (isRealSupabaseConfigured) {
+      const { error } = await supabaseAdmin
+        .from('waiting_lists')
+        .delete()
+        .eq('product_id', productId)
+        .eq('buyer_tg_id', buyerTgId);
+      if (error) throw error;
+      return true;
+    } else {
+      const mockDb = readMockDb();
+      if (!mockDb.waiting_lists) mockDb.waiting_lists = [];
+      mockDb.waiting_lists = mockDb.waiting_lists.filter(w => !(w.product_id === productId && w.buyer_tg_id === buyerTgId));
+      writeMockDb(mockDb);
+      return true;
+    }
   }
 };
 
